@@ -1,0 +1,55 @@
+{
+  "name": "pcash",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "PCASH protocol, reference node, SDK, circuits, and marketplace profile.",
+  "engines": {
+    "node": ">=24.12.0"
+  },
+  "workspaces": [
+    "sdk",
+    "relayer",
+    "wallet",
+    "marketplace",
+    "web/tokens",
+    "lineage",
+    "web",
+    "e2e",
+    "bench",
+    "test-support",
+    "web/board"
+  ],
+  "scripts": {
+    "build:packages": "npm run build --workspace @pcash/sdk && npm run build --workspace @pcash/wallet && npm run build --workspace @pcash/relayer && npm run build --workspace @pcash/marketplace && npm run build --workspace @pcash/tokens && npm run build --workspace @pcash/lineage && npm run build --workspace @pcash/board",
+    "build": "npm run build:packages && npm run build --workspace @pcash/web",
+    "preinstall": "node scripts/live_run_lock.mjs check",
+    "circuit-bundle:test": "node --test scripts/circuits/browser_assets.test.mjs scripts/circuits/browser_gateway.test.mjs scripts/circuits/bundle.test.mjs scripts/circuits/refresh_prover_assets.test.mjs scripts/live_run_lock.test.mjs",
+    "circuit-release:browser": "node scripts/circuits/bundle.mjs exec -- npm run test:browser --workspace @pcash/e2e -- --project protocol",
+    "preweb:browser-journey": "npm run build:packages",
+    "web:browser-journey": "node scripts/circuits/bundle.mjs exec -- npm run test:browser --workspace @pcash/e2e -- --project connection",
+    "preweb:browser-funded-journey": "npm run build:packages",
+    "web:browser-funded-journey": "node scripts/circuits/bundle.mjs exec -- npm run test:browser --workspace @pcash/e2e -- --project wallet",
+    "source-verification": "node scripts/source-verification/index.mts",
+    "source-verification:check": "node scripts/source-verification/index.mts check",
+    "source-verification:test": "node --test scripts/source-verification/index.test.mts",
+    "source:build-marketplace": "npm run source-verification -- build --definition marketplace/src/tooling/sourceVerification.mts",
+    "source:attach-configurations": "npm run source-verification -- attach-configurations",
+    "source:publish": "npm run source-verification -- publish",
+    "source:reproduce": "npm run source-verification -- reproduce-contract",
+    "boundaries": "node scripts/check_package_boundaries.mjs",
+    "boundaries:test": "node --test scripts/check_package_boundaries.test.mjs scripts/explorer_boundary_plugin.test.mjs",
+    "dev:test": "node --test scripts/dev/run.test.mts",
+    "web": "npm run dev --workspace @pcash/web",
+    "bench": "npm run dev --workspace @pcash/bench",
+    "e2e:typecheck": "npm run typecheck --workspace @pcash/e2e",
+    "e2e:metamask": "node scripts/circuits/bundle.mjs exec -- npm run test:metamask --workspace @pcash/e2e",
+    "e2e": "npm run e2e --workspace @pcash/e2e --",
+    "preweb:browser-marketplace-journey": "npm run build:packages",
+    "web:browser-marketplace-journey": "node scripts/circuits/bundle.mjs exec -- npm run test:browser --workspace @pcash/e2e -- --project marketplace",
+    "e2e:unit": "npm run test:unit --workspace @pcash/e2e"
+  },
+  "dependencies": {
+    "@noble/hashes": "2.2.0"
+  }
+}

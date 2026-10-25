@@ -1,0 +1,6 @@
+.page { display: grid; gap: 16px; padding-block: 24px; }
+.page > div { background: var(--color-surface-raised); border-radius: var(--radius-sm); }
+.title { width: min(260px, 65%); height: 30px; }
+.subtitle { width: min(380px, 80%); height: 14px; }
+.summary { height: 180px; margin-block: 16px; }
+.row { height: 48px; }

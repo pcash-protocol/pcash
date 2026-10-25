@@ -1,0 +1,24 @@
+[package]
+name = "pcash-verify"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "PCASH wire-proof verification behind a trait with a pinned-Barretenberg backend"
+
+[lints]
+workspace = true
+
+[dependencies]
+barretenberg-rs = { version = "=6.0.0", default-features = false }
+thiserror = { workspace = true }
+hex = { workspace = true }
+rmp-serde = "1"
+sha2 = { workspace = true }
+wait-timeout = "0.2"
+
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", features = ["event"] }
+
+[dev-dependencies]
+rmpv = "1"
+tempfile = { workspace = true }

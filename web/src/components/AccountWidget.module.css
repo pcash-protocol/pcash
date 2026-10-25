@@ -1,0 +1,45 @@
+.slot { position: relative; display: flex; align-items: center; margin-left: 8px; }
+
+.trigger {
+  position: relative;
+  display: flex; align-items: center; gap: 9px;
+  padding: 5px 10px 5px 6px;
+  border: 1px solid var(--color-border); border-radius: var(--radius-control);
+  background: var(--color-surface-raised); color: var(--color-text);
+  font-size: 13px; white-space: nowrap;
+}
+.trigger:hover { border-color: var(--color-accent-strong); }
+.trigger.plain { padding: 7px 13px; }
+.trigger:disabled { opacity: 1; cursor: default; }
+
+.chevron { color: var(--color-text-muted); font-size: 10px; }
+
+.attentionBadge {
+  position: absolute; top: -6px; right: -6px;
+  display: grid; place-items: center; width: 17px; height: 17px;
+  border: 2px solid var(--color-surface); border-radius: 50%;
+  background: var(--color-warning-text); color: var(--color-warning-surface);
+  font-size: 12px; font-weight: 700; line-height: 1;
+}
+.attentionBadge::before { content: "!"; }
+
+.activityBadge, .doneBadge {
+  position: absolute; top: -5px; right: -5px; width: 14px; height: 14px;
+  border: 2px solid var(--color-surface); border-radius: 50%;
+}
+.activityBadge { background: conic-gradient(var(--color-accent) 0 30%, var(--color-accent-soft) 30%); animation: spin 1s linear infinite; }
+.doneBadge { background: var(--color-accent); }
+@media (prefers-reduced-motion: reduce) { .activityBadge { animation: none; } }
+
+.avatar {
+  width: 24px; height: 24px; border-radius: 999px; flex: none;
+  background: var(--color-accent-soft); border: 1px solid var(--color-border);
+  object-fit: cover;
+}
+.avatar.lg { width: 38px; height: 38px; }
+
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.skeleton { background: var(--color-surface-raised); border-radius: var(--radius-sm); }
+.triggerSkeleton { width: 132px; height: 34px; }

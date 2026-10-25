@@ -1,0 +1,60 @@
+{
+  "format": "pcash-blob-codec",
+  "payloadPattern": "byte[i] = i mod 256",
+  "cases": [
+    {
+      "name": "one-byte",
+      "payloadLength": 1,
+      "blobCount": 1,
+      "blobSha256": [
+        "e9c1f7719555539d4e48b78ca3f034fcc3ce5e8d30f88fecd76b2b0dbc685d52"
+      ]
+    },
+    {
+      "name": "field-boundary",
+      "payloadLength": 31,
+      "blobCount": 1,
+      "blobSha256": [
+        "cdd88c0687db8e2705fd31b47188d9fc02153e81ef49b396e6016f41ef3e1cf0"
+      ]
+    },
+    {
+      "name": "field-crossing",
+      "payloadLength": 32,
+      "blobCount": 1,
+      "blobSha256": [
+        "a1f4538af2356574af955383c719d47ea24e6ea38e6f19f3d3021747ad821201"
+      ]
+    },
+    {
+      "name": "last-one-blob-payload",
+      "payloadLength": 126945,
+      "blobCount": 1,
+      "blobSha256": [
+        "f5ae8f2b915d1a6c1819fe2bb3755d96e76146cfd2c2950bd9f5fffea3b9459e"
+      ]
+    },
+    {
+      "name": "first-two-blob-payload",
+      "payloadLength": 126946,
+      "blobCount": 2,
+      "blobSha256": [
+        "eafb8897855580d413916d67bb31ebe4fad2e1ac285348a1dadda50b2f4758de",
+        "726766703c702e0f0c1c616370973a5aa13e918736f959d90965f8c387619a80"
+      ]
+    },
+    {
+      "name": "maximum-batch",
+      "payloadLength": 761825,
+      "blobCount": 6,
+      "blobSha256": [
+        "9f8d19bb709620abc96177ad15c37217408a5b512ea3e5d6f9ae03cca2239c36",
+        "4c0cb376e991e2e41556838a4b047716ce33bbd63e72681e86bdeab8fe216f16",
+        "4c0cb376e991e2e41556838a4b047716ce33bbd63e72681e86bdeab8fe216f16",
+        "4c0cb376e991e2e41556838a4b047716ce33bbd63e72681e86bdeab8fe216f16",
+        "4c0cb376e991e2e41556838a4b047716ce33bbd63e72681e86bdeab8fe216f16",
+        "4c0cb376e991e2e41556838a4b047716ce33bbd63e72681e86bdeab8fe216f16"
+      ]
+    }
+  ]
+}

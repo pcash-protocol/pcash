@@ -1,0 +1,91 @@
+[package]
+name = "pcash-node"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "PCASH node: L1 follow loop, reorg-aware derivation, redb state, and the pcash_* RPC server"
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "pcash-node"
+path = "src/main.rs"
+
+[lib]
+name = "pcash_node"
+path = "src/lib.rs"
+
+[[bench]]
+name = "derivation"
+harness = false
+required-features = ["benchmarks"]
+
+[[bench]]
+name = "forced_verification"
+harness = false
+required-features = ["benchmarks"]
+
+[features]
+# Node-side entry points that let a test inject a fork schedule. Enabled ONLY
+# through the self dev-dependency below, so no release build can select it.
+test-support = []
+# The manual benchmarks. Opt-in so `--all-targets` builds and lints do not
+# compile harnesses nothing else uses; run them with `just bench-derivation` and
+# `just bench-forced-verification`.
+benchmarks = []
+
+[dependencies]
+async-trait = { workspace = true }
+pcash-l1 = { path = "../l1" }
+pcash-derive = { path = "../derive" }
+pcash-issuance = { path = "../issuance" }
+pcash-state = { path = "../state" }
+pcash-verify = { path = "../verify" }
+pcash-pscan = { path = "../pscan" }
+pcash-pboard = { path = "../pboard" }
+pcash-rpc = { path = "../rpc", default-features = false }
+pcash-p2p = { path = "../p2p" }
+pcash-crypto = { path = "../crypto" }
+pcash-metrics = { path = "../metrics" }
+pcash-da = { path = "../da", features = ["kzg"] }
+
+alloy-primitives = { workspace = true }
+alloy-eips = "2.1"
+alloy-rpc-types-beacon = "2.1"
+redb = { workspace = true }
+clap = { workspace = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "signal", "fs", "io-util", "net"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["json"] }
+eyre = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+thiserror = { workspace = true }
+tempfile = { workspace = true }
+reqwest = { version = "0.13", default-features = false, features = ["json", "stream", "rustls"] }
+crossbeam-channel = "0.5"
+
+futures-util = "0.3"
+
+# Free space on the data directory's filesystem, for the metrics gauge.
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", features = ["fs"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["test-util"] }
+# Self dev-dependency: the only way `test-support` is ever turned on.
+pcash-node = { path = ".", features = ["test-support"] }
+# The storage-halt test fails a commit through the state crate's own hook.
+pcash-state = { path = "../state", features = ["test-support"] }
+k256 = { workspace = true }
+# Mock-transport reorg test: build canned L1 blocks/receipts and inject them
+# through a custom transport behind `L1Client::from_transport`.
+alloy-transport = { workspace = true }
+alloy-json-rpc = { workspace = true }
+alloy-rpc-types-eth = { workspace = true }
+alloy-consensus = { workspace = true }
+alloy-sol-types = { workspace = true }
+tower = { workspace = true }

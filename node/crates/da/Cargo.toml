@@ -1,0 +1,25 @@
+[package]
+name = "pcash-da"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "PCASH calldata/blob carrier encoding and KZG content verification"
+
+[lints]
+workspace = true
+
+[features]
+default = []
+kzg = ["alloy-eips/kzg", "dep:c-kzg"]
+
+[dependencies]
+alloy-eips = { version = "2.1", default-features = false, features = ["std", "kzg-sidecar"] }
+alloy-primitives = { workspace = true }
+c-kzg = { version = "2.1.1", default-features = false, features = ["ethereum_kzg_settings"], optional = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+hex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }

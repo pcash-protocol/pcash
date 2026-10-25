@@ -1,0 +1,67 @@
+name: Issuance conformance
+
+on:
+  workflow_dispatch:
+    inputs:
+      portability:
+        description: Run the full OS and architecture matrix
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: issuance-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  vectors:
+    name: Vectors (Linux x64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Select the tested Rust compiler
+        run: rustup toolchain install 1.94.1 --profile minimal
+      - name: Test exact issuance transitions
+        run: cargo +1.94.1 test --locked -p pcash-issuance --lib
+      - name: Test exact issuance transitions (release)
+        run: cargo +1.94.1 test --locked --release -p pcash-issuance --lib -- --include-ignored
+      - name: Compare frozen issuance vectors
+        run: cargo +1.94.1 run --locked -p pcash-issuance --bin issuance-vectors -- --check vectors/issuance.json
+
+  independent-python:
+    name: Independent Python
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Check the issuance policy with Python integers
+        run: python3 scripts/issuance/check_issuance_vectors.py vectors/issuance.json
+
+  portability:
+    name: Vectors (${{ matrix.os }})
+    if: inputs.portability
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04-arm, macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Select the tested Rust compiler
+        run: rustup toolchain install 1.94.1 --profile minimal
+      - name: Test exact issuance transitions
+        run: cargo +1.94.1 test --locked -p pcash-issuance --lib
+      - name: Test exact issuance transitions (release)
+        run: cargo +1.94.1 test --locked --release -p pcash-issuance --lib -- --include-ignored
+      - name: Compare frozen issuance vectors
+        run: cargo +1.94.1 run --locked -p pcash-issuance --bin issuance-vectors -- --check vectors/issuance.json

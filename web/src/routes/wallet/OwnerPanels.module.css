@@ -1,0 +1,137 @@
+.noticeRow {
+  position: relative;
+}
+
+.noticeRow > div {
+  padding-right: 84px;
+}
+
+.dismiss {
+  position: absolute;
+  top: 7px;
+  right: 8px;
+  padding: 6px 9px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.sendCard {
+  min-height: 440px;
+}
+
+.sendForm {
+  display: grid;
+  gap: 14px;
+}
+
+.sendForm label {
+  display: grid;
+  gap: 7px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.sendForm input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-control-surface);
+  color: var(--color-text);
+  padding: 11px;
+}
+
+.formHint {
+  margin: 2px 0;
+  font-size: 13px;
+}
+
+.sendCard :global(.spinner) { margin-right: 8px; vertical-align: -2px; }
+
+
+.review dl {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px 22px;
+  padding: 14px 0;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.review dt {
+  color: var(--color-text-muted);
+}
+
+.review dd {
+  max-width: 300px;
+  overflow: hidden;
+  margin: 0;
+  text-overflow: ellipsis;
+  text-align: right;
+}
+
+
+@media (max-width: 1000px) {
+
+  .sendCard {
+    min-height: auto;
+  }
+}
+
+@media (max-width: 620px) {
+  .review dl {
+    grid-template-columns: 1fr;
+  }
+
+  .review dd {
+    text-align: left;
+  }
+}
+.fieldInvalid { border-color: var(--color-danger-border) !important; }
+.fieldError { color: var(--color-danger-text); font-size: 12.5px; margin: -4px 0 0; }
+.fieldResolved { color: var(--color-text-muted); font-size: 12.5px; margin: -4px 0 0; overflow-wrap: anywhere; }
+.fieldResolved code { color: var(--color-code-text-strong); }
+.sendActions { display: flex; gap: 10px; }
+.summary { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.reviewLine { display: flex; flex-wrap: wrap; gap: 4px 8px; margin: 0; font-size: 13px; }
+.reviewLine dt { color: var(--color-text-muted); }
+.reviewLine dd { margin: 0 8px 0 0; min-width: 0; overflow-wrap: anywhere; }
+
+
+.transactionHash { overflow-wrap: anywhere; }
+.confirmed { color: var(--color-success-text); }
+.amountField { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.amountBox { position: relative; }
+/* The #send ancestor outranks the wallet panel's #send input styles. */
+:global(#send) .amountBox .amountInput { min-height: 58px; padding: 10px 72px 10px 12px; font-size: 28px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.unit { position: absolute; right: 14px; bottom: 19px; color: var(--color-text-muted); font-size: 14px; pointer-events: none; }
+.feeField { display: grid; gap: 4px; }
+.feeField label { grid-template-columns: auto 110px; align-items: center; justify-content: start; gap: 10px; }
+:global(#send) .feeField .feeInput { min-height: 32px; padding: 5px 8px; font-size: 13px; }
+.feeField p { margin: 0; color: var(--color-text-muted); }
+.available { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0; color: var(--color-text-muted); font-size: 12px; }
+.available button { padding: 2px 8px; min-height: 0; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface-raised); font-size: 12px; }
+.copyHash { margin-left: 4px; vertical-align: middle; }
+/* Outranks the wallet panel's #send button size. */
+:global(#send) dd button.copyHash { min-height: 0; padding: 4px; }
+.profileLink { display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; }
+.recipientField { position: relative; }
+/* The #send ancestor outranks the wallet panel's #send input and button styles. */
+:global(#send) .recipientField .recipientInput { padding-right: 44px; }
+:global(#send) .recipientField .scanButton { position: absolute; right: 4px; bottom: 4px; display: grid; place-items: center; width: 34px; height: 34px; min-height: 0; padding: 0; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--color-text-muted); }
+:global(#send) .recipientField .scanButton:hover, :global(#send) .recipientField .scanButton[aria-pressed="true"] { background: var(--color-surface-raised); color: var(--color-text); }
+
+.sendFields { display: grid; gap: 14px; min-width: 0; margin: 0; padding: 0; border: 0; }
+
+/* The message and sender choice are secondary to the amount: one compact group under it. */
+.memoField { display: grid; gap: 6px; min-width: 0; }
+.memoField p { margin: 0; color: var(--color-text-muted); }
+.memoInput { width: 100%; min-width: 0; min-height: 64px; padding: 10px 11px; resize: vertical; font-family: inherit; font-size: 14px; line-height: 1.4; }
+.memoHint { display: flex; justify-content: space-between; gap: 12px; }
+.memoHint span:last-child { flex-shrink: 0; font-variant-numeric: tabular-nums; }
+/* The #send ancestor outranks the form's and the wallet panel's label and input styles. */
+:global(#send) .sendFields .senderChoice { display: flex; align-items: center; gap: 8px; color: var(--color-text); font-size: 13px; cursor: pointer; }
+:global(#send) .sendFields .senderChoice input { width: auto; min-height: 0; margin: 0; padding: 0; accent-color: var(--color-text); }
+@media (max-width: 520px) {
+  .memoInput { font-size: 16px; }
+}

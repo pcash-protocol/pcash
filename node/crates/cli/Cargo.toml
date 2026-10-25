@@ -1,0 +1,43 @@
+[package]
+name = "pcash-cli"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "pcash-cli: command-line client for the node's pcash_* JSON-RPC"
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "pcash-cli"
+path = "src/main.rs"
+
+[dependencies]
+# The typed `pcash_*` client and its wire types: the CLI parses arguments and
+# renders responses, and owns no part of the protocol encoding.
+pcash-rpc = { path = "../rpc" }
+pcash-state = { path = "../state" }
+sha2 = { workspace = true }
+# The dedicated `pscan_*` listener client: source reads, operator publish,
+# and permissionless submissions all live on that namespace now.
+pcash-pscan = { path = "../pscan", default-features = false, features = ["client"] }
+jsonrpsee = { version = "0.25", features = ["http-client"] }
+# The P2P identity file format, so `p2p-key` reads and writes the exact bytes
+# the node does. The CLI never holds key material: it gets back an account of
+# public facts only.
+pcash-p2p = { path = "../p2p" }
+
+clap = { workspace = true }
+tokio = { version = "1", features = ["rt", "macros"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+alloy-primitives = { workspace = true }
+hex = { workspace = true }
+eyre = { workspace = true }
+time = { version = "0.3", features = ["formatting"] }
+
+[dev-dependencies]
+# The `NodeApi` stub, so the binary can be driven against a real server.
+pcash-rpc = { path = "../rpc", features = ["test-support"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tempfile = { workspace = true }

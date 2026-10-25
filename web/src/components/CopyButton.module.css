@@ -1,0 +1,6 @@
+.copy { display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 6px; }
+.copy svg { flex: none; }
+.copy[data-copy-state="copied"] svg { color: var(--color-success-text); }
+.copy[data-copy-state="failed"] svg { color: var(--color-danger-text); }
+button.icon { padding: 4px; border: 0; background: transparent; color: var(--color-text-muted); line-height: 0; }
+button.icon:hover:not(:disabled) { background: var(--color-surface-raised); color: var(--color-text); }

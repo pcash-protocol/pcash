@@ -1,0 +1,2511 @@
+{
+  "account": {
+    "accountKind": "0x1",
+    "accountRevision": "0x3",
+    "accountRuleSetCommitment": "0x535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172",
+    "address": "0x2e2f303132333435363738393a3b3c3d3e3f4041",
+    "index": "0xa",
+    "material": {
+      "mlKem768PublicKey": "0x404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedf",
+      "status": "available"
+    },
+    "nullifierKeyCommitment": "0x42434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f6061",
+    "receiveKeyHash": "0x6465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f80818283"
+  },
+  "accountChangePage": {
+    "changes": [
+      {
+        "accountIndex": "0xa",
+        "accountKind": "0x0",
+        "accountRevision": "0x2",
+        "accountRuleSetCommitment": "0x62636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f8081",
+        "address": "0x737475767778797a7b7c7d7e7f80818283848586",
+        "nullifierKeyCommitment": "0x5152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f70",
+        "origin": {
+          "blockHash": "0x404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
+          "blockNumber": "0x11"
+        },
+        "receiveKey": "0x707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f",
+        "receiveKeyHash": "0x737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192"
+      },
+      {
+        "accountIndex": "0xb",
+        "accountKind": "0x1",
+        "accountRevision": "0x1",
+        "accountRuleSetCommitment": "0xa6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5",
+        "address": "0x8a8b8c8d8e8f909192939495969798999a9b9c9d",
+        "nullifierKeyCommitment": "0x95969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4",
+        "origin": {
+          "blockHash": "0x8485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3",
+          "blockNumber": "0x12"
+        },
+        "receiveKey": null,
+        "receiveKeyHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    ],
+    "complete": false,
+    "continuation": {
+      "fromBlock": "0x10",
+      "nextBlock": "0x13",
+      "nextOrdinal": "0x2",
+      "target": {
+        "blockHash": "0xcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaeb",
+        "blockNumber": "0x55"
+      }
+    },
+    "fromBlock": "0x10",
+    "target": {
+      "accountCount": "0xc",
+      "block": {
+        "blockHash": "0xcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaeb",
+        "blockNumber": "0x55"
+      }
+    }
+  },
+  "accountMaterialNotPresent": {
+    "status": "notPresent"
+  },
+  "accountMaterialUnavailable": {
+    "lifecycle": "rotating",
+    "status": "unavailable"
+  },
+  "accountProofNotFound": {
+    "address": "0xa1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4",
+    "authenticated": false,
+    "status": "notFound"
+  },
+  "accountProofPresent": {
+    "account": {
+      "accountKind": "0x1",
+      "accountRevision": "0x3",
+      "accountRuleSetCommitment": "0x535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172",
+      "address": "0x2e2f303132333435363738393a3b3c3d3e3f4041",
+      "index": "0xa",
+      "material": {
+        "mlKem768PublicKey": "0x404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedf",
+        "status": "available"
+      },
+      "nullifierKeyCommitment": "0x42434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f6061",
+      "receiveKeyHash": "0x6465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f80818283"
+    },
+    "accountCount": "0x3333",
+    "accountSiblings": [
+      "0x52535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071",
+      "0x636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182",
+      "0x7475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90919293",
+      "0x85868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4",
+      "0x969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5",
+      "0xa7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6",
+      "0xb8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7",
+      "0xc9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8",
+      "0xdadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9",
+      "0xebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a",
+      "0xfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b",
+      "0x0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c",
+      "0x1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d",
+      "0x2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e",
+      "0x404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
+      "0x5152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f70",
+      "0x62636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f8081",
+      "0x737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192",
+      "0x8485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3",
+      "0x95969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4",
+      "0xa6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5",
+      "0xb7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6",
+      "0xc8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7",
+      "0xd9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8",
+      "0xeaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff00010203040506070809",
+      "0xfbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a",
+      "0x0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b",
+      "0x1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c",
+      "0x2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d",
+      "0x3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e",
+      "0x505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f",
+      "0x6162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f80",
+      "0x72737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f9091",
+      "0x838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2",
+      "0x9495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3",
+      "0xa5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4",
+      "0xb6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5",
+      "0xc7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6",
+      "0xd8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7",
+      "0xe9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708"
+    ],
+    "accountStateRoot": "0x75767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f9091929394",
+    "accountStateRootStateSiblings": [
+      "0x4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d",
+      "0x5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e",
+      "0x707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f",
+      "0x8182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0"
+    ],
+    "boundary": {
+      "blockHash": "0xbbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9da",
+      "header": {
+        "historyRoot": "0x999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8",
+        "l1OriginRoot": "0x88898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7",
+        "number": "0x44",
+        "parentHash": "0x55565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374",
+        "stateRoot": "0x7778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90919293949596",
+        "timestamp": "0x65123456",
+        "transactionResultsRoot": "0x666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
+      },
+      "state": {
+        "accountCount": "0x33",
+        "accountStateRoot": "0x333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152",
+        "issuedSoFar": "0x22",
+        "lagQ": "0",
+        "nullifierCount": "0x55",
+        "nullifierRoot": "0x4445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60616263",
+        "outputCount": "0x11",
+        "outputRoot": "0x1112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30"
+      }
+    },
+    "stateRootHeaderSiblings": [
+      "0xa4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3",
+      "0xb5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4",
+      "0xc6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5",
+      "0xd7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6"
+    ],
+    "status": "present"
+  },
+  "addPeerResult": {
+    "peerId": "12D3KooWPeerA"
+  },
+  "block": {
+    "hash": "0xdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfc",
+    "historyRoot": "0x32333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f5051",
+    "l1Origin": {
+      "blockHash": "0x767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495",
+      "blockNumber": "0x77",
+      "blockTimestamp": "0x65129999",
+      "l1LogCount": "0x2",
+      "l1LogsRoot": "0x8788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6"
+    },
+    "l1OriginRoot": "0x2122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40",
+    "number": "0x66",
+    "parentHash": "0xeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d",
+    "stateRoot": "0x101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f",
+    "timestamp": "0x65129999",
+    "transactionBytes": null,
+    "transactionResultCount": "0x2",
+    "transactionResults": [
+      {
+        "contentHash": "0x98999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7",
+        "inclusion": {
+          "batchItemIndex": "0x0",
+          "l1BlockHash": "0x767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495",
+          "l1BlockNumber": "0x77",
+          "l1TransactionHash": "0xbabbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9",
+          "l1TransactionIndex": "0x1"
+        },
+        "outcome": "succeeded",
+        "transactionId": "0x5455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f70717273"
+      },
+      {
+        "contentHash": "0xa9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8",
+        "inclusion": {
+          "batchItemIndex": "0x0",
+          "l1BlockHash": "0x767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495",
+          "l1BlockNumber": "0x77",
+          "l1TransactionHash": "0xcbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9ea",
+          "l1TransactionIndex": "0x2"
+        },
+        "outcome": "proofRejected",
+        "transactionId": "0x65666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f8081828384"
+      }
+    ],
+    "transactionResultsRoot": "0xff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e"
+  },
+  "blockEconomicsPage": {
+    "atBlockHash": "0xcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaeb",
+    "atBlockNumber": "0x55",
+    "nextBlock": "0xa",
+    "records": [
+      {
+        "baseline": "0x64",
+        "blockAllowance": "0x12c",
+        "blocks": "0x2",
+        "firstBlock": "0x8",
+        "firstTimestamp": "0x60",
+        "internalOffer": "0x64",
+        "issuanceTotal": "0x12c",
+        "lagQ": "-8166776806102523123120990578362437074944",
+        "lastBlock": "0x9",
+        "lastTimestamp": "0x6c",
+        "openFeesTotal": "0x7",
+        "qualifyingActions": "0x3",
+        "rewardEach": "0x64"
+      }
+    ]
+  },
+  "blockHeader": {
+    "boundary": {
+      "blockHash": "0xbbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9da",
+      "header": {
+        "historyRoot": "0x999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8",
+        "l1OriginRoot": "0x88898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7",
+        "number": "0x44",
+        "parentHash": "0x55565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374",
+        "stateRoot": "0x7778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90919293949596",
+        "timestamp": "0x65123456",
+        "transactionResultsRoot": "0x666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
+      },
+      "state": {
+        "accountCount": "0x33",
+        "accountStateRoot": "0x333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152",
+        "issuedSoFar": "0x22",
+        "lagQ": "0",
+        "nullifierCount": "0x55",
+        "nullifierRoot": "0x4445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60616263",
+        "outputCount": "0x11",
+        "outputRoot": "0x1112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30"
+      }
+    },
+    "recentPcashBlockHash": "0xd9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8"
+  },
+  "blockId": {
+    "blockHash": "0xcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaeb",
+    "blockNumber": "0x55"
+  },
+  "blockPayouts": {
+    "block": {
+      "blockHash": "0xcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaeb",
+      "blockNumber": "0x55"
+    },
+    "issuanceTotal": "0x12c",
+    "openFeesTotal": "0x7",
+    "payouts": [
+      {
+        "amount": "0x64",
+        "component": "issuance",
+        "contexts": [
+          "0xdbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fa"
+        ],
+        "outputIndex": "0x31",
+        "ownerCommitment": "0xcacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9",
+        "source": {
+          "batchItemIndex": 3,
+          "kind": "designatedIssuance",
+          "l1TransactionIndex": 2
+        }
+      },
+      {
+        "amount": "0x7",
+        "component": "openFee",
+        "contexts": [
+          "0x0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d",
+          "0x1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e"
+        ],
+        "outputIndex": "0x33",
+        "ownerCommitment": "0xfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c",
+        "source": {
+          "kind": "posterPayout",
+          "l1TransactionIndices": [
+            2,
+            4
+          ]
+        }
+      },
+      {
+        "amount": "0xc8",
+        "component": "issuance",
+        "contexts": [
+          "0x0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d",
+          "0x1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e"
+        ],
+        "outputIndex": "0x34",
+        "ownerCommitment": "0xfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c",
+        "source": {
+          "kind": "posterPayout",
+          "l1TransactionIndices": [
+            2,
+            4
+          ]
+        }
+      }
+    ]
+  },
+  "boundary": {
+    "blockHash": "0xbbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9da",
+    "header": {
+      "historyRoot": "0x999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8",
+      "l1OriginRoot": "0x88898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7",
+      "number": "0x44",
+      "parentHash": "0x55565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374",
+      "stateRoot": "0x7778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90919293949596",
+      "timestamp": "0x65123456",
+      "transactionResultsRoot": "0x666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
+    },
+    "state": {
+      "accountCount": "0x33",
+      "accountStateRoot": "0x333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152",
+      "issuedSoFar": "0x22",
+      "lagQ": "0",
+      "nullifierCount": "0x55",
+      "nullifierRoot": "0x4445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60616263",
+      "outputCount": "0x11",
+      "outputRoot": "0x1112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30"
+    }
+  },
+  "catalogInfoAvailable": {
+    "limits": {
+      "defaultPageItems": "0xc8",
+      "maxAggregatePayloadBytes": "0xa00000",
+      "maxPageItems": "0x1f4",
+      "maxPagePayloadBytes": "0x100000",
+      "maxPayloadBytes": "0x40000",
+      "maxRecords": "0x1388"
+    },
+    "namespaces": [
+      "pcash.marketplace.offer.v1"
+    ],
+    "pcashChainId": "0xabcd",
+    "status": "available",
+    "writable": true
+  },
+  "catalogInfoDisabled": {
+    "limits": {
+      "defaultPageItems": "0xc8",
+      "maxAggregatePayloadBytes": "0xa00000",
+      "maxPageItems": "0x1f4",
+      "maxPagePayloadBytes": "0x100000",
+      "maxPayloadBytes": "0x40000",
+      "maxRecords": "0x1388"
+    },
+    "namespaces": [
+      "pcash.marketplace.offer.v1"
+    ],
+    "pcashChainId": "0x0",
+    "status": "disabled",
+    "writable": false
+  },
+  "catalogPage": {
+    "items": [
+      {
+        "contentId": "0xd6bb583afc011362f78d842a40e65e57417fde5470a2238bf0fd138bc1e171a8",
+        "createdAt": "0x6553f17b",
+        "namespace": "pcash.marketplace.offer.v1",
+        "payload": "0x909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+        "pcashChainId": "0xabcd"
+      }
+    ],
+    "nextCursor": "0x606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f"
+  },
+  "catalogRecord": {
+    "contentId": "0xd6bb583afc011362f78d842a40e65e57417fde5470a2238bf0fd138bc1e171a8",
+    "createdAt": "0x6553f17b",
+    "namespace": "pcash.marketplace.offer.v1",
+    "payload": "0x909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+    "pcashChainId": "0xabcd"
+  },
+  "contractContract": {
+    "accountProof": {
+      "account": {
+        "accountKind": "0x1",
+        "accountRevision": "0x3",
+        "accountRuleSetCommitment": "0x535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172",
+        "address": "0x2e2f303132333435363738393a3b3c3d3e3f4041",
+        "index": "0xa",
+        "material": {
+          "mlKem768PublicKey": "0x404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedf",
+          "status": "available"
+        },
+        "nullifierKeyCommitment": "0x42434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f6061",
+        "receiveKeyHash": "0x6465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f80818283"
+      },
+      "accountCount": "0x3333",
+      "accountSiblings": [
+        "0x52535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071",
+        "0x636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182",
+        "0x7475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90919293",
+        "0x85868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4",
+        "0x969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5",
+        "0xa7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6",
+        "0xb8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7",
+        "0xc9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8",
+        "0xdadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9",
+        "0xebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a",
+        "0xfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b",
+        "0x0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c",
+        "0x1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d",
+        "0x2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e",
+        "0x404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
+        "0x5152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f70",
+        "0x62636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f8081",
+        "0x737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192",
+        "0x8485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3",
+        "0x95969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4",
+        "0xa6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5",
+        "0xb7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6",
+        "0xc8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7",
+        "0xd9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8",
+        "0xeaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff00010203040506070809",
+        "0xfbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a",
+        "0x0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b",
+        "0x1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c",
+        "0x2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d",
+        "0x3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e",
+        "0x505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f",
+        "0x6162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f80",
+        "0x72737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f9091",
+        "0x838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2",
+        "0x9495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3",
+        "0xa5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4",
+        "0xb6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5",
+        "0xc7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6",
+        "0xd8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7",
+        "0xe9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708"
+      ],
+      "accountStateRoot": "0x75767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f9091929394",
+      "accountStateRootStateSiblings": [
+        "0x4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d",
+        "0x5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e",
+        "0x707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f",
+        "0x8182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0"
+      ],
+      "boundary": {
+        "blockHash": "0xbbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9da",
+        "header": {
+          "historyRoot": "0x999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8",
+          "l1OriginRoot": "0x88898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7",
+          "number": "0x44",
+          "parentHash": "0x55565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374",
+          "stateRoot": "0x7778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90919293949596",
+          "timestamp": "0x65123456",
+          "transactionResultsRoot": "0x666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
+        },
+        "state": {
+          "accountCount": "0x33",
+          "accountStateRoot": "0x333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152",
+          "issuedSoFar": "0x22",
+          "lagQ": "0",
+          "nullifierCount": "0x55",
+          "nullifierRoot": "0x4445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60616263",
+          "outputCount": "0x11",
+          "outputRoot": "0x1112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30"
+        }
+      },
+      "stateRootHeaderSiblings": [
+        "0xa4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3",
+        "0xb5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4",
+        "0xc6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5",
+        "0xd7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6"
+      ],
+      "status": "present"
+    },
+    "address": "0x45464748494a4b4c4d4e4f505152535455565758",
+    "functions": [
+      {
+        "configurationCommitment": "0xa8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7",
+        "applicationVkHash": "0x9798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6",
+        "selector": "0x0"
+      },
+      {
+        "configurationCommitment": "0xcacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9",
+        "applicationVkHash": "0xb9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8",
+        "selector": "0x1"
+      }
+    ],
+    "origin": {
+      "batchItemIndex": "0x5",
+      "l1BlockHash": "0xdbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fa",
+      "l1BlockNumber": "0x4444",
+      "l1TransactionHash": "0xecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b",
+      "l1TransactionIndex": "0x2"
+    },
+    "status": "contract",
+    "transaction": "0x101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f"
+  },
+  "contractNotContract": {
+    "accountProof": {
+      "account": {
+        "accountKind": "0x1",
+        "accountRevision": "0x3",
+        "accountRuleSetCommitment": "0x535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172",
+        "address": "0x2e2f303132333435363738393a3b3c3d3e3f4041",
+        "index": "0xa",
+        "material": {
+          "mlKem768PublicKey": "0x404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedf",
+          "status": "available"
+        },
+        "nullifierKeyCommitment": "0x42434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f6061",
+        "receiveKeyHash": "0x6465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f80818283"
+      },
+      "accountCount": "0x3333",
+      "accountSiblings": [
+        "0x52535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071",
+        "0x636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182",
+        "0x7475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90919293",
+        "0x85868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4",
+        "0x969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5",
+        "0xa7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6",
+        "0xb8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7",
+        "0xc9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8",
+        "0xdadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9",
+        "0xebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a",
+        "0xfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b",
+        "0x0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c",
+        "0x1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d",
+        "0x2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e",
+        "0x404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
+        "0x5152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f70",
+        "0x62636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f8081",
+        "0x737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192",
+        "0x8485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3",
+        "0x95969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4",
+        "0xa6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5",
+        "0xb7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6",
+        "0xc8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7",
+        "0xd9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8",
+        "0xeaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff00010203040506070809",
+        "0xfbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a",
+        "0x0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b",
+        "0x1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c",
+        "0x2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d",
+        "0x3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e",
+        "0x505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f",
+        "0x6162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f80",
+        "0x72737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f9091",
+        "0x838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2",
+        "0x9495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3",
+        "0xa5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4",
+        "0xb6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5",
+        "0xc7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6",
+        "0xd8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7",
+        "0xe9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708"
+      ],
+      "accountStateRoot": "0x75767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f9091929394",
+      "accountStateRootStateSiblings": [
+        "0x4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d",
+        "0x5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e",
+        "0x707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f",
+        "0x8182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0"
+      ],
+      "boundary": {
+        "blockHash": "0xbbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9da",
+        "header": {
+          "historyRoot": "0x999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8",
+          "l1OriginRoot": "0x88898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7",
+          "number": "0x44",
+          "parentHash": "0x55565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374",
+          "stateRoot": "0x7778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90919293949596",
+          "timestamp": "0x65123456",
+          "transactionResultsRoot": "0x666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
+        },
+        "state": {
+          "accountCount": "0x33",
+          "accountStateRoot": "0x333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152",
+          "issuedSoFar": "0x22",
+          "lagQ": "0",
+          "nullifierCount": "0x55",
+          "nullifierRoot": "0x4445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60616263",
+          "outputCount": "0x11",
+          "outputRoot": "0x1112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30"
+        }
+      },
+      "stateRootHeaderSiblings": [
+        "0xa4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3",
+        "0xb5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4",
+        "0xc6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5",
+        "0xd7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6"
+      ],
+      "status": "present"
+    },
+    "status": "notContract"
+  },
+  "contractNotFound": {
+    "address": "0xb8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacb",
+    "authenticated": false,
+    "status": "notFound"
+  },
+  "contractUnavailable": {
+    "address": "0xcfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2",
+    "lifecycle": "pruned",
+    "status": "unavailable"
+  },
+  "derivationHalted": {
+    "cause": "l1Input",
+    "l1BlockNumber": "0x9a",
+    "sinceUnixMs": "0x18b00000002",
+    "state": "halted"
+  },
+  "derivationStalled": {
+    "cause": "l1Rpc",
+    "l1BlockNumber": "0x9a",
+    "sinceUnixMs": "0x18b00000001",
+    "state": "stalled"
+  },
+  "feeEstimate": {
+    "basis": {
+      "included": {
+        "fast": "0x6000",
+        "low": "0x2000",
+        "standard": "0x4000"
+      },
+      "includedSamples": "0x7",
+      "pending": {
+        "fast": "0x3000",
+        "low": "0x1000",
+        "standard": "0x2000"
+      },
+      "pendingSamples": "0x1"
+    },
+    "byteSize": "0x8121",
+    "head": {
+      "blockHash": "0xcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaeb",
+      "blockNumber": "0x55"
+    },
+    "tiers": {
+      "fast": "0x9000",
+      "low": "0x3000",
+      "standard": "0x6000"
+    },
+    "windowBlocks": "0x40"
+  },
+  "historyProof": {
+    "boundary": {
+      "blockHash": "0xbbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9da",
+      "header": {
+        "historyRoot": "0x999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8",
+        "l1OriginRoot": "0x88898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7",
+        "number": "0x44",
+        "parentHash": "0x55565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374",
+        "stateRoot": "0x7778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90919293949596",
+        "timestamp": "0x65123456",
+        "transactionResultsRoot": "0x666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
+      },
+      "state": {
+        "accountCount": "0x33",
+        "accountStateRoot": "0x333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152",
+        "issuedSoFar": "0x22",
+        "lagQ": "0",
+        "nullifierCount": "0x55",
+        "nullifierRoot": "0x4445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60616263",
+        "outputCount": "0x11",
+        "outputRoot": "0x1112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30"
+      }
+    },
+    "historicalBlockHash": "0x9495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3",
+    "historicalBlockNumber": "0x19",
+    "historyRoot": "0x838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2",
+    "historyRootSiblings": [
+      "0xf2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f1011",
+      "0x030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122",
+      "0x1415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30313233",
+      "0x25262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f4041424344"
+    ],
+    "historySiblings": [
+      "0x9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babb",
+      "0xadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcc",
+      "0xbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdd",
+      "0xcfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedee",
+      "0xe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+      "0xf1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f10",
+      "0x02030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2021",
+      "0x131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132",
+      "0x2425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40414243",
+      "0x35363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f5051525354",
+      "0x464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465",
+      "0x5758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f70717273747576",
+      "0x68696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f8081828384858687",
+      "0x797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798",
+      "0x8a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9",
+      "0x9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9ba",
+      "0xacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacb",
+      "0xbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdc",
+      "0xcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebeced",
+      "0xdfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfe",
+      "0xf0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f",
+      "0x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "0x12131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f3031",
+      "0x232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142",
+      "0x3435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f50515253",
+      "0x45464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f6061626364",
+      "0x565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475",
+      "0x6768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f80818283848586",
+      "0x78797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f9091929394959697",
+      "0x898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8",
+      "0x9a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9",
+      "0xabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9ca",
+      "0xbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadb",
+      "0xcdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebec",
+      "0xdedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfd",
+      "0xeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e",
+      "0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "0x1112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30",
+      "0x22232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f4041",
+      "0x333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152"
+    ],
+    "recentPcashBlockHash": "0x72737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f9091"
+  },
+  "inclusionId": {
+    "batchItemIndex": "0x5",
+    "l1BlockHash": "0xdbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fa",
+    "l1BlockNumber": "0x4444",
+    "l1TransactionHash": "0xecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b",
+    "l1TransactionIndex": "0x2"
+  },
+  "issuanceQuote": {
+    "baseline": "0x64",
+    "blockAllowance": "0x12c",
+    "candidateTimestamp": "0x18",
+    "exhausted": false,
+    "internalOffer": "0x64",
+    "issuedSoFar": "0x64",
+    "lagQ": "-4083388403051261561560495289181218537472",
+    "maxSingleActionReward": "0x64",
+    "multiplierQ": "0x100000000000000000000000000000000",
+    "parent": {
+      "blockHash": "0xcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaeb",
+      "blockNumber": "0x55",
+      "timestamp": "0xc"
+    },
+    "rewardPossible": true,
+    "supplyCap": "0x3b9aca00"
+  },
+  "l1DeliveryBatchPage": {
+    "batches": [
+      {
+        "blobVersionedHashes": [
+          "0x0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d"
+        ],
+        "carrierHash": "0xfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c",
+        "carrierLength": "0x1f0000",
+        "carrierType": "blob",
+        "context": null,
+        "emitter": null,
+        "exclusionReason": null,
+        "items": [
+          {
+            "batchItemIndex": "0x0",
+            "byteLength": "0x7b9f",
+            "byteOffset": "0x47",
+            "contentHash": "0x4142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60",
+            "exclusionReason": null
+          },
+          {
+            "batchItemIndex": "0x1",
+            "byteLength": "0x1",
+            "byteOffset": "0x7c0a",
+            "contentHash": "0x52535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071",
+            "exclusionReason": "directModeOutsideInbox"
+          }
+        ],
+        "l1BlockHash": "0xdbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fa",
+        "l1BlockNumber": "0x4444",
+        "l1Sender": "0x8a8b8c8d8e8f909192939495969798999a9b9c9d",
+        "l1TransactionHash": "0xecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b",
+        "l1TransactionIndex": "0x2",
+        "logIndex": null,
+        "posterContext": "0x303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f",
+        "posterOwnerCommitment": "0x1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e"
+      },
+      {
+        "blobVersionedHashes": [],
+        "carrierHash": "0x636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182",
+        "carrierLength": "0x7c40",
+        "carrierType": "event",
+        "context": "0xc017e0",
+        "emitter": "0xa1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4",
+        "exclusionReason": null,
+        "items": [
+          {
+            "batchItemIndex": "0x2",
+            "byteLength": "0x7b9f",
+            "byteOffset": "0x47",
+            "contentHash": "0x969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5",
+            "exclusionReason": null
+          }
+        ],
+        "l1BlockHash": "0xdbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fa",
+        "l1BlockNumber": "0x4444",
+        "l1Sender": "0x8a8b8c8d8e8f909192939495969798999a9b9c9d",
+        "l1TransactionHash": "0xecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b",
+        "l1TransactionIndex": "0x2",
+        "logIndex": "0x3",
+        "posterContext": "0x85868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4",
+        "posterOwnerCommitment": "0x7475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90919293"
+      },
+      {
+        "blobVersionedHashes": [],
+        "carrierHash": "0xa7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6",
+        "carrierLength": "0x41",
+        "carrierType": "event",
+        "context": null,
+        "emitter": "0xa1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4",
+        "exclusionReason": "invalidCarrierEncoding",
+        "items": [],
+        "l1BlockHash": "0xdbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fa",
+        "l1BlockNumber": "0x4444",
+        "l1Sender": "0x8a8b8c8d8e8f909192939495969798999a9b9c9d",
+        "l1TransactionHash": "0xecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b",
+        "l1TransactionIndex": "0x2",
+        "logIndex": "0x4",
+        "posterContext": null,
+        "posterOwnerCommitment": null
+      }
+    ],
+    "complete": false,
+    "continuation": {
+      "block": {
+        "blockHash": "0xcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaeb",
+        "blockNumber": "0x55"
+      },
+      "nextBatch": "0x3"
+    },
+    "l1TransactionHash": "0xecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b"
+  },
+  "l1LogProof": {
+    "boundary": {
+      "blockHash": "0xbbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9da",
+      "header": {
+        "historyRoot": "0x999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8",
+        "l1OriginRoot": "0x88898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7",
+        "number": "0x44",
+        "parentHash": "0x55565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374",
+        "stateRoot": "0x7778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90919293949596",
+        "timestamp": "0x65123456",
+        "transactionResultsRoot": "0x666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
+      },
+      "state": {
+        "accountCount": "0x33",
+        "accountStateRoot": "0x333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152",
+        "issuedSoFar": "0x22",
+        "lagQ": "0",
+        "nullifierCount": "0x55",
+        "nullifierRoot": "0x4445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60616263",
+        "outputCount": "0x11",
+        "outputRoot": "0x1112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30"
+      }
+    },
+    "l1BlockHash": "0x6162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f80",
+    "l1BlockNumber": "0x112233",
+    "l1BlockTimestamp": "0x65129999",
+    "l1LogCount": "0x3",
+    "l1LogsRoot": "0x72737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f9091",
+    "l1OriginIndex": "0x18",
+    "l1OriginRoot": "0x505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f",
+    "l1OriginRootSiblings": [
+      "0x9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbd",
+      "0xafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdce",
+      "0xc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedf",
+      "0xd1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0"
+    ],
+    "l1OriginSiblings": [
+      "0x48494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f6061626364656667",
+      "0x595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778",
+      "0x6a6b6c6d6e6f707172737475767778797a7b7c7d7e7f80818283848586878889",
+      "0x7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a",
+      "0x8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaab",
+      "0x9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbc",
+      "0xaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccd",
+      "0xbfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcddde",
+      "0xd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeef",
+      "0xe1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff00",
+      "0xf2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f1011",
+      "0x030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122",
+      "0x1415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30313233",
+      "0x25262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f4041424344",
+      "0x363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455",
+      "0x4748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60616263646566",
+      "0x58595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374757677",
+      "0x696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788",
+      "0x7a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90919293949596979899",
+      "0x8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aa",
+      "0x9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babb",
+      "0xadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcc",
+      "0xbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdd",
+      "0xcfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedee",
+      "0xe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+      "0xf1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f10",
+      "0x02030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2021",
+      "0x131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132",
+      "0x2425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40414243",
+      "0x35363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f5051525354",
+      "0x464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465",
+      "0x5758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f70717273747576",
+      "0x68696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f8081828384858687",
+      "0x797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798",
+      "0x8a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9",
+      "0x9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9ba",
+      "0xacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacb",
+      "0xbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdc",
+      "0xcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebeced",
+      "0xdfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfe"
+    ],
+    "logIndex": "0x1",
+    "logLeafIndex": "0x1",
+    "logSiblings": [
+      "0x404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
+      "0x5152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f70",
+      "0x62636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f8081",
+      "0x737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192",
+      "0x8485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3",
+      "0x95969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4",
+      "0xa6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5",
+      "0xb7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6",
+      "0xc8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7",
+      "0xd9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8",
+      "0xeaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff00010203040506070809",
+      "0xfbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a",
+      "0x0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b",
+      "0x1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c",
+      "0x2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d",
+      "0x3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e",
+      "0x505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f",
+      "0x6162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f80",
+      "0x72737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f9091",
+      "0x838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2",
+      "0x9495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3",
+      "0xa5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4",
+      "0xb6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5",
+      "0xc7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6",
+      "0xd8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7",
+      "0xe9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708",
+      "0xfafbfcfdfeff000102030405060708090a0b0c0d0e0f10111213141516171819",
+      "0x0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a",
+      "0x1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b",
+      "0x2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c",
+      "0x3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d",
+      "0x4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e",
+      "0x606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f",
+      "0x7172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90",
+      "0x82838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1",
+      "0x939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2",
+      "0xa4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3",
+      "0xb5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4",
+      "0xc6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5",
+      "0xd7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6",
+      "0xe8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff0001020304050607",
+      "0xf9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718",
+      "0x0a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20212223242526272829",
+      "0x1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a",
+      "0x2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b",
+      "0x3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c",
+      "0x4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d",
+      "0x5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e",
+      "0x707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f",
+      "0x8182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0",
+      "0x92939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1",
+      "0xa3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2",
+      "0xb4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3",
+      "0xc5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4",
+      "0xd6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5",
+      "0xe7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff00010203040506",
+      "0xf8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f1011121314151617",
+      "0x090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728",
+      "0x1a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30313233343536373839",
+      "0x2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a",
+      "0x3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b",
+      "0x4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c",
+      "0x5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d",
+      "0x6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e"
+    ],
+    "recentPcashBlockHash": "0x3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e",
+    "transactionIndex": "0x2"
+  },
+  "l1OriginProof": {
+    "boundary": {
+      "blockHash": "0xbbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9da",
+      "header": {
+        "historyRoot": "0x999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8",
+        "l1OriginRoot": "0x88898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7",
+        "number": "0x44",
+        "parentHash": "0x55565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374",
+        "stateRoot": "0x7778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90919293949596",
+        "timestamp": "0x65123456",
+        "transactionResultsRoot": "0x666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
+      },
+      "state": {
+        "accountCount": "0x33",
+        "accountStateRoot": "0x333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152",
+        "issuedSoFar": "0x22",
+        "lagQ": "0",
+        "nullifierCount": "0x55",
+        "nullifierRoot": "0x4445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60616263",
+        "outputCount": "0x11",
+        "outputRoot": "0x1112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30"
+      }
+    },
+    "l1BlockHash": "0x6162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f80",
+    "l1BlockNumber": "0x112233",
+    "l1BlockTimestamp": "0x65129999",
+    "l1LogCount": "0x3",
+    "l1LogsRoot": "0x72737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f9091",
+    "l1OriginIndex": "0x18",
+    "l1OriginRoot": "0x505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f",
+    "l1OriginRootSiblings": [
+      "0x9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbd",
+      "0xafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdce",
+      "0xc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedf",
+      "0xd1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0"
+    ],
+    "l1OriginSiblings": [
+      "0x48494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f6061626364656667",
+      "0x595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778",
+      "0x6a6b6c6d6e6f707172737475767778797a7b7c7d7e7f80818283848586878889",
+      "0x7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a",
+      "0x8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaab",
+      "0x9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbc",
+      "0xaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccd",
+      "0xbfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcddde",
+      "0xd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeef",
+      "0xe1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff00",
+      "0xf2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f1011",
+      "0x030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122",
+      "0x1415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30313233",
+      "0x25262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f4041424344",
+      "0x363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455",
+      "0x4748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60616263646566",
+      "0x58595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374757677",
+      "0x696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788",
+      "0x7a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90919293949596979899",
+      "0x8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aa",
+      "0x9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babb",
+      "0xadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcc",
+      "0xbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdd",
+      "0xcfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedee",
+      "0xe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+      "0xf1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f10",
+      "0x02030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2021",
+      "0x131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132",
+      "0x2425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40414243",
+      "0x35363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f5051525354",
+      "0x464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465",
+      "0x5758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f70717273747576",
+      "0x68696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f8081828384858687",
+      "0x797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798",
+      "0x8a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9",
+      "0x9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9ba",
+      "0xacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacb",
+      "0xbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdc",
+      "0xcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebeced",
+      "0xdfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfe"
+    ],
+    "recentPcashBlockHash": "0x3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e"
+  },
+  "mempoolPage": {
+    "headCheckedBlock": "0x55",
+    "headCheckedBlockHash": "0xcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaeb",
+    "items": [
+      {
+        "byteSize": "0x4d2",
+        "conflictCount": "0x1",
+        "conflictKeys": [
+          "key-a",
+          "key-b"
+        ],
+        "contentHash": "0x7475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90919293",
+        "fundingMode": null,
+        "headCheckedBlock": "0x55",
+        "headCheckedBlockHash": "0xcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaeb",
+        "issuanceOwnerCommitment": "0x55565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374",
+        "issuanceRoute": "designated",
+        "kind": "privateValue",
+        "openFeeAmount": "0x0",
+        "publicRecords": [],
+        "rawTransaction": "0x707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+        "receivedAtUnixMs": "0x18bcfe56800",
+        "recentPcashBlockHash": "0xc9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8",
+        "stableId": "0xstable",
+        "statementId": "0x85868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4",
+        "status": "queued",
+        "validUntil": "0x65128888"
+      }
+    ],
+    "nextCursor": "0x1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b",
+    "peerCount": "0x3"
+  },
+  "mempoolTransaction": {
+    "byteSize": "0x4d2",
+    "conflictCount": "0x1",
+    "conflictKeys": [
+      "key-a",
+      "key-b"
+    ],
+    "contentHash": "0x7475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90919293",
+    "fundingMode": null,
+    "headCheckedBlock": "0x55",
+    "headCheckedBlockHash": "0xcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaeb",
+    "issuanceOwnerCommitment": "0x55565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374",
+    "issuanceRoute": "designated",
+    "kind": "privateValue",
+    "openFeeAmount": "0x0",
+    "publicRecords": [],
+    "rawTransaction": "0x707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+    "receivedAtUnixMs": "0x18bcfe56800",
+    "recentPcashBlockHash": "0xc9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8",
+    "stableId": "0xstable",
+    "statementId": "0x85868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4",
+    "status": "queued",
+    "validUntil": "0x65128888"
+  },
+  "nodeInfo": {
+    "bootstrapAddresses": [],
+    "listenAddresses": [
+      "/ip4/127.0.0.1/tcp/8646"
+    ],
+    "network": {
+      "dialFailures": "0x0",
+      "discoveryMode": "client",
+      "discoveryQueriesFailed": "0x0",
+      "discoveryQueriesSucceeded": "0x0",
+      "holePunchesFailed": "0x0",
+      "holePunchesSucceeded": "0x0",
+      "pendingDials": "0x0",
+      "reachability": "unknown",
+      "relayCircuits": "0x0",
+      "relayCircuitsClosed": "0x0",
+      "relayReservations": [],
+      "routingPeers": "0x0",
+      "targetPeers": "0x10"
+    },
+    "peerCount": "0x1",
+    "peerId": "12D3KooWSelf",
+    "topic": "pcash/v1/43981/txs"
+  },
+  "nullifierProofs": {
+    "boundary": {
+      "blockHash": "0xbbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9da",
+      "header": {
+        "historyRoot": "0x999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8",
+        "l1OriginRoot": "0x88898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7",
+        "number": "0x44",
+        "parentHash": "0x55565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374",
+        "stateRoot": "0x7778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90919293949596",
+        "timestamp": "0x65123456",
+        "transactionResultsRoot": "0x666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
+      },
+      "state": {
+        "accountCount": "0x33",
+        "accountStateRoot": "0x333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152",
+        "issuedSoFar": "0x22",
+        "lagQ": "0",
+        "nullifierCount": "0x55",
+        "nullifierRoot": "0x4445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60616263",
+        "outputCount": "0x11",
+        "outputRoot": "0x1112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30"
+      }
+    },
+    "nullifierRoot": "0xa5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4",
+    "proofs": [
+      {
+        "leaf": {
+          "nextIndex": "0x88",
+          "nextValue": "0xc7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6",
+          "value": "0xb6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5"
+        },
+        "leafIndex": "0x89",
+        "nullifier": "0xb6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5",
+        "siblings": [
+          "0xa4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3",
+          "0xb5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4",
+          "0xc6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5",
+          "0xd7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6",
+          "0xe8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff0001020304050607",
+          "0xf9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718",
+          "0x0a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20212223242526272829",
+          "0x1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a",
+          "0x2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b",
+          "0x3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c",
+          "0x4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d",
+          "0x5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e",
+          "0x707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f",
+          "0x8182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0",
+          "0x92939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1",
+          "0xa3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2",
+          "0xb4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3",
+          "0xc5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4",
+          "0xd6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5",
+          "0xe7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff00010203040506",
+          "0xf8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f1011121314151617",
+          "0x090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728",
+          "0x1a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30313233343536373839",
+          "0x2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a",
+          "0x3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b",
+          "0x4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c",
+          "0x5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d",
+          "0x6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e",
+          "0x808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f",
+          "0x9192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0",
+          "0xa2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1",
+          "0xb3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2",
+          "0xc4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3",
+          "0xd5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4",
+          "0xe6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405",
+          "0xf7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f10111213141516",
+          "0x08090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2021222324252627",
+          "0x191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738",
+          "0x2a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40414243444546474849",
+          "0x3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a",
+          "0x4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b"
+        ]
+      },
+      {
+        "leaf": {
+          "nextIndex": "0x0",
+          "nextValue": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "value": "0x0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a"
+        },
+        "leafIndex": "0x92",
+        "nullifier": "0xfafbfcfdfeff000102030405060708090a0b0c0d0e0f10111213141516171819",
+        "siblings": [
+          "0xf6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415",
+          "0x0708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20212223242526",
+          "0x18191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f3031323334353637",
+          "0x292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748",
+          "0x3a3b3c3d3e3f404142434445464748494a4b4c4d4e4f50515253545556575859",
+          "0x4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a",
+          "0x5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b",
+          "0x6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c",
+          "0x7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d",
+          "0x8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadae",
+          "0xa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+          "0xb1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0",
+          "0xc2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1",
+          "0xd3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2",
+          "0xe4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff00010203",
+          "0xf5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f1011121314",
+          "0x060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425",
+          "0x1718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30313233343536",
+          "0x28292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f4041424344454647",
+          "0x393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758",
+          "0x4a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60616263646566676869",
+          "0x5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a",
+          "0x6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b",
+          "0x7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c",
+          "0x8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacad",
+          "0x9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbe",
+          "0xb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecf",
+          "0xc1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0",
+          "0xd2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1",
+          "0xe3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102",
+          "0xf4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f10111213",
+          "0x05060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2021222324",
+          "0x161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435",
+          "0x2728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40414243444546",
+          "0x38393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f5051525354555657",
+          "0x494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768",
+          "0x5a5b5c5d5e5f606162636465666768696a6b6c6d6e6f70717273747576777879",
+          "0x6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a",
+          "0x7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b",
+          "0x8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabac",
+          "0x9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbd"
+        ]
+      }
+    ]
+  },
+  "outputFrontier": {
+    "block": {
+      "blockHash": "0xcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaeb",
+      "blockNumber": "0x55"
+    },
+    "ommers": [
+      "0x0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c",
+      "0x1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d",
+      "0x2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e"
+    ],
+    "outputCount": "0xb",
+    "outputRoot": "0xfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b"
+  },
+  "outputPage": {
+    "complete": false,
+    "continuation": {
+      "fromOutputIndex": "0x20",
+      "nextOutputIndex": "0x31",
+      "target": {
+        "blockHash": "0xcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaeb",
+        "blockNumber": "0x55"
+      },
+      "targetOutputCount": "0x40"
+    },
+    "fromOutputIndex": "0x20",
+    "outputs": [
+      {
+        "arena": "0xebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a",
+        "contentHash": "0xb8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7",
+        "kind": "ordinary",
+        "nullifiers": [
+          "0xc9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8",
+          "0xdadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9"
+        ],
+        "origin": {
+          "blockHash": "0xcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaeb",
+          "blockNumber": "0x55",
+          "blockTimestamp": "0x65125555"
+        },
+        "outputCommitment": "0xa7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6",
+        "outputData": "0x01de8df69f8b171cf4f73b67350bd6aa88161a924c52e502119f637c1e2d6186addfcb326f135e60995450a4583ba4ed8fd88d936bca4794610d9e1a4777fa8686f7a8185e99394ad3d804f9200b09c899405b6ed2c913ead319b8a0125bbc28c7f6a2332fba6287197a2a594d76f95e0575b6f2800c0ae71e55954318994896f3e65f03bfda5e05616d2785c0bc51dca5a5107ee2e6bd534fc9cd61825bbab03aa7364270fe2f2d76502977d86505d038d69c04a31e0427fce1f35c0d3ea7029e64043d4d9c285d0c17a7de9b7811c9fcb7ae5c60096c837a530d156e653fe85cd52b976406e0a47876b7bc1d168b5cc6a78b8125d2a3f1870ae29f6e1c7aa1e3b87fc4147b5feb5c09bb52098db3cf62c5a2131dbab63a5593df6d7fc06f628eedc6fba9d47abaad74f0a44d18fd2f677566eee2792fa4e864cbef906985a72ffbdc0fb52cd57d37c5fb7ae822472264ad9022d1c4ab60e45f6781d126211069bb4211314f4a0f96ca5fd4b5f410730c81abd1e94ddd5f0ae35b7a186dcb9d7ef54d7919b1e020067fc090d26b84f771c702787684e2840c3b987f44084477466368528f81cb4fae33d859b7eacf4cb535bac262ff6997a43ca9f65ce8d113ebbbd07fb351622341249591fed826e3e2b24759d73c4a5519a668710e3884f333a0f61819e5e3421f1b16933155cc8c97126c00587884a4127eaf96cfeca419d7ac349adfb2ecbea3acb9891173053353dca653ef5d1c6c4fbaaf59465994320955fe6b86595fb403d002b411f8d0ec716f1a8e304b2b0dd3957aaafdc677b68af63b62a81aa87e68c19d50ecfff54fd645e664a28575187b010622b5dd2df19683ab7b46c90db15eaf6be38135bc17c08f6cc4a4dfddd1cc8b06b01099e44995caea4f2581655a550801665067fd46fa0f54055b5818a19cc9137cb3cc46297a30e0df511180430ae934c23caa1bd71b0e7339a17b88884ec3e03d4eded1c63246d0c754961ff2eaa5deecbeff8cf871fb496e355ad0b240a7b97e3e04996f0fb7dc4b45bf1789190530b4845b212ab20117cd2c5c141990d4212c07778c09b3c336ed05adb2f32f48cfdfb6a3181a917c2d278f4da58ba9465d4ae24e91faf37ca85409a502f997e0f14833967c78b6eb9412a4f9ae8a04b9453aad899f4e783ee5f06e7b22cf40e998ddabf49739678393e3d1138b9c30ff3d61bcb118ff16fc291219f3b011750e3dad8fe651b90d02b857bb46382e86b3d3239fbb1a9214b975807d688867e9011dc016640f63184cc39a5ac18728c429323121b57d18132f5cafd25bb4976ddaec033357d35a88d613f4653b2621db5aabfe70121dac232d980dc38acb93e7abb5d4fae0cd054a6229efa11700bd9f5750874cdec31e35bcc665dc0ef15eb893435a512165feb08b6b45d187406165532d3ca2dac022015c994eee652fe348469e0e3929e79ffca8c280de63e51a1e7f380f4bfa513608a1e2ec0084570bc8df620d8c5d665a355632d8f79b7b1e951ed2755626ac115119de30f14baf5181e5f0eaf2bd108fe8501d9cdd26eb883d6a3c1c394ae8dfdea30bd90f716a7134b4d3cde410633229a8ff024ca73c94c8eff38b365d155f789dfae49ea08663f1bd3c6dbafe5806463829feba0e499f1c614038398230f24449901bbfb8a1263d8ccaf67570426686e47ae6720c4bfc15bb53049e",
+        "outputIndex": "0x30",
+        "outputSlot": "0x0",
+        "privateValueShape": null,
+        "transactionId": "0x969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5",
+        "transactionType": "0x2"
+      }
+    ],
+    "target": {
+      "block": {
+        "blockHash": "0xcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaeb",
+        "blockNumber": "0x55"
+      },
+      "outputCount": "0x40"
+    }
+  },
+  "outputPath": {
+    "boundary": {
+      "blockHash": "0xbbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9da",
+      "header": {
+        "historyRoot": "0x999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8",
+        "l1OriginRoot": "0x88898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7",
+        "number": "0x44",
+        "parentHash": "0x55565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374",
+        "stateRoot": "0x7778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90919293949596",
+        "timestamp": "0x65123456",
+        "transactionResultsRoot": "0x666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
+      },
+      "state": {
+        "accountCount": "0x33",
+        "accountStateRoot": "0x333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152",
+        "issuedSoFar": "0x22",
+        "lagQ": "0",
+        "nullifierCount": "0x55",
+        "nullifierRoot": "0x4445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60616263",
+        "outputCount": "0x11",
+        "outputRoot": "0x1112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30"
+      }
+    },
+    "count": "0x14",
+    "outputIndex": "0x13",
+    "root": "0xa6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5",
+    "siblings": [
+      "0xf8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f1011121314151617",
+      "0x090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728",
+      "0x1a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30313233343536373839",
+      "0x2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a",
+      "0x3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b",
+      "0x4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c",
+      "0x5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d",
+      "0x6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e",
+      "0x808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f",
+      "0x9192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0",
+      "0xa2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1",
+      "0xb3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2",
+      "0xc4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3",
+      "0xd5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4",
+      "0xe6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405",
+      "0xf7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f10111213141516",
+      "0x08090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2021222324252627",
+      "0x191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738",
+      "0x2a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40414243444546474849",
+      "0x3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a",
+      "0x4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b",
+      "0x5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c",
+      "0x6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d",
+      "0x7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e",
+      "0x909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+      "0xa1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0",
+      "0xb2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1",
+      "0xc3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2",
+      "0xd4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3",
+      "0xe5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff0001020304",
+      "0xf6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415",
+      "0x0708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20212223242526",
+      "0x18191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f3031323334353637",
+      "0x292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748",
+      "0x3a3b3c3d3e3f404142434445464748494a4b4c4d4e4f50515253545556575859",
+      "0x4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a",
+      "0x5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b",
+      "0x6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c",
+      "0x7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d",
+      "0x8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadae"
+    ]
+  },
+  "outputPaths": {
+    "boundary": {
+      "blockHash": "0xbbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9da",
+      "header": {
+        "historyRoot": "0x999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8",
+        "l1OriginRoot": "0x88898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7",
+        "number": "0x44",
+        "parentHash": "0x55565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374",
+        "stateRoot": "0x7778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90919293949596",
+        "timestamp": "0x65123456",
+        "transactionResultsRoot": "0x666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
+      },
+      "state": {
+        "accountCount": "0x33",
+        "accountStateRoot": "0x333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152",
+        "issuedSoFar": "0x22",
+        "lagQ": "0",
+        "nullifierCount": "0x55",
+        "nullifierRoot": "0x4445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60616263",
+        "outputCount": "0x11",
+        "outputRoot": "0x1112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30"
+      }
+    },
+    "count": "0x15",
+    "paths": [
+      {
+        "outputIndex": "0x1",
+        "siblings": [
+          "0xa2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1",
+          "0xb3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2",
+          "0xc4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3",
+          "0xd5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4",
+          "0xe6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405",
+          "0xf7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f10111213141516",
+          "0x08090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2021222324252627",
+          "0x191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738",
+          "0x2a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40414243444546474849",
+          "0x3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a",
+          "0x4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b",
+          "0x5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c",
+          "0x6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d",
+          "0x7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e",
+          "0x909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+          "0xa1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0",
+          "0xb2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1",
+          "0xc3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2",
+          "0xd4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3",
+          "0xe5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff0001020304",
+          "0xf6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415",
+          "0x0708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20212223242526",
+          "0x18191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f3031323334353637",
+          "0x292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748",
+          "0x3a3b3c3d3e3f404142434445464748494a4b4c4d4e4f50515253545556575859",
+          "0x4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a",
+          "0x5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b",
+          "0x6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c",
+          "0x7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d",
+          "0x8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadae",
+          "0xa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+          "0xb1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0",
+          "0xc2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1",
+          "0xd3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2",
+          "0xe4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff00010203",
+          "0xf5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f1011121314",
+          "0x060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425",
+          "0x1718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30313233343536",
+          "0x28292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f4041424344454647",
+          "0x393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758"
+        ]
+      },
+      {
+        "outputIndex": "0x2",
+        "siblings": [
+          "0x4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b",
+          "0x5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c",
+          "0x6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d",
+          "0x7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e",
+          "0x909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+          "0xa1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0",
+          "0xb2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1",
+          "0xc3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2",
+          "0xd4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3",
+          "0xe5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff0001020304",
+          "0xf6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415",
+          "0x0708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20212223242526",
+          "0x18191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f3031323334353637",
+          "0x292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748",
+          "0x3a3b3c3d3e3f404142434445464748494a4b4c4d4e4f50515253545556575859",
+          "0x4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a",
+          "0x5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b",
+          "0x6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c",
+          "0x7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d",
+          "0x8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadae",
+          "0xa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+          "0xb1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0",
+          "0xc2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1",
+          "0xd3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2",
+          "0xe4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff00010203",
+          "0xf5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f1011121314",
+          "0x060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425",
+          "0x1718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30313233343536",
+          "0x28292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f4041424344454647",
+          "0x393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758",
+          "0x4a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60616263646566676869",
+          "0x5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a",
+          "0x6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b",
+          "0x7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c",
+          "0x8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacad",
+          "0x9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbe",
+          "0xb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecf",
+          "0xc1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0",
+          "0xd2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1",
+          "0xe3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102"
+        ]
+      }
+    ],
+    "root": "0xb7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6"
+  },
+  "outputSystem": {
+    "kind": "system",
+    "origin": {
+      "blockHash": "0xcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaeb",
+      "blockNumber": "0x55",
+      "blockTimestamp": "0x65125555"
+    },
+    "outputCommitment": "0xecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b",
+    "outputIndex": "0x31",
+    "payout": {
+      "amount": "0x64",
+      "component": "issuance",
+      "contexts": [
+        "0xdbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fa"
+      ],
+      "outputIndex": "0x31",
+      "ownerCommitment": "0xcacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9",
+      "source": {
+        "batchItemIndex": 3,
+        "kind": "designatedIssuance",
+        "l1TransactionIndex": 2
+      },
+      "transactionId": "0xb9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8"
+    }
+  },
+  "payoutPage": {
+    "atBlockHash": "0xcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaeb",
+    "atBlockNumber": "0x55",
+    "nextCursor": {
+      "anchor": {
+        "blockHash": "0xcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaeb",
+        "blockNumber": "0x55"
+      },
+      "nextBlock": "0x55",
+      "nextPayoutIndex": "0x2"
+    },
+    "records": [
+      {
+        "amount": "0x64",
+        "blockHash": "0xcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaeb",
+        "blockNumber": "0x55",
+        "component": "issuance",
+        "contexts": [
+          "0xdbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fa"
+        ],
+        "outputIndex": "0x31",
+        "ownerCommitment": "0xcacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9",
+        "source": {
+          "batchItemIndex": 3,
+          "kind": "designatedIssuance",
+          "l1TransactionIndex": 2
+        },
+        "transactionId": "0xb9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8"
+      },
+      {
+        "amount": "0x7",
+        "blockHash": "0xcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaeb",
+        "blockNumber": "0x55",
+        "component": "openFee",
+        "contexts": [
+          "0x0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d",
+          "0x1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e"
+        ],
+        "outputIndex": "0x33",
+        "ownerCommitment": "0xfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c",
+        "source": {
+          "kind": "posterPayout",
+          "l1TransactionIndices": [
+            2,
+            4
+          ]
+        },
+        "transactionId": null
+      }
+    ]
+  },
+  "peer": {
+    "agentVersion": "pcash-node/0.0.0",
+    "bannedSeconds": null,
+    "capability": {
+      "chainId": "0xabcd",
+      "currentForkCount": "0x2",
+      "currentPrefixHash": "0x202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+      "genesisHash": "0xfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d",
+      "headTimestamp": "0x65121111",
+      "nextActivationTimestamp": "0x65122222",
+      "nextPrefixHash": "0x3132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f50"
+    },
+    "compatible": true,
+    "connectedSeconds": "0x2a",
+    "connections": "0x1",
+    "direction": "outbound",
+    "divergence": {
+      "l1BlockHash": "0x42434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f6061",
+      "l1BlockNumber": "0x1234567",
+      "localBlockHash": "0x535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172",
+      "peerBlockHash": "0x6465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f80818283"
+    },
+    "incompatibleReason": null,
+    "payloadBytesReceived": "0x5678",
+    "payloadBytesSent": "0x1234",
+    "peerId": "12D3KooWPeerA",
+    "protocolVersion": "/pcash/mempool/1",
+    "remoteAddress": "/ip4/127.0.0.1/tcp/8646",
+    "rttMillis": "0x7",
+    "score": 8,
+    "txAccepted": "0x8",
+    "txReceived": "0x9",
+    "txRejected": "0x1"
+  },
+  "peerUnidentified": {
+    "agentVersion": null,
+    "bannedSeconds": "0x258",
+    "capability": null,
+    "compatible": false,
+    "connectedSeconds": "0x2a",
+    "connections": "0x1",
+    "direction": "inbound",
+    "divergence": null,
+    "incompatibleReason": "fork prefix mismatch",
+    "payloadBytesReceived": "0x5678",
+    "payloadBytesSent": "0x1234",
+    "peerId": "12D3KooWPeerA",
+    "protocolVersion": null,
+    "remoteAddress": "/ip4/127.0.0.1/tcp/8646",
+    "rttMillis": null,
+    "score": -40,
+    "txAccepted": "0x8",
+    "txReceived": "0x9",
+    "txRejected": "0x1"
+  },
+  "preparedRelay": {
+    "batchBytes": "0x80",
+    "collectibleOpenFee": "0x2632e314a000",
+    "collectibleQualifyingActions": "0x1",
+    "headCheckedBlock": "0x55",
+    "headCheckedBlockHash": "0xcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaeb",
+    "rejected": [
+      {
+        "contentHash": "0x4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e",
+        "reason": "conflicting nullifier"
+      }
+    ],
+    "selectedContentHashes": [
+      "0x2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c",
+      "0x3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d"
+    ],
+    "selectedQualifyingActions": "0x2",
+    "selectedTransactions": [
+      "0xa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7",
+      "0xa1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccd"
+    ]
+  },
+  "receipt": {
+    "account": {
+      "accountRevision": "0x9",
+      "address": "0x5c5d5e5f606162636465666768696a6b6c6d6e6f"
+    },
+    "contentHash": "0xdbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fa",
+    "failureDetail": null,
+    "fundingMode": null,
+    "inclusion": {
+      "batchItemIndex": "0x5",
+      "l1BlockHash": "0xdbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fa",
+      "l1BlockNumber": "0x4444",
+      "l1TransactionHash": "0xecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b",
+      "l1TransactionIndex": "0x2"
+    },
+    "issuanceOwnerCommitment": "0x55565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374",
+    "kind": "privateValue",
+    "l1Sender": "0x737475767778797a7b7c7d7e7f80818283848586",
+    "nullifiers": [
+      "0xfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c",
+      "0x0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d",
+      "0x1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e",
+      "0x303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f"
+    ],
+    "outcome": "succeeded",
+    "outputLeafStart": "0x20",
+    "outputsAdded": "0x5",
+    "settledIssuanceAmount": "0x64",
+    "settledOpenFeeAmount": "0x0",
+    "transactionId": "0xecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b"
+  },
+  "removePeerResult": {
+    "banned": true,
+    "removed": true
+  },
+  "status": {
+    "acceptedBatchVersions": [
+      "0x1"
+    ],
+    "acceptedTransactionTypes": [
+      "0x0",
+      "0x1",
+      "0x2",
+      "0x3"
+    ],
+    "derivation": {
+      "sinceUnixMs": "0x18b00000000",
+      "state": "following"
+    },
+    "finalizedBlock": "0x87",
+    "finalizedBlockHash": "0x98999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7",
+    "finalizedBlockTimestamp": "0x65121000",
+    "finalizedL1BlockHash": "0xbabbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9",
+    "finalizedL1BlockNumber": "0x98",
+    "forkCapability": {
+      "chainId": "0xabcd",
+      "currentForkCount": "0x2",
+      "currentPrefixHash": "0x202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+      "genesisHash": "0xfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d",
+      "headTimestamp": "0x65121111",
+      "nextActivationTimestamp": "0x65122222",
+      "nextPrefixHash": "0x3132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f50"
+    },
+    "genesisHash": "0xfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d",
+    "genesisL1Block": "0x1234",
+    "genesisL1BlockHash": "0x0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e",
+    "historyRoot": "0xedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c",
+    "inboxAddress": "0x1718191a1b1c1d1e1f202122232425262728292a",
+    "index": {
+      "cursor": {
+        "blockHash": "0xcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaeb",
+        "blockNumber": "0x55"
+      },
+      "status": "ready"
+    },
+    "issuedSoFar": "0x3782dace9d900000",
+    "l1ChainId": "0xaa36a7",
+    "l1OriginRoot": "0xdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafb",
+    "latestBlock": "0x88",
+    "latestBlockHash": "0x8788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6",
+    "latestBlockTimestamp": "0x65121111",
+    "latestL1BlockHash": "0xa9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8",
+    "latestL1BlockNumber": "0x99",
+    "observedL1BlockNumber": "0x9b",
+    "outputCount": "0x40",
+    "pcashChainId": "0xabcd",
+    "proverAssets": {
+      "assetSetId": "4242424242424242424242424242424242424242424242424242424242424242",
+      "baseUrl": "/proving/4242424242424242424242424242424242424242424242424242424242424242/"
+    },
+    "stateRoot": "0xcbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9ea",
+    "supplyCap": "0x33b2e3c9fd0803ce8000000",
+    "totalFailed": "0x3",
+    "totalSucceeded": "0xc",
+    "totalTransactions": "0xf"
+  },
+  "transactionCheck": {
+    "outcome": "succeeded"
+  },
+  "transactionCheckNotAdmitted": {
+    "outcome": "directModeOutsideInbox"
+  },
+  "witnessSnapshot": {
+    "accounts": [
+      {
+        "account": {
+          "accountKind": "0x1",
+          "accountRevision": "0x3",
+          "accountRuleSetCommitment": "0x535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172",
+          "address": "0x2e2f303132333435363738393a3b3c3d3e3f4041",
+          "index": "0xa",
+          "material": {
+            "mlKem768PublicKey": "0x404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedf",
+            "status": "available"
+          },
+          "nullifierKeyCommitment": "0x42434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f6061",
+          "receiveKeyHash": "0x6465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f80818283"
+        },
+        "accountCount": "0x3333",
+        "accountSiblings": [
+          "0x52535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071",
+          "0x636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182",
+          "0x7475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90919293",
+          "0x85868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4",
+          "0x969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5",
+          "0xa7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6",
+          "0xb8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7",
+          "0xc9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8",
+          "0xdadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9",
+          "0xebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a",
+          "0xfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b",
+          "0x0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c",
+          "0x1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d",
+          "0x2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e",
+          "0x404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
+          "0x5152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f70",
+          "0x62636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f8081",
+          "0x737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192",
+          "0x8485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3",
+          "0x95969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4",
+          "0xa6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5",
+          "0xb7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6",
+          "0xc8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7",
+          "0xd9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8",
+          "0xeaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff00010203040506070809",
+          "0xfbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a",
+          "0x0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b",
+          "0x1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c",
+          "0x2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d",
+          "0x3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e",
+          "0x505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f",
+          "0x6162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f80",
+          "0x72737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f9091",
+          "0x838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2",
+          "0x9495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3",
+          "0xa5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4",
+          "0xb6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5",
+          "0xc7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6",
+          "0xd8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7",
+          "0xe9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708"
+        ],
+        "accountStateRoot": "0x75767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f9091929394",
+        "accountStateRootStateSiblings": [
+          "0x4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d",
+          "0x5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e",
+          "0x707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f",
+          "0x8182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0"
+        ],
+        "boundary": {
+          "blockHash": "0xbbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9da",
+          "header": {
+            "historyRoot": "0x999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8",
+            "l1OriginRoot": "0x88898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7",
+            "number": "0x44",
+            "parentHash": "0x55565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374",
+            "stateRoot": "0x7778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90919293949596",
+            "timestamp": "0x65123456",
+            "transactionResultsRoot": "0x666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
+          },
+          "state": {
+            "accountCount": "0x33",
+            "accountStateRoot": "0x333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152",
+            "issuedSoFar": "0x22",
+            "lagQ": "0",
+            "nullifierCount": "0x55",
+            "nullifierRoot": "0x4445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60616263",
+            "outputCount": "0x11",
+            "outputRoot": "0x1112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30"
+          }
+        },
+        "stateRootHeaderSiblings": [
+          "0xa4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3",
+          "0xb5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4",
+          "0xc6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5",
+          "0xd7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6"
+        ],
+        "status": "present"
+      }
+    ],
+    "block": {
+      "hash": "0xdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfc",
+      "l1Origin": {
+        "blockHash": "0x767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495",
+        "blockNumber": "0x77",
+        "blockTimestamp": "0x65129999",
+        "l1LogCount": "0x2",
+        "l1LogsRoot": "0x8788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6"
+      },
+      "number": "0x66"
+    },
+    "blockHeader": {
+      "boundary": {
+        "blockHash": "0xbbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9da",
+        "header": {
+          "historyRoot": "0x999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8",
+          "l1OriginRoot": "0x88898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7",
+          "number": "0x44",
+          "parentHash": "0x55565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374",
+          "stateRoot": "0x7778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90919293949596",
+          "timestamp": "0x65123456",
+          "transactionResultsRoot": "0x666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
+        },
+        "state": {
+          "accountCount": "0x33",
+          "accountStateRoot": "0x333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152",
+          "issuedSoFar": "0x22",
+          "lagQ": "0",
+          "nullifierCount": "0x55",
+          "nullifierRoot": "0x4445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60616263",
+          "outputCount": "0x11",
+          "outputRoot": "0x1112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30"
+        }
+      },
+      "recentPcashBlockHash": "0xd9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8"
+    },
+    "contracts": [
+      {
+        "accountProof": {
+          "account": {
+            "accountKind": "0x1",
+            "accountRevision": "0x3",
+            "accountRuleSetCommitment": "0x535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172",
+            "address": "0x2e2f303132333435363738393a3b3c3d3e3f4041",
+            "index": "0xa",
+            "material": {
+              "mlKem768PublicKey": "0x404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedf",
+              "status": "available"
+            },
+            "nullifierKeyCommitment": "0x42434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f6061",
+            "receiveKeyHash": "0x6465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f80818283"
+          },
+          "accountCount": "0x3333",
+          "accountSiblings": [
+            "0x52535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071",
+            "0x636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182",
+            "0x7475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90919293",
+            "0x85868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4",
+            "0x969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5",
+            "0xa7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6",
+            "0xb8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7",
+            "0xc9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8",
+            "0xdadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9",
+            "0xebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a",
+            "0xfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b",
+            "0x0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c",
+            "0x1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d",
+            "0x2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e",
+            "0x404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
+            "0x5152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f70",
+            "0x62636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f8081",
+            "0x737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192",
+            "0x8485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3",
+            "0x95969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4",
+            "0xa6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5",
+            "0xb7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6",
+            "0xc8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7",
+            "0xd9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8",
+            "0xeaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff00010203040506070809",
+            "0xfbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a",
+            "0x0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b",
+            "0x1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c",
+            "0x2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d",
+            "0x3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e",
+            "0x505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f",
+            "0x6162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f80",
+            "0x72737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f9091",
+            "0x838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2",
+            "0x9495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3",
+            "0xa5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4",
+            "0xb6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5",
+            "0xc7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6",
+            "0xd8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7",
+            "0xe9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708"
+          ],
+          "accountStateRoot": "0x75767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f9091929394",
+          "accountStateRootStateSiblings": [
+            "0x4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d",
+            "0x5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e",
+            "0x707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f",
+            "0x8182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0"
+          ],
+          "boundary": {
+            "blockHash": "0xbbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9da",
+            "header": {
+              "historyRoot": "0x999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8",
+              "l1OriginRoot": "0x88898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7",
+              "number": "0x44",
+              "parentHash": "0x55565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374",
+              "stateRoot": "0x7778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90919293949596",
+              "timestamp": "0x65123456",
+              "transactionResultsRoot": "0x666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
+            },
+            "state": {
+              "accountCount": "0x33",
+              "accountStateRoot": "0x333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152",
+              "issuedSoFar": "0x22",
+              "lagQ": "0",
+              "nullifierCount": "0x55",
+              "nullifierRoot": "0x4445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60616263",
+              "outputCount": "0x11",
+              "outputRoot": "0x1112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30"
+            }
+          },
+          "stateRootHeaderSiblings": [
+            "0xa4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3",
+            "0xb5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4",
+            "0xc6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5",
+            "0xd7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6"
+          ],
+          "status": "present"
+        },
+        "address": "0x45464748494a4b4c4d4e4f505152535455565758",
+        "functions": [
+          {
+            "configurationCommitment": "0xa8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7",
+            "applicationVkHash": "0x9798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6",
+            "selector": "0x0"
+          },
+          {
+            "configurationCommitment": "0xcacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9",
+            "applicationVkHash": "0xb9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8",
+            "selector": "0x1"
+          }
+        ],
+        "origin": {
+          "batchItemIndex": "0x5",
+          "l1BlockHash": "0xdbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fa",
+          "l1BlockNumber": "0x4444",
+          "l1TransactionHash": "0xecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b",
+          "l1TransactionIndex": "0x2"
+        },
+        "status": "contract",
+        "transaction": "0x101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f"
+      }
+    ],
+    "l1Logs": [
+      {
+        "boundary": {
+          "blockHash": "0xbbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9da",
+          "header": {
+            "historyRoot": "0x999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8",
+            "l1OriginRoot": "0x88898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7",
+            "number": "0x44",
+            "parentHash": "0x55565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374",
+            "stateRoot": "0x7778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90919293949596",
+            "timestamp": "0x65123456",
+            "transactionResultsRoot": "0x666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
+          },
+          "state": {
+            "accountCount": "0x33",
+            "accountStateRoot": "0x333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152",
+            "issuedSoFar": "0x22",
+            "lagQ": "0",
+            "nullifierCount": "0x55",
+            "nullifierRoot": "0x4445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60616263",
+            "outputCount": "0x11",
+            "outputRoot": "0x1112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30"
+          }
+        },
+        "l1BlockHash": "0x6162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f80",
+        "l1BlockNumber": "0x112233",
+        "l1BlockTimestamp": "0x65129999",
+        "l1LogCount": "0x3",
+        "l1LogsRoot": "0x72737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f9091",
+        "l1OriginIndex": "0x18",
+        "l1OriginRoot": "0x505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f",
+        "l1OriginRootSiblings": [
+          "0x9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbd",
+          "0xafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdce",
+          "0xc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedf",
+          "0xd1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0"
+        ],
+        "l1OriginSiblings": [
+          "0x48494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f6061626364656667",
+          "0x595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778",
+          "0x6a6b6c6d6e6f707172737475767778797a7b7c7d7e7f80818283848586878889",
+          "0x7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a",
+          "0x8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaab",
+          "0x9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbc",
+          "0xaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccd",
+          "0xbfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcddde",
+          "0xd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeef",
+          "0xe1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff00",
+          "0xf2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f1011",
+          "0x030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122",
+          "0x1415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30313233",
+          "0x25262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f4041424344",
+          "0x363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455",
+          "0x4748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60616263646566",
+          "0x58595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374757677",
+          "0x696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788",
+          "0x7a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90919293949596979899",
+          "0x8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aa",
+          "0x9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babb",
+          "0xadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcc",
+          "0xbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdd",
+          "0xcfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedee",
+          "0xe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+          "0xf1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f10",
+          "0x02030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2021",
+          "0x131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132",
+          "0x2425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40414243",
+          "0x35363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f5051525354",
+          "0x464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465",
+          "0x5758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f70717273747576",
+          "0x68696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f8081828384858687",
+          "0x797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798",
+          "0x8a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9",
+          "0x9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9ba",
+          "0xacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacb",
+          "0xbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdc",
+          "0xcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebeced",
+          "0xdfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfe"
+        ],
+        "logIndex": "0x1",
+        "logLeafIndex": "0x1",
+        "logSiblings": [
+          "0x404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
+          "0x5152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f70",
+          "0x62636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f8081",
+          "0x737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192",
+          "0x8485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3",
+          "0x95969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4",
+          "0xa6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5",
+          "0xb7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6",
+          "0xc8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7",
+          "0xd9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8",
+          "0xeaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff00010203040506070809",
+          "0xfbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a",
+          "0x0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b",
+          "0x1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c",
+          "0x2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d",
+          "0x3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e",
+          "0x505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f",
+          "0x6162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f80",
+          "0x72737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f9091",
+          "0x838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2",
+          "0x9495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3",
+          "0xa5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4",
+          "0xb6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5",
+          "0xc7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6",
+          "0xd8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7",
+          "0xe9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708",
+          "0xfafbfcfdfeff000102030405060708090a0b0c0d0e0f10111213141516171819",
+          "0x0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a",
+          "0x1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b",
+          "0x2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c",
+          "0x3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d",
+          "0x4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e",
+          "0x606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f",
+          "0x7172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90",
+          "0x82838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1",
+          "0x939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2",
+          "0xa4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3",
+          "0xb5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4",
+          "0xc6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5",
+          "0xd7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6",
+          "0xe8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff0001020304050607",
+          "0xf9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718",
+          "0x0a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20212223242526272829",
+          "0x1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a",
+          "0x2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b",
+          "0x3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c",
+          "0x4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d",
+          "0x5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e",
+          "0x707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f",
+          "0x8182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0",
+          "0x92939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1",
+          "0xa3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2",
+          "0xb4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3",
+          "0xc5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4",
+          "0xd6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5",
+          "0xe7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff00010203040506",
+          "0xf8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f1011121314151617",
+          "0x090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728",
+          "0x1a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30313233343536373839",
+          "0x2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a",
+          "0x3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b",
+          "0x4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c",
+          "0x5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d",
+          "0x6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e"
+        ],
+        "recentPcashBlockHash": "0x3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e",
+        "transactionIndex": "0x2"
+      }
+    ],
+    "nullifiers": {
+      "boundary": {
+        "blockHash": "0xbbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9da",
+        "header": {
+          "historyRoot": "0x999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8",
+          "l1OriginRoot": "0x88898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7",
+          "number": "0x44",
+          "parentHash": "0x55565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374",
+          "stateRoot": "0x7778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90919293949596",
+          "timestamp": "0x65123456",
+          "transactionResultsRoot": "0x666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
+        },
+        "state": {
+          "accountCount": "0x33",
+          "accountStateRoot": "0x333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152",
+          "issuedSoFar": "0x22",
+          "lagQ": "0",
+          "nullifierCount": "0x55",
+          "nullifierRoot": "0x4445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60616263",
+          "outputCount": "0x11",
+          "outputRoot": "0x1112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30"
+        }
+      },
+      "nullifierRoot": "0xa5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4",
+      "proofs": [
+        {
+          "leaf": {
+            "nextIndex": "0x88",
+            "nextValue": "0xc7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6",
+            "value": "0xb6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5"
+          },
+          "leafIndex": "0x89",
+          "nullifier": "0xb6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5",
+          "siblings": [
+            "0xa4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3",
+            "0xb5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4",
+            "0xc6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5",
+            "0xd7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6",
+            "0xe8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff0001020304050607",
+            "0xf9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718",
+            "0x0a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20212223242526272829",
+            "0x1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a",
+            "0x2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b",
+            "0x3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c",
+            "0x4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d",
+            "0x5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e",
+            "0x707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f",
+            "0x8182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0",
+            "0x92939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1",
+            "0xa3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2",
+            "0xb4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3",
+            "0xc5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4",
+            "0xd6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5",
+            "0xe7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff00010203040506",
+            "0xf8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f1011121314151617",
+            "0x090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728",
+            "0x1a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30313233343536373839",
+            "0x2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a",
+            "0x3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b",
+            "0x4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c",
+            "0x5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d",
+            "0x6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e",
+            "0x808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f",
+            "0x9192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0",
+            "0xa2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1",
+            "0xb3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2",
+            "0xc4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3",
+            "0xd5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4",
+            "0xe6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405",
+            "0xf7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f10111213141516",
+            "0x08090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2021222324252627",
+            "0x191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738",
+            "0x2a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40414243444546474849",
+            "0x3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a",
+            "0x4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b"
+          ]
+        },
+        {
+          "leaf": {
+            "nextIndex": "0x0",
+            "nextValue": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "value": "0x0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a"
+          },
+          "leafIndex": "0x92",
+          "nullifier": "0xfafbfcfdfeff000102030405060708090a0b0c0d0e0f10111213141516171819",
+          "siblings": [
+            "0xf6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415",
+            "0x0708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20212223242526",
+            "0x18191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f3031323334353637",
+            "0x292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748",
+            "0x3a3b3c3d3e3f404142434445464748494a4b4c4d4e4f50515253545556575859",
+            "0x4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a",
+            "0x5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b",
+            "0x6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c",
+            "0x7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d",
+            "0x8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadae",
+            "0xa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+            "0xb1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0",
+            "0xc2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1",
+            "0xd3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2",
+            "0xe4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff00010203",
+            "0xf5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f1011121314",
+            "0x060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425",
+            "0x1718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30313233343536",
+            "0x28292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f4041424344454647",
+            "0x393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758",
+            "0x4a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60616263646566676869",
+            "0x5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a",
+            "0x6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b",
+            "0x7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c",
+            "0x8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacad",
+            "0x9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbe",
+            "0xb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecf",
+            "0xc1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0",
+            "0xd2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1",
+            "0xe3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102",
+            "0xf4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f10111213",
+            "0x05060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2021222324",
+            "0x161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435",
+            "0x2728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40414243444546",
+            "0x38393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f5051525354555657",
+            "0x494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768",
+            "0x5a5b5c5d5e5f606162636465666768696a6b6c6d6e6f70717273747576777879",
+            "0x6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a",
+            "0x7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b",
+            "0x8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabac",
+            "0x9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbd"
+          ]
+        }
+      ]
+    },
+    "outputs": {
+      "boundary": {
+        "blockHash": "0xbbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9da",
+        "header": {
+          "historyRoot": "0x999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8",
+          "l1OriginRoot": "0x88898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7",
+          "number": "0x44",
+          "parentHash": "0x55565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374",
+          "stateRoot": "0x7778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f90919293949596",
+          "timestamp": "0x65123456",
+          "transactionResultsRoot": "0x666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
+        },
+        "state": {
+          "accountCount": "0x33",
+          "accountStateRoot": "0x333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152",
+          "issuedSoFar": "0x22",
+          "lagQ": "0",
+          "nullifierCount": "0x55",
+          "nullifierRoot": "0x4445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60616263",
+          "outputCount": "0x11",
+          "outputRoot": "0x1112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30"
+        }
+      },
+      "count": "0x15",
+      "paths": [
+        {
+          "outputIndex": "0x1",
+          "siblings": [
+            "0xa2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1",
+            "0xb3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2",
+            "0xc4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3",
+            "0xd5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4",
+            "0xe6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405",
+            "0xf7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f10111213141516",
+            "0x08090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2021222324252627",
+            "0x191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738",
+            "0x2a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40414243444546474849",
+            "0x3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a",
+            "0x4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b",
+            "0x5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c",
+            "0x6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d",
+            "0x7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e",
+            "0x909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+            "0xa1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0",
+            "0xb2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1",
+            "0xc3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2",
+            "0xd4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3",
+            "0xe5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff0001020304",
+            "0xf6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415",
+            "0x0708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20212223242526",
+            "0x18191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f3031323334353637",
+            "0x292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748",
+            "0x3a3b3c3d3e3f404142434445464748494a4b4c4d4e4f50515253545556575859",
+            "0x4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a",
+            "0x5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b",
+            "0x6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c",
+            "0x7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d",
+            "0x8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadae",
+            "0xa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+            "0xb1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0",
+            "0xc2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1",
+            "0xd3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2",
+            "0xe4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff00010203",
+            "0xf5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f1011121314",
+            "0x060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425",
+            "0x1718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30313233343536",
+            "0x28292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f4041424344454647",
+            "0x393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758"
+          ]
+        },
+        {
+          "outputIndex": "0x2",
+          "siblings": [
+            "0x4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b",
+            "0x5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c",
+            "0x6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d",
+            "0x7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e",
+            "0x909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+            "0xa1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0",
+            "0xb2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1",
+            "0xc3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2",
+            "0xd4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3",
+            "0xe5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff0001020304",
+            "0xf6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415",
+            "0x0708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20212223242526",
+            "0x18191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f3031323334353637",
+            "0x292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748",
+            "0x3a3b3c3d3e3f404142434445464748494a4b4c4d4e4f50515253545556575859",
+            "0x4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a",
+            "0x5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b",
+            "0x6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c",
+            "0x7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d",
+            "0x8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadae",
+            "0xa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+            "0xb1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0",
+            "0xc2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1",
+            "0xd3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2",
+            "0xe4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff00010203",
+            "0xf5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f1011121314",
+            "0x060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425",
+            "0x1718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30313233343536",
+            "0x28292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f4041424344454647",
+            "0x393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758",
+            "0x4a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60616263646566676869",
+            "0x5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a",
+            "0x6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b",
+            "0x7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c",
+            "0x8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacad",
+            "0x9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbe",
+            "0xb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecf",
+            "0xc1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0",
+            "0xd2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1",
+            "0xe3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102"
+          ]
+        }
+      ],
+      "root": "0xb7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6"
+    },
+    "status": {
+      "acceptedBatchVersions": [
+        "0x1"
+      ],
+      "acceptedTransactionTypes": [
+        "0x0",
+        "0x1",
+        "0x2",
+        "0x3"
+      ],
+      "derivation": {
+        "sinceUnixMs": "0x18b00000000",
+        "state": "following"
+      },
+      "finalizedBlock": "0x87",
+      "finalizedBlockHash": "0x98999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7",
+      "finalizedBlockTimestamp": "0x65121000",
+      "finalizedL1BlockHash": "0xbabbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9",
+      "finalizedL1BlockNumber": "0x98",
+      "forkCapability": {
+        "chainId": "0xabcd",
+        "currentForkCount": "0x2",
+        "currentPrefixHash": "0x202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+        "genesisHash": "0xfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d",
+        "headTimestamp": "0x65121111",
+        "nextActivationTimestamp": "0x65122222",
+        "nextPrefixHash": "0x3132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f50"
+      },
+      "genesisHash": "0xfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d",
+      "genesisL1Block": "0x1234",
+      "genesisL1BlockHash": "0x0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e",
+      "historyRoot": "0xedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c",
+      "inboxAddress": "0x1718191a1b1c1d1e1f202122232425262728292a",
+      "index": {
+        "cursor": {
+          "blockHash": "0xcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaeb",
+          "blockNumber": "0x55"
+        },
+        "status": "ready"
+      },
+      "issuedSoFar": "0x3782dace9d900000",
+      "l1ChainId": "0xaa36a7",
+      "l1OriginRoot": "0xdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafb",
+      "latestBlock": "0x88",
+      "latestBlockHash": "0x8788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6",
+      "latestBlockTimestamp": "0x65121111",
+      "latestL1BlockHash": "0xa9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8",
+      "latestL1BlockNumber": "0x99",
+      "observedL1BlockNumber": "0x9b",
+      "outputCount": "0x40",
+      "pcashChainId": "0xabcd",
+      "proverAssets": {
+        "assetSetId": "4242424242424242424242424242424242424242424242424242424242424242",
+        "baseUrl": "/proving/4242424242424242424242424242424242424242424242424242424242424242/"
+      },
+      "stateRoot": "0xcbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9ea",
+      "supplyCap": "0x33b2e3c9fd0803ce8000000",
+      "totalFailed": "0x3",
+      "totalSucceeded": "0xc",
+      "totalTransactions": "0xf"
+    }
+  }
+}

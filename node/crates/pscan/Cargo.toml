@@ -1,0 +1,41 @@
+[package]
+name = "pcash-pscan"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "PCASH contract source verification: the pscan_* JSON-RPC namespace, its registry, and its permissionless submission channel"
+
+[lints]
+workspace = true
+
+[features]
+default = ["client"]
+# The typed `pscan_*` client. On by default so `cargo test -p pcash-pscan`
+# covers it; a future standalone service binary can drop it.
+client = ["jsonrpsee/macros", "jsonrpsee/http-client"]
+
+[dependencies]
+pcash-rpc = { path = "../rpc", default-features = false }
+pcash-crypto = { path = "../crypto" }
+pcash-state = { path = "../state" }
+parking_lot = { workspace = true }
+pcash-metrics = { path = "../metrics" }
+
+alloy-primitives = { workspace = true }
+alloy-serde = "2.1"
+hex = { workspace = true }
+redb = { workspace = true }
+serde = { workspace = true }
+tempfile = { workspace = true }
+tracing = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tower = { workspace = true }
+tower-http = { version = "0.6", features = ["cors"] }
+
+jsonrpsee = { version = "0.25", features = ["server"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

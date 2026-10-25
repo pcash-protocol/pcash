@@ -1,0 +1,45 @@
+.overview { display: grid; gap: 24px; }
+.chartCard { min-width: 0; }
+.chartCard h2 { margin: 8px 0 10px; font-size: clamp(24px, 2.6vw, 32px); }
+.lede { max-width: 720px; color: var(--color-text-muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 18px 0 0; padding: 0; list-style: none; font-family: var(--font-ui); font-size: 12px; color: var(--color-text-muted); }
+.legend li { display: inline-flex; align-items: center; gap: 7px; }
+.swatch { width: 18px; height: 10px; overflow: visible; }
+.swatch path { stroke: var(--color-text); stroke-width: 2; stroke-linecap: round; fill: none; }
+.swatch .swatchDash { stroke: var(--color-text); stroke-dasharray: 4 3; }
+.chartFrame { position: relative; width: 100%; min-width: 0; margin-top: 14px; }
+.chart { width: 100%; height: auto; display: block; overflow: visible; touch-action: pan-y; }
+.chart:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 4px; border-radius: var(--radius-sm); }
+.chart text { font-family: var(--font-ui); font-size: 12px; fill: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+.axis { stroke: var(--color-border); stroke-width: 1; fill: none; }
+.grid { stroke: var(--color-border); stroke-width: 1; fill: none; opacity: .55; }
+.line { stroke: var(--color-text); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; fill: none; }
+.dashed { stroke: var(--color-text); stroke-width: 2; stroke-dasharray: 6 4; stroke-linejoin: round; fill: none; }
+.endDot { fill: var(--color-text); stroke: var(--color-surface); stroke-width: 2; }
+.hollowDot { fill: var(--color-surface); stroke: var(--color-text-muted); stroke-width: 2; }
+.chart .endLabel { fill: var(--color-text); font-weight: 600; }
+.today { stroke: var(--color-border); stroke-width: 1; }
+.crosshair { stroke: var(--color-text-muted); stroke-width: 1; }
+.tooltip { position: absolute; bottom: calc(100% + 6px); z-index: 1; min-width: 190px; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); box-shadow: 0 4px 14px rgb(29 43 34 / 12%); font-family: var(--font-ui); font-size: 12px; pointer-events: none; }
+.tooltip p { margin: 0 0 6px; color: var(--color-text-muted); }
+.tooltip div { display: grid; grid-template-columns: 18px auto 1fr; align-items: center; gap: 8px; margin-top: 3px; white-space: nowrap; }
+.tooltip strong { font-weight: 600; font-variant-numeric: tabular-nums; }
+.tooltip span { color: var(--color-text-muted); }
+.caption { color: var(--color-text-muted); font-size: 13px; line-height: 1.65; margin: 14px 0 0; max-width: 820px; }
+.table { margin-top: 12px; font-family: var(--font-ui); font-size: 13px; }
+.table summary { cursor: pointer; color: var(--color-text-muted); }
+.table table { margin-top: 10px; width: 100%; border-collapse: collapse; }
+.table th, .table td { padding: 6px 8px; border-bottom: 1px solid var(--color-border); text-align: right; font-variant-numeric: tabular-nums; }
+.table th:first-child { text-align: left; }
+.learn { margin: 0; font-family: var(--font-ui); font-size: 13px; text-align: right; }
+.unavailable { min-height: 140px; }
+.pace h2 { margin: 8px 0 10px; font-size: clamp(24px, 2.6vw, 32px); }
+.paceTiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 24px; margin: 20px 0 12px; }
+.paceTiles :global(.eyebrow) { margin-bottom: 4px; }
+.paceTiles strong { display: block; margin-top: 6px; font-family: var(--font-ui); font-size: 22px; font-weight: 600; }
+.paceTiles p:not(:global(.eyebrow)) { margin: 6px 0 0; font-size: 14px; color: var(--color-text-muted); }
+.status { margin: 10px 0 0; font-family: var(--font-ui); font-size: 14px; font-weight: 600; color: var(--color-text); }
+.formulas { grid-template-columns: max-content minmax(0, 1fr); gap: 10px 14px; margin: 22px 0 8px; font-size: 17px; }
+.formulas dt { font-family: inherit; color: var(--color-text); text-align: right; }
+.formulas sup { font-size: .7em; }
+@media (max-width: 520px) { .formulas { grid-template-columns: minmax(0, 1fr); gap: 2px; } .formulas dt { text-align: left; } .formulas dd { margin-bottom: 10px; } }

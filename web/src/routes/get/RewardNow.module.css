@@ -1,0 +1,19 @@
+.reward { min-width: 0; }
+.hero { margin: 10px 0 4px; color: var(--color-text); font-family: var(--font-serif); font-size: clamp(38px, 4.4vw, 52px); font-weight: 600; line-height: 1.05; letter-spacing: -0.01em; }
+.unit { margin: 0; font-family: var(--font-ui); font-size: 14px; color: var(--color-text-muted); }
+.placeholder { color: var(--color-text-muted); }
+.scale { margin: 20px 0 8px; }
+.nowLabel { position: relative; height: 18px; margin-bottom: 6px; font-family: var(--font-ui); font-size: 13px; font-weight: 600; color: var(--color-text); font-variant-numeric: tabular-nums; }
+.nowLabel span { position: absolute; top: 0; white-space: nowrap; }
+.track { position: relative; height: 10px; border-radius: 5px; background: var(--color-accent-soft); }
+.fill { position: absolute; inset: 0 auto 0 0; min-width: 4px; border-radius: 5px; background: var(--color-text); }
+.referenceTick { position: absolute; top: -5px; bottom: -5px; width: 2px; margin-left: -1px; background: var(--color-text-muted); }
+.scaleLabels { position: relative; height: 18px; margin-top: 8px; font-family: var(--font-ui); font-size: 12px; color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+.scaleLabels span { position: absolute; top: 0; white-space: nowrap; }
+.scaleLabels span:first-child { left: 0; }
+.scaleLabels span:nth-child(2) { transform: translateX(-50%); }
+.scaleLabels span:last-child { right: 0; }
+.split { margin: 14px 0 0; font-family: var(--font-ui); font-size: 14px; color: var(--color-text); }
+.split + .split { margin-top: 4px; }
+.trend { margin: 22px 0 6px; font-family: var(--font-ui); font-size: 15px; font-weight: 600; color: var(--color-text); }
+.mechanism { margin: 14px 0 0; font-size: 14px; line-height: 1.6; color: var(--color-text-muted); }

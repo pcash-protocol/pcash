@@ -1,0 +1,174 @@
+{
+  "name": "@pcash/sdk",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "PCASH TypeScript SDK: layered subpath entry points for protocol primitives, node RPC, witness building, and L1 submission.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "default": "./dist/browser.js"
+    },
+    "./bcfg": {
+      "types": "./dist/bcfg/index.d.ts",
+      "default": "./dist/bcfg/index.js"
+    },
+    "./blgr": {
+      "types": "./dist/blgr/index.d.ts",
+      "default": "./dist/blgr/index.js"
+    },
+    "./constants": {
+      "types": "./dist/constants/index.d.ts",
+      "default": "./dist/constants/index.js"
+    },
+    "./constants/prover-artifacts": {
+      "types": "./dist/constants/proverArtifacts.d.ts",
+      "default": "./dist/constants/proverArtifacts.js"
+    },
+    "./crypto": {
+      "types": "./dist/crypto/index.d.ts",
+      "default": "./dist/crypto/index.js"
+    },
+    "./utils": {
+      "types": "./dist/utils/index.d.ts",
+      "default": "./dist/utils/index.js"
+    },
+    "./protocol": {
+      "types": "./dist/protocol/index.d.ts",
+      "default": "./dist/protocol/index.js"
+    },
+    "./eip712": {
+      "types": "./dist/eip712/index.d.ts",
+      "default": "./dist/eip712/index.js"
+    },
+    "./rules": {
+      "types": "./dist/rules/index.d.ts",
+      "default": "./dist/rules/index.js"
+    },
+    "./delivery": {
+      "types": "./dist/delivery/index.d.ts",
+      "default": "./dist/delivery/index.js"
+    },
+    "./builders": {
+      "types": "./dist/builders/index.d.ts",
+      "default": "./dist/builders/index.js"
+    },
+    "./fixtures": {
+      "types": "./dist/fixtures/index.d.ts",
+      "default": "./dist/fixtures/index.js"
+    },
+    "./clients": {
+      "types": "./dist/clients/index.d.ts",
+      "default": "./dist/clients/index.js"
+    },
+    "./l1": {
+      "types": "./dist/l1/index.d.ts",
+      "default": "./dist/l1/index.js"
+    },
+    "./relay": {
+      "types": "./dist/relay/index.d.ts",
+      "default": "./dist/relay/index.js"
+    },
+    "./source-verification": {
+      "types": "./dist/source-verification/index.d.ts",
+      "default": "./dist/source-verification/index.js"
+    },
+    "./prover": {
+      "types": "./dist/prover/index.d.ts",
+      "default": "./dist/prover/index.js"
+    },
+    "./browser-prover": {
+      "types": "./dist/browser-prover/index.d.ts",
+      "default": "./dist/browser-prover/index.js"
+    },
+    "./browser-prover/requests": {
+      "types": "./dist/browser-prover/requests.d.ts",
+      "default": "./dist/browser-prover/requests.js"
+    },
+    "./node": {
+      "types": "./dist/node/index.d.ts",
+      "default": "./dist/node/index.js"
+    },
+    "./node/toolchain": {
+      "types": "./dist/node/toolchain.d.ts",
+      "default": "./dist/node/toolchain.js"
+    },
+    "./wallet": {
+      "types": "./dist/wallet/index.d.ts",
+      "default": "./dist/wallet/index.js"
+    },
+    "./wallet/actions": {
+      "types": "./dist/wallet/actions/index.d.ts",
+      "default": "./dist/wallet/actions/index.js"
+    },
+    "./wallet/scanning": {
+      "types": "./dist/wallet/scanning.d.ts",
+      "default": "./dist/wallet/scanning.js"
+    },
+    "./wallet/web": {
+      "types": "./dist/wallet/web/index.d.ts",
+      "default": "./dist/wallet/web/index.js"
+    },
+    "./wallet/node": {
+      "types": "./dist/wallet/node/index.d.ts",
+      "default": "./dist/wallet/node/index.js"
+    },
+    "./wallet/database": {
+      "types": "./dist/wallet/database.d.ts",
+      "default": "./dist/wallet/database.js"
+    },
+    "./wallet/testing": {
+      "types": "./dist/wallet/testing.d.ts",
+      "default": "./dist/wallet/testing.js"
+    },
+    "./package.json": "./package.json",
+    "./names": {
+      "types": "./dist/names/index.d.ts",
+      "default": "./dist/names/index.js"
+    }
+  },
+  "scripts": {
+    "test": "node ../scripts/circuits/bundle.mjs exec -- vitest run",
+    "pretest:watch": "npm run build",
+    "test:watch": "node ../scripts/circuits/bundle.mjs exec -- vitest",
+    "pretypecheck": "npm run build",
+    "typecheck": "tsc --noEmit",
+    "build": "node ../scripts/package/clean_dist.mjs && tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
+    "pretest": "npm run build",
+    "test:fast": "PCASH_TEST_SUITE=fast vitest run"
+  },
+  "dependencies": {
+    "@aztec-foundation/bb.js": "6.0.0",
+    "@noble/ciphers": "^2.2.0",
+    "@noble/curves": "^1.9.7",
+    "@noble/hashes": "2.2.0",
+    "@scure/bip39": "1.6.0",
+    "@noble/post-quantum": "^0.6.1",
+    "@noir-lang/acvm_js": "1.0.0-rc.3",
+    "@noir-lang/noir_js": "1.0.0-rc.3",
+    "@noir-lang/noirc_abi": "1.0.0-rc.3",
+    "ethers": "6.17.0",
+    "kzg-wasm": "1.0.0",
+    "proper-lockfile": "4.1.2",
+    "viem": "^2.55.1"
+  },
+  "devDependencies": {
+    "@pcash/test-support": "0.0.0",
+    "@types/node": "^26.1.1",
+    "@types/proper-lockfile": "4.1.4",
+    "fake-indexeddb": "^6.2.4",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.6",
+    "vitest": "^2.1.0"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ]
+}

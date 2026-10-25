@@ -1,0 +1,179 @@
+{
+  "schemaVersion": 1,
+  "contract": "Escrow",
+  "functions": [
+    {
+      "name": "claim",
+      "selector": 0,
+      "applicationVkHash": "0x0d1943cba2e9d0964bde777a7475e6bfac0882bd1643173aff08ee721cf0b67a",
+      "arguments": [
+        {
+          "name": "recipient",
+          "type": "uint160",
+          "visibility": "private"
+        },
+        {
+          "name": "claimKey",
+          "type": "field",
+          "visibility": "private"
+        }
+      ],
+      "configuration": [
+        {
+          "name": "configurationSalt",
+          "type": "field",
+          "visibility": "private"
+        },
+        {
+          "name": "router",
+          "type": "uint160"
+        },
+        {
+          "name": "seller",
+          "type": "uint160"
+        },
+        {
+          "name": "offerId",
+          "type": "field"
+        },
+        {
+          "name": "assetId",
+          "type": "field"
+        },
+        {
+          "name": "amount",
+          "type": "uint128"
+        },
+        {
+          "name": "ethPriceWei",
+          "type": "uint128"
+        },
+        {
+          "name": "deadlineT",
+          "type": "uint64"
+        }
+      ],
+      "configurationCommitment": {
+        "scheme": "poseidon",
+        "domain": "REFERENCE_CONFIGURATION_DOMAIN",
+        "fields": [
+          "configurationSalt",
+          "router",
+          "seller",
+          "offerId",
+          "assetId",
+          "amount",
+          "ethPriceWei",
+          "deadlineT"
+        ]
+      }
+    },
+    {
+      "name": "reclaim",
+      "selector": 1,
+      "applicationVkHash": "0x1911a6f27a49ccae6b621965200201585ae673ce5262c0d743a72c3c1e3acfde",
+      "arguments": [
+        {
+          "name": "escrowContract",
+          "type": "uint160"
+        },
+        {
+          "name": "offerId",
+          "type": "field"
+        },
+        {
+          "name": "assetId",
+          "type": "field"
+        },
+        {
+          "name": "recipient",
+          "type": "uint160"
+        },
+        {
+          "name": "payoutAmount",
+          "type": "uint128"
+        },
+        {
+          "name": "openFeeAmount",
+          "type": "uint128"
+        },
+        {
+          "name": "issuanceRecipient",
+          "type": "uint160"
+        },
+        {
+          "name": "issuanceOwnerCommitment",
+          "type": "field"
+        },
+        {
+          "name": "relayFeeAmount",
+          "type": "uint128"
+        },
+        {
+          "name": "relayFeeOwnerCommitment",
+          "type": "field"
+        },
+        {
+          "name": "transactionContext",
+          "type": "field"
+        },
+        {
+          "name": "notBefore",
+          "type": "uint64"
+        },
+        {
+          "name": "validUntil",
+          "type": "uint64"
+        },
+        {
+          "name": "payoutOpeningCommitment",
+          "type": "bytes32"
+        },
+        {
+          "name": "sellerSignature",
+          "type": "secp256k1Signature",
+          "visibility": "private"
+        }
+      ],
+      "configuration": [
+        {
+          "name": "configurationSalt",
+          "type": "field",
+          "visibility": "private"
+        },
+        {
+          "name": "seller",
+          "type": "uint160"
+        },
+        {
+          "name": "offerId",
+          "type": "field"
+        },
+        {
+          "name": "deadlineT",
+          "type": "uint64"
+        },
+        {
+          "name": "domainSeparatorHigh",
+          "type": "uint128"
+        },
+        {
+          "name": "domainSeparatorLow",
+          "type": "uint128"
+        }
+      ],
+      "configurationCommitment": {
+        "scheme": "poseidon",
+        "domain": "REFERENCE_CONFIGURATION_DOMAIN",
+        "fields": [
+          "configurationSalt",
+          "seller",
+          "offerId",
+          "deadlineT",
+          "domainSeparatorHigh",
+          "domainSeparatorLow"
+        ]
+      }
+    }
+  ]
+}

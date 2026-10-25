@@ -1,0 +1,20 @@
+{
+  "name": "@pcash/test-support",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./protocol-fixtures": "./src/protocolFixtures.ts",
+    "./chain-sim": "./src/chainSim.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pcash/sdk": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^5.9.3"
+  }
+}

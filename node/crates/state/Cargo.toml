@@ -1,0 +1,30 @@
+[package]
+name = "pcash-state"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "PCASH canonical state, typed block commitments, and in-memory/redb backends"
+
+[lints]
+workspace = true
+
+[features]
+# Lets another crate's tests fail the next commit. Only the node crate's
+# dev-dependency enables it; release builds leave it off.
+test-support = []
+
+[dependencies]
+pcash-issuance = { path = "../issuance" }
+pcash-crypto = { path = "../crypto" }
+alloy-primitives = { workspace = true, features = ["serde"] }
+alloy-serde = "2.1"
+redb = { workspace = true }
+sha3 = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+hex = { workspace = true }
+ark-ff = { version = "0.5", default-features = false }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+tempfile = { workspace = true }

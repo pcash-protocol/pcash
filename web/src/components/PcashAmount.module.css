@@ -1,0 +1,8 @@
+.amount {
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}

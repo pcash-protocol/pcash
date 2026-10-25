@@ -1,0 +1,30 @@
+[package]
+name = "pcash-pboard"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "PCASH message board index: board posts read from the node's output feed, served as the pboard_* JSON-RPC namespace"
+
+[lints]
+workspace = true
+
+[dependencies]
+pcash-derive = { path = "../derive" }
+pcash-rpc = { path = "../rpc", default-features = false }
+pcash-state = { path = "../state" }
+
+alloy-primitives = { workspace = true }
+alloy-serde = "2.1"
+redb = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+tracing = { workspace = true }
+
+jsonrpsee = { version = "0.25", features = ["server"] }
+
+[dev-dependencies]
+async-trait = { workspace = true }
+pcash-rpc = { path = "../rpc", features = ["test-support"] }

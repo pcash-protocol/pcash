@@ -1,0 +1,22 @@
+apiVersion: 1
+providers:
+  - name: pcash-node
+    orgId: 1
+    folder: PCASH
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards/node
+      foldersFromFilesStructure: false
+  - name: pcash-wallet
+    orgId: 1
+    folder: PCASH
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards/wallet
+      foldersFromFilesStructure: false

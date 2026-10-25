@@ -1,0 +1,44 @@
+[package]
+name = "pcash-p2p"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "PCASH non-consensus mempool transport: verified gossipsub plus bounded late-peer sync"
+
+[lints]
+workspace = true
+
+[dependencies]
+alloy-primitives = { workspace = true, features = ["serde"] }
+futures = { workspace = true }
+hex = { workspace = true }
+libp2p = { version = "0.56", default-features = false, features = [
+  "autonat",
+  "cbor",
+  "dcutr",
+  "ed25519",
+  "gossipsub",
+  "identify",
+  "kad",
+  "macros",
+  "noise",
+  "ping",
+  "relay",
+  "request-response",
+  "serde",
+  "tcp",
+  "tokio",
+  "upnp",
+  "yamux",
+] }
+rand = "0.8"
+serde = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
+tracing = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+tracing-subscriber = { workspace = true }

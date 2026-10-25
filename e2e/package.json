@@ -1,0 +1,39 @@
+{
+  "name": "@pcash/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Private composable PCASH end-to-end acceptance framework.",
+  "scripts": {
+    "build:deps": "npm --prefix .. run build:packages",
+    "pretest:watch": "npm run build:deps",
+    "test:watch": "vitest test",
+    "pretest:metamask": "npm run build:deps",
+    "test:metamask": "playwright test --config playwright.config.ts --project metamask",
+    "pretypecheck": "npm run build:deps",
+    "typecheck": "tsc --noEmit",
+    "e2e": "node src/run.ts",
+    "record-fixtures": "node src/seed/recordExplorerFixture.ts",
+    "pretest:unit": "npm run build:deps",
+    "test:unit": "vitest run --config vitest.config.ts && node --test browser/journey/*.test.mjs",
+    "test:browser": "playwright test --config playwright.config.ts"
+  },
+  "dependencies": {
+    "@pcash/marketplace": "0.1.0",
+    "@pcash/relayer": "0.0.0",
+    "@pcash/sdk": "0.1.0",
+    "@pcash/test-support": "0.0.0",
+    "@pcash/tokens": "0.1.0",
+    "@pcash/wallet": "0.1.0",
+    "viem": "^2.55.1",
+    "@pcash/lineage": "^0.1.0",
+    "@pcash/board": "0.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@tenkeylabs/dappwright": "^2.13.12",
+    "@types/node": "^26.1.1",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.0"
+  }
+}

@@ -1,0 +1,652 @@
+{
+  "owner": "protocol",
+  "circuits": [
+    {
+      "package": "account_rule_mine",
+      "path": "rules/mine",
+      "role": "application",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol"
+      ]
+    },
+    {
+      "package": "account_rule_payment_ecdsa",
+      "path": "rules/payment",
+      "role": "application",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol",
+        "signature_common",
+        "reference_rule_common"
+      ]
+    },
+    {
+      "package": "account_rule_asset_payment_ecdsa",
+      "path": "rules/asset_payment",
+      "role": "application",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol",
+        "signature_common",
+        "reference_rule_common"
+      ]
+    },
+    {
+      "package": "account_rule_asset_burn_ecdsa",
+      "path": "rules/asset_burn",
+      "role": "application",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol",
+        "signature_common",
+        "reference_rule_common"
+      ]
+    },
+    {
+      "package": "account_rule_admin_ecdsa",
+      "path": "rules/admin",
+      "role": "application",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol",
+        "signature_common",
+        "reference_rule_common"
+      ]
+    },
+    {
+      "package": "account_rule_batch_transfer_ecdsa",
+      "path": "rules/batch_transfer/s",
+      "role": "application",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol",
+        "signature_common",
+        "reference_rule_common"
+      ],
+      "profile": "S",
+      "wrapper": "batch_transfer"
+    },
+    {
+      "package": "account_rule_large_batch_transfer_ecdsa",
+      "path": "rules/batch_transfer/l",
+      "role": "application",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native"
+      ],
+      "srsPoints": 1048576,
+      "dependencies": [
+        "pcash_protocol",
+        "signature_common",
+        "reference_rule_common"
+      ],
+      "profile": "L",
+      "wrapper": "batch_transfer"
+    },
+    {
+      "package": "account_rule_asset_creation_ecdsa",
+      "path": "rules/asset_creation/s",
+      "role": "application",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol",
+        "signature_common",
+        "reference_rule_common"
+      ],
+      "profile": "S",
+      "wrapper": "asset_creation"
+    },
+    {
+      "package": "account_rule_large_asset_creation_ecdsa",
+      "path": "rules/asset_creation/l",
+      "role": "application",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native"
+      ],
+      "srsPoints": 1048576,
+      "dependencies": [
+        "pcash_protocol",
+        "signature_common",
+        "reference_rule_common"
+      ],
+      "profile": "L",
+      "wrapper": "asset_creation"
+    },
+    {
+      "package": "account_rule_contract_fee_sponsorship_ecdsa",
+      "path": "rules/contract_fee_sponsorship/s",
+      "role": "application",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol",
+        "signature_common",
+        "reference_rule_common"
+      ],
+      "profile": "S",
+      "wrapper": "contract_fee_sponsorship"
+    },
+    {
+      "package": "account_rule_large_contract_fee_sponsorship_ecdsa",
+      "path": "rules/contract_fee_sponsorship/l",
+      "role": "application",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol",
+        "signature_common",
+        "reference_rule_common"
+      ],
+      "profile": "L",
+      "wrapper": "contract_fee_sponsorship"
+    },
+    {
+      "package": "account_rule_full_ecdsa",
+      "path": "fixtures/full_transaction",
+      "role": "application",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol",
+        "signature_common",
+        "reference_rule_common"
+      ],
+      "fixture": true
+    },
+    {
+      "package": "account_rule_multisig",
+      "path": "fixtures/multisig",
+      "role": "application",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol",
+        "signature_common",
+        "reference_rule_common"
+      ],
+      "fixture": true
+    },
+    {
+      "package": "account_rule_asset_covenant",
+      "path": "fixtures/asset_covenant",
+      "role": "application",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol",
+        "reference_rule_common"
+      ],
+      "fixture": true
+    },
+    {
+      "package": "account_rule_shared_asset_claim",
+      "path": "fixtures/shared_asset_claim",
+      "role": "application",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol",
+        "reference_rule_common"
+      ],
+      "fixture": true
+    },
+    {
+      "package": "no_op_event_application",
+      "path": "protocol/no_op_event_application",
+      "role": "application",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144
+    },
+    {
+      "package": "private_value_transfer_kernel",
+      "path": "protocol/private_value/s/transfer_kernel",
+      "role": "kernel",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol"
+      ],
+      "profile": "S",
+      "wrapper": "transfer_kernel",
+      "pin": "PRIVATE_VALUE_TRANSFER_KERNEL_VK_HASH",
+      "links": [
+        {
+          "callData": 1,
+          "folds": "application"
+        },
+        {
+          "callData": 2,
+          "folds": "application"
+        }
+      ]
+    },
+    {
+      "package": "private_value_sponsored_transfer_kernel",
+      "path": "protocol/private_value/s/sponsored_transfer_kernel",
+      "role": "kernel",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol"
+      ],
+      "profile": "S",
+      "wrapper": "sponsored_transfer_kernel",
+      "pin": "PRIVATE_VALUE_SPONSORED_TRANSFER_KERNEL_VK_HASH",
+      "links": [
+        {
+          "callData": 1,
+          "folds": "application"
+        },
+        {
+          "callData": 2,
+          "folds": "application"
+        },
+        {
+          "callData": 3,
+          "folds": "application"
+        }
+      ]
+    },
+    {
+      "package": "private_value_asset_creation_kernel",
+      "path": "protocol/private_value/s/asset_creation_kernel",
+      "role": "kernel",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol"
+      ],
+      "profile": "S",
+      "wrapper": "asset_creation_kernel",
+      "pin": "PRIVATE_VALUE_ASSET_CREATION_KERNEL_VK_HASH",
+      "links": [
+        {
+          "callData": 1,
+          "folds": "application"
+        },
+        {
+          "callData": 2,
+          "folds": "application"
+        }
+      ]
+    },
+    {
+      "package": "private_value_hiding_kernel",
+      "path": "protocol/private_value/s/hiding_kernel",
+      "role": "hiding",
+      "publicInputs": {
+        "profile": "S",
+        "extra": 0
+      },
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol"
+      ],
+      "profile": "S",
+      "wrapper": "hiding_kernel",
+      "links": [
+        {
+          "callData": 0,
+          "folds": [
+            "private_value_transfer_kernel",
+            "private_value_sponsored_transfer_kernel",
+            "private_value_asset_creation_kernel"
+          ]
+        }
+      ]
+    },
+    {
+      "package": "private_value_large_transfer_kernel",
+      "path": "protocol/private_value/l/transfer_kernel",
+      "role": "kernel",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol"
+      ],
+      "profile": "L",
+      "wrapper": "transfer_kernel",
+      "pin": "PRIVATE_VALUE_LARGE_TRANSFER_KERNEL_VK_HASH",
+      "links": [
+        {
+          "callData": 1,
+          "folds": "application"
+        },
+        {
+          "callData": 2,
+          "folds": "application"
+        }
+      ]
+    },
+    {
+      "package": "private_value_large_sponsored_transfer_kernel",
+      "path": "protocol/private_value/l/sponsored_transfer_kernel",
+      "role": "kernel",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol"
+      ],
+      "profile": "L",
+      "wrapper": "sponsored_transfer_kernel",
+      "pin": "PRIVATE_VALUE_LARGE_SPONSORED_TRANSFER_KERNEL_VK_HASH",
+      "links": [
+        {
+          "callData": 1,
+          "folds": "application"
+        },
+        {
+          "callData": 2,
+          "folds": "application"
+        },
+        {
+          "callData": 3,
+          "folds": "application"
+        }
+      ]
+    },
+    {
+      "package": "private_value_large_asset_creation_kernel",
+      "path": "protocol/private_value/l/asset_creation_kernel",
+      "role": "kernel",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol"
+      ],
+      "profile": "L",
+      "wrapper": "asset_creation_kernel",
+      "pin": "PRIVATE_VALUE_LARGE_ASSET_CREATION_KERNEL_VK_HASH",
+      "links": [
+        {
+          "callData": 1,
+          "folds": "application"
+        },
+        {
+          "callData": 2,
+          "folds": "application"
+        }
+      ]
+    },
+    {
+      "package": "private_value_large_hiding_kernel",
+      "path": "protocol/private_value/l/hiding_kernel",
+      "role": "hiding",
+      "publicInputs": {
+        "profile": "L",
+        "extra": 0
+      },
+      "provingRuntimes": [
+        "native"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol"
+      ],
+      "profile": "L",
+      "wrapper": "hiding_kernel",
+      "links": [
+        {
+          "callData": 0,
+          "folds": [
+            "private_value_large_transfer_kernel",
+            "private_value_large_sponsored_transfer_kernel",
+            "private_value_large_asset_creation_kernel"
+          ]
+        }
+      ]
+    },
+    {
+      "package": "user_account_update_kernel",
+      "path": "protocol/user_account_update/kernel",
+      "role": "kernel",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol"
+      ],
+      "pin": "USER_ACCOUNT_UPDATE_KERNEL_VK_HASH",
+      "links": [
+        {
+          "callData": 1,
+          "folds": "application"
+        },
+        {
+          "callData": 2,
+          "folds": "application"
+        }
+      ]
+    },
+    {
+      "package": "user_account_update_hiding_kernel",
+      "path": "protocol/user_account_update/hiding_kernel",
+      "role": "hiding",
+      "publicInputs": {
+        "profile": "S",
+        "extra": 1
+      },
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol"
+      ],
+      "profile": "S",
+      "wrapper": "user_account_update_hiding_kernel",
+      "links": [
+        {
+          "callData": 0,
+          "folds": [
+            "user_account_update_kernel"
+          ]
+        }
+      ]
+    },
+    {
+      "package": "contract_creation_kernel",
+      "path": "protocol/contract_creation/kernel",
+      "role": "kernel",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol"
+      ],
+      "pin": "CONTRACT_CREATION_KERNEL_VK_HASH",
+      "links": [
+        {
+          "callData": 1,
+          "folds": "application"
+        },
+        {
+          "callData": 2,
+          "folds": "application"
+        }
+      ]
+    },
+    {
+      "package": "contract_creation_hiding_kernel",
+      "path": "protocol/contract_creation/hiding_kernel",
+      "role": "hiding",
+      "publicInputs": {
+        "profile": "S",
+        "extra": 1
+      },
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol"
+      ],
+      "profile": "S",
+      "wrapper": "contract_creation_hiding_kernel",
+      "links": [
+        {
+          "callData": 0,
+          "folds": [
+            "contract_creation_kernel"
+          ]
+        }
+      ]
+    },
+    {
+      "package": "event_sender_authentication",
+      "path": "fixtures/sender_authentication",
+      "role": "application",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol",
+        "reference_event_common"
+      ],
+      "fixture": true
+    },
+    {
+      "package": "event_large_sender_authentication",
+      "path": "fixtures/large_sender_authentication",
+      "role": "application",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol",
+        "reference_event_common"
+      ],
+      "fixture": true
+    },
+    {
+      "package": "account_rule_event_gate",
+      "path": "fixtures/event_gate",
+      "role": "application",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol"
+      ],
+      "fixture": true
+    },
+    {
+      "package": "event_fixture",
+      "path": "fixtures/event",
+      "role": "application",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144,
+      "dependencies": [
+        "pcash_protocol"
+      ],
+      "fixture": true
+    }
+  ]
+}

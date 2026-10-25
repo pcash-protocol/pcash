@@ -1,0 +1,4 @@
+{
+  "S": { "shapeId": 0, "inputs": 4, "outputs": 5 },
+  "L": { "shapeId": 1, "inputs": 32, "outputs": 32 }
+}

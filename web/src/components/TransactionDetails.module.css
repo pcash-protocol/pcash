@@ -1,0 +1,7 @@
+.details { border-top: 1px solid var(--color-border); margin-top: 16px; padding-top: 16px; overflow-wrap: anywhere; }
+.details h3 { font: inherit; font-weight: 600; margin: 0 0 12px; }
+.details p { margin: 0 0 12px; }
+.details dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 16px; margin: 0 0 12px; }
+.details dt { color: var(--color-text-muted); }
+.details dd { margin: 0; }
+.details a { display: block; margin-top: 8px; }

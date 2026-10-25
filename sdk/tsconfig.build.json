@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    // Source imports carry .ts extensions so the tree runs directly under Node's
+    // type stripping. Emitting rewrites them to .js so a published consumer
+    // resolves real files.
+    "rewriteRelativeImportExtensions": true
+  },
+  "include": ["src"]
+}

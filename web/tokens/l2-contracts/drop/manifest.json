@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "contract": "EligibilityDrop",
+  "functions": [
+    {
+      "name": "claim",
+      "selector": 0,
+      "applicationVkHash": "0x0ac9a7915b3e4a6569e981fc2ac9de3c8aea70e7e6c0eff7bbfa5f3f4a4bc648",
+      "arguments": [
+        {
+          "name": "feePaid",
+          "type": "bool",
+          "visibility": "private"
+        },
+        {
+          "name": "claimant",
+          "type": "userAccountOpening",
+          "visibility": "private"
+        },
+        {
+          "name": "cutoff",
+          "type": "historicalAccountCount",
+          "visibility": "private"
+        },
+        {
+          "name": "claimSlot",
+          "type": "uint32",
+          "visibility": "private"
+        }
+      ],
+      "configuration": [
+        {
+          "name": "configurationSalt",
+          "type": "field"
+        },
+        {
+          "name": "assetId",
+          "type": "field"
+        },
+        {
+          "name": "claimAmount",
+          "type": "uint128"
+        },
+        {
+          "name": "cutoffBlockNumber",
+          "type": "uint64"
+        },
+        {
+          "name": "claimEndTimestamp",
+          "type": "uint64"
+        },
+        {
+          "name": "creator",
+          "type": "uint160"
+        },
+        {
+          "name": "creatorNullifierKeyCommitment",
+          "type": "field"
+        }
+      ],
+      "configurationCommitment": {
+        "scheme": "poseidon",
+        "domain": "REFERENCE_CONFIGURATION_DOMAIN",
+        "fields": [
+          "configurationSalt",
+          "assetId",
+          "claimAmount",
+          "cutoffBlockNumber",
+          "claimEndTimestamp",
+          "creator",
+          "creatorNullifierKeyCommitment"
+        ]
+      }
+    },
+    {
+      "name": "reclaim",
+      "selector": 1,
+      "applicationVkHash": "0x25c7ba4917359dd8b3df8ddeb703b1978245026f0b62c30ec843978c5597333d",
+      "arguments": [
+        {
+          "name": "feePaid",
+          "type": "bool",
+          "visibility": "private"
+        },
+        {
+          "name": "creatorNkRoot",
+          "type": "field",
+          "visibility": "private"
+        },
+        {
+          "name": "outputAmounts",
+          "type": "uint128[5]",
+          "visibility": "private"
+        }
+      ],
+      "configuration": [
+        {
+          "name": "configurationSalt",
+          "type": "field"
+        },
+        {
+          "name": "assetId",
+          "type": "field"
+        },
+        {
+          "name": "claimAmount",
+          "type": "uint128"
+        },
+        {
+          "name": "cutoffBlockNumber",
+          "type": "uint64"
+        },
+        {
+          "name": "claimEndTimestamp",
+          "type": "uint64"
+        },
+        {
+          "name": "creator",
+          "type": "uint160"
+        },
+        {
+          "name": "creatorNullifierKeyCommitment",
+          "type": "field"
+        }
+      ],
+      "configurationCommitment": {
+        "scheme": "poseidon",
+        "domain": "REFERENCE_CONFIGURATION_DOMAIN",
+        "fields": [
+          "configurationSalt",
+          "assetId",
+          "claimAmount",
+          "cutoffBlockNumber",
+          "claimEndTimestamp",
+          "creator",
+          "creatorNullifierKeyCommitment"
+        ]
+      }
+    }
+  ]
+}

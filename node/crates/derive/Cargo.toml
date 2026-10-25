@@ -1,0 +1,35 @@
+[package]
+name = "pcash-derive"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "PCASH L1 derivation engine: inbox framing, transaction admission and execution, issuance, and StateRoot commitment"
+
+[lints]
+workspace = true
+
+[dependencies]
+pcash-crypto = { path = "../crypto" }
+pcash-state = { path = "../state" }
+pcash-verify = { path = "../verify" }
+pcash-l1 = { path = "../l1" }
+pcash-da = { path = "../da" }
+pcash-issuance = { path = "../issuance" }
+
+alloy-primitives = { workspace = true }
+k256 = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+alloy-sol-types = { workspace = true }
+hex = { workspace = true }
+pcash-crypto = { path = "../crypto" }
+pcash-state = { path = "../state" }
+pcash-l1 = { path = "../l1" }
+pcash-verify = { path = "../verify" }
+alloy-primitives = { workspace = true }
+k256 = { workspace = true }
+sha3 = { workspace = true }
+sha2 = { workspace = true }
+serde_json = { workspace = true }

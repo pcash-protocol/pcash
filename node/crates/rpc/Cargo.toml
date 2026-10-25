@@ -1,0 +1,47 @@
+[package]
+name = "pcash-rpc"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "PCASH reference client API: the pcash_* JSON-RPC namespace over jsonrpsee HTTP+WS"
+
+[lints]
+workspace = true
+
+[features]
+default = ["client"]
+# The typed `pcash_*` client. On by default so `cargo test -p pcash-rpc` covers
+# it; `pcash-node` takes the dependency with `default-features = false` so a
+# node build does not pull an HTTP client it never uses.
+client = ["jsonrpsee/macros", "jsonrpsee/http-client"]
+# Fixtures and a `NodeApi` stub for tests that need a real server. Enabled ONLY
+# through a dev-dependency, so no release build can select it.
+test-support = []
+
+[dependencies]
+pcash-issuance = { path = "../issuance" }
+pcash-derive = { path = "../derive" }
+pcash-state = { path = "../state" }
+pcash-metrics = { path = "../metrics" }
+pcash-da = { path = "../da" }
+
+alloy-primitives = { workspace = true }
+alloy-serde = "2.1"
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+hex = { workspace = true }
+redb = { workspace = true }
+thiserror = { workspace = true }
+
+jsonrpsee = { version = "0.25", features = ["server"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tower = { workspace = true }
+tower-http = { version = "0.6", features = ["cors"] }
+
+[dev-dependencies]
+# Self dev-dependency: the only way `test-support` is ever turned on here.
+pcash-rpc = { path = ".", features = ["test-support"] }
+pcash-crypto = { path = "../crypto" }
+pcash-state = { path = "../state" }
+reqwest = { version = "0.13", default-features = false, features = ["json"] }

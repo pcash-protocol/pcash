@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "contract": "ClaimLink",
+  "functions": [
+    {
+      "name": "claim",
+      "selector": 0,
+      "applicationVkHash": "0x0c77be6af34f0c357ddfdbdf2275b5a52513060b00fbbdbcc571c1f50a1ed130",
+      "arguments": [
+        {
+          "name": "feePaid",
+          "type": "bool",
+          "visibility": "private"
+        },
+        {
+          "name": "assetInput",
+          "type": "assetInputOpening",
+          "visibility": "private"
+        }
+      ],
+      "configuration": [
+        {
+          "name": "configurationSalt",
+          "type": "field",
+          "visibility": "private"
+        },
+        {
+          "name": "assetId",
+          "type": "field",
+          "visibility": "private"
+        }
+      ],
+      "configurationCommitment": {
+        "scheme": "poseidon",
+        "domain": "REFERENCE_CONFIGURATION_DOMAIN",
+        "fields": [
+          "configurationSalt",
+          "assetId"
+        ]
+      }
+    }
+  ]
+}

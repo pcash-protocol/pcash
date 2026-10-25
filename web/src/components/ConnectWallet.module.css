@@ -1,0 +1,7 @@
+.connect { grid-column: 1 / -1; display: grid; gap: 10px; }
+.connect > button { width: 100%; }
+.error { margin: 0; color: var(--color-danger-text); }
+.ensChoice { display: flex; align-items: center; gap: 8px; font-family: var(--font-ui); font-size: 13px; cursor: pointer; }
+.ensChoice input { margin: 0; }
+.terms { margin: 0; color: var(--color-text-muted); font-family: var(--font-ui); font-size: 12px; }
+.terms a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }

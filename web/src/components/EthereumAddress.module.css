@@ -1,0 +1,4 @@
+.fitted { display: inline-flex; min-width: 0; max-width: 100%; vertical-align: bottom; white-space: nowrap; }
+.fitted > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.fitted > span:last-child { flex: none; }
+.copyable { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; }

@@ -1,0 +1,45 @@
+{
+  "name": "@pcash/lineage",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Fixed-root private lineage application.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./fixture": {
+      "types": "./dist/fixture.d.ts",
+      "default": "./dist/fixture.js"
+    },
+    "./package.json": "./package.json",
+    "./artifacts": {
+      "types": "./dist/proverArtifacts.d.ts",
+      "default": "./dist/proverArtifacts.js"
+    },
+    "./runtimes": {
+      "types": "./dist/circuitRuntimes.d.ts",
+      "default": "./dist/circuitRuntimes.js"
+    }
+  },
+  "scripts": {
+    "build": "node ../scripts/package/clean_dist.mjs && tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "node ../scripts/circuits/bundle.mjs exec -- vitest run test/application.proving.test.ts && node test/fast.mjs",
+    "prepack": "npm run build",
+    "test:fast": "node test/fast.mjs"
+  },
+  "dependencies": {
+    "@pcash/sdk": "^0.1.0",
+    "@pcash/test-support": "0.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.0"
+  },
+  "files": [
+    "dist"
+  ]
+}

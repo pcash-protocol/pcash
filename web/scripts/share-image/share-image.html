@@ -1,0 +1,36 @@
+<!doctype html>
+<!-- The link-preview image (public/og.jpg). Render it with `npm run share-image --workspace @pcash/web`. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,800&display=block" />
+  <style>
+    html, body { margin: 0; }
+    body { position: relative; width: 1200px; height: 630px; overflow: hidden; background: #ece5cf; }
+    /* The art prints onto the paper as on the home page: each image multiplies, and
+       a white layer cut to the seal's outline hides the line work behind the seal.
+       The group fades in after the headline ends. */
+    .art { position: absolute; inset: 0; mix-blend-mode: multiply;
+      -webkit-mask-image: linear-gradient(to right, transparent 50%, #000 70%); mask-image: linear-gradient(to right, transparent 50%, #000 70%); }
+    .art img { position: absolute; display: block; max-width: none; }
+    .lines { height: 125%; width: auto; top: -12%; right: -14%; mix-blend-mode: multiply;
+      -webkit-mask-image: linear-gradient(to bottom, transparent, #000 14%, #000 86%, transparent); mask-image: linear-gradient(to bottom, transparent, #000 14%, #000 86%, transparent); }
+    .seal { position: absolute; width: 700px; aspect-ratio: 2400 / 2364; right: -210px; top: calc(50% - 345px); }
+    .seal::before { content: ""; position: absolute; inset: 0; background: #fff;
+      -webkit-mask: url(/brand/seal-silhouette.png) center / 100% 100% no-repeat; mask: url(/brand/seal-silhouette.png) center / 100% 100% no-repeat; }
+    .seal img { position: relative; width: 100%; height: auto; mix-blend-mode: multiply; }
+    .copy { position: absolute; top: 0; bottom: 0; left: 72px; display: flex; flex-direction: column; justify-content: center; gap: 44px; }
+    .lockup { display: flex; align-items: center; gap: 14px; mix-blend-mode: multiply; }
+    .lockup img:first-child { width: 64px; height: auto; }
+    .lockup img:last-child { width: 210px; height: auto; }
+    h1 { margin: 0; color: #1d2b22; font: 800 88px/0.98 "Source Serif 4", Georgia, serif; letter-spacing: -0.025em; }
+  </style>
+</head>
+<body>
+  <div class="art"><img class="lines" src="/brand/linework.webp" alt="" /><div class="seal"><img src="/brand/seal.webp" alt="" /></div></div>
+  <div class="copy">
+    <div class="lockup"><img src="/brand/seal-small.webp" alt="" /><img src="/brand/wordmark.webp" alt="PCASH" /></div>
+    <h1>Private money<br />Ethereum can<br />program.</h1>
+  </div>
+</body>
+</html>

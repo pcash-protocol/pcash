@@ -1,0 +1,55 @@
+.anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+.block {
+  display: flex;
+}
+
+.bubble {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 8px);
+  width: max-content;
+  max-width: min(260px, 80vw);
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 12%);
+  pointer-events: none;
+}
+
+.start { left: 0; }
+.end { right: 0; }
+.top { top: auto; bottom: calc(100% + 8px); }
+
+.helpAnchor { display: inline-flex; }
+
+/* A 22px circle with a 42px touch target. The anchor keeps page-level button radii from squaring it. */
+.helpAnchor .help {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: none;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1;
+}
+.help::after { content: ""; position: absolute; inset: -10px; }
+.help[aria-expanded="true"] { border-color: var(--color-accent); color: var(--color-text); }
+
+.helpBubble { left: 0; right: 0; width: auto; max-width: none; }

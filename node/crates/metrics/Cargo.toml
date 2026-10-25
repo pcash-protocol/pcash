@@ -1,0 +1,19 @@
+[package]
+name = "pcash-metrics"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "PCASH node metrics: injectable recorder, Prometheus exposition, operator /metrics"
+
+[lints]
+workspace = true
+
+[dependencies]
+axum = { workspace = true }
+prometheus-client = { workspace = true }
+tokio = { version = "1", features = ["rt", "net"] }
+tracing = { workspace = true }
+
+[dev-dependencies]
+reqwest = { version = "0.13", default-features = false, features = ["json"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

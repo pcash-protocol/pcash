@@ -1,0 +1,219 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "title": "L1 lag (blocks)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "pcash_node_l1_lag_blocks",
+          "legendFormat": "lag",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Derived vs L1 head vs finalized",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "targets": [
+        { "expr": "pcash_node_derived_l1_block", "legendFormat": "derived", "refId": "A" },
+        { "expr": "pcash_node_l1_head", "legendFormat": "head", "refId": "B" },
+        { "expr": "pcash_node_finalized_l1_block", "legendFormat": "finalized", "refId": "C" }
+      ]
+    },
+    {
+      "title": "Derive rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(pcash_node_l1_blocks_derived_total[1m])",
+          "legendFormat": "{{mode}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Derive duration p95",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(pcash_node_derive_duration_seconds_bucket[5m]))",
+          "legendFormat": "p95",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Skipped entries",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(pcash_node_entries_skipped_total[5m])",
+          "legendFormat": "{{reason}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Reorgs",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "rate(pcash_node_reorgs_total[5m])",
+          "legendFormat": "reorgs/s",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Index ready",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
+      "targets": [
+        { "expr": "pcash_node_index_ready", "legendFormat": "ready", "refId": "A" }
+      ]
+    },
+    {
+      "title": "PCASH tip / finalized",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+      "targets": [
+        { "expr": "pcash_node_pcash_tip", "legendFormat": "tip", "refId": "A" },
+        { "expr": "pcash_node_pcash_finalized", "legendFormat": "finalized", "refId": "B" }
+      ]
+    },
+    {
+      "title": "Mempool entries by status",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "expr": "pcash_node_mempool_entries",
+          "legendFormat": "{{status}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Mempool bytes vs max",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 24 },
+      "targets": [
+        { "expr": "pcash_node_mempool_bytes", "legendFormat": "bytes", "refId": "A" },
+        { "expr": "pcash_node_mempool_max_bytes", "legendFormat": "max", "refId": "B" }
+      ]
+    },
+    {
+      "title": "Mempool unpaid entries vs max",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 24 },
+      "targets": [
+        { "expr": "pcash_node_mempool_unpaid_entries", "legendFormat": "unpaid", "refId": "A" },
+        { "expr": "pcash_node_mempool_max_unpaid_entries", "legendFormat": "max", "refId": "B" }
+      ]
+    },
+    {
+      "title": "Mempool admissions",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
+      "targets": [
+        {
+          "expr": "rate(pcash_node_mempool_admissions_total[5m])",
+          "legendFormat": "{{source}} {{outcome}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Proof verify p95",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 32 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(pcash_node_mempool_verify_duration_seconds_bucket[5m]))",
+          "legendFormat": "p95",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Mempool ready",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 32 },
+      "targets": [
+        { "expr": "pcash_node_mempool_ready", "legendFormat": "ready", "refId": "A" }
+      ]
+    },
+    {
+      "title": "Relay prepare selected vs rejected",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 40 },
+      "targets": [
+        {
+          "expr": "rate(pcash_node_mempool_prepare_total[5m])",
+          "legendFormat": "{{result}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "RPC errors",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 40 },
+      "targets": [
+        {
+          "expr": "rate(pcash_node_rpc_errors_total[5m])",
+          "legendFormat": "{{method}} {{code}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "RPC p95 by method",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 48 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, method) (rate(pcash_node_rpc_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{method}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Peer block hash divergences",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 56 },
+      "targets": [
+        {
+          "expr": "increase(pcash_node_p2p_block_hash_divergences_total[10m])",
+          "legendFormat": "divergences / 10m",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["pcash", "node"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "PCASH node",
+  "uid": "pcash-node",
+  "version": 1
+}

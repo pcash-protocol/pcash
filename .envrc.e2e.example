@@ -1,0 +1,14 @@
+# Copy to .envrc.e2e for `just e2e-live`. Variables already set in the shell
+# take precedence. Left empty, each targets the local stack `just e2e-up` serves.
+
+# The node's public JSON-RPC, for example https://<node>/rpc.
+export PCASH_E2E_RPC_URL=
+# An execution RPC for the node's L1.
+export PCASH_E2E_L1_RPC=
+# Funded on that L1. It pays every batch the run publishes; give each running harness its own.
+export PCASH_E2E_L1_KEY=
+
+# Optional.
+# export PCASH_E2E_PSCAN_URL=
+# export PCASH_E2E_PAYMENT_ROUTER_ADDRESS=
+# export PCASH_E2E_L1_MAX_FEE_PER_GAS=

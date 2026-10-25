@@ -1,0 +1,45 @@
+{
+  "name": "@pcash/wallet",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "PCASH wallet HTTP service, CLI, and PGlite database host.",
+  "exports": {
+    ".": {
+      "types": "./dist/service/index.d.ts",
+      "default": "./dist/service/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "pcash-wallet": "./dist/service/bin-server.js",
+    "pcash-wallet-cli": "./dist/cli/bin.js"
+  },
+  "scripts": {
+    "build": "node ../scripts/package/clean_dist.mjs && tsc -p tsconfig.build.json && node ../scripts/package/finish_build.mjs --dist dist --bin=cli/bin.js,service/bin-server.js",
+    "pretest": "npm run build --workspace @pcash/sdk && npm run build",
+    "typecheck": "tsc --noEmit",
+    "pretypecheck": "npm run build --workspace @pcash/sdk",
+    "test": "vitest run",
+    "pcash-wallet-cli": "node src/cli/bin.ts",
+    "pcash-wallet": "node src/service/bin-server.ts",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "0.5.5",
+    "@pcash/sdk": "^0.1.0",
+    "prom-client": "15.1.3",
+    "viem": "^2.55.1"
+  },
+  "devDependencies": {
+    "@pcash/test-support": "0.0.0",
+    "@scure/bip39": "1.6.0",
+    "@types/node": "^26.1.1",
+    "fake-indexeddb": "^6.2.5",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.0"
+  },
+  "files": [
+    "dist"
+  ]
+}

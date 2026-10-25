@@ -1,0 +1,13 @@
+{
+  "profile": "pcash-reference-account-rules",
+  "status": "optional application profile",
+  "domainPrefix": "pcash.",
+  "fieldModulus": "0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001",
+  "formula": "poseidon(uint64(L), chunk_0, ..., chunk_(m-1)) over the L bytes of \"pcash.\" || context_string",
+  "tags": {
+    "REFERENCE_CONFIGURATION_DOMAIN": "0x1ce42634cf3cf4cb87e520affa3c136c566911097b66a8dc08b267717093a576",
+    "REFERENCE_MULTISIG_APPROVAL_DOMAIN": "0x138a3981618bf64f55e482612cfa68b06b81de34554a6495cbcd817e6bd29314",
+    "REFERENCE_ASSET_CONFIGURATION_DOMAIN": "0x23ee149f3435bd0894e8e53909115c1d9d49bc81e080a810613a89eb49b4aeb2",
+    "REFERENCE_FUNGIBLE_METADATA_DOMAIN": "0x1c9a1ff83e6d729ae117eec6f52f2d2bb5deb29b6c3ef1d3a0e2eabeefbf003d"
+  }
+}

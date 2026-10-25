@@ -1,0 +1,29 @@
+{
+  "name": "@pcash/board",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Anonymous public message board: browser-safe post codec and board index reader.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./codec": {
+      "types": "./dist/codec.d.ts",
+      "default": "./dist/codec.js"
+    }
+  },
+  "scripts": {
+    "build": "node ../../scripts/package/clean_dist.mjs && tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@pcash/sdk": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^5.9.3"
+  }
+}

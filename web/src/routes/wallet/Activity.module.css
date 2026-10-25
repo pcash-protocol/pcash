@@ -1,0 +1,53 @@
+.activity { margin-bottom: 18px; }
+.hint { margin: 2px 0; font-size: 13px; }
+
+.post { display: grid; gap: 6px; justify-items: start; margin: 12px 0; }
+.post p { margin: 0; color: var(--color-text-muted); font-size: 12px; }
+
+.empty {
+  display: flex; flex-direction: column; gap: 7px; margin-top: 18px; padding: 22px;
+  border: 1px dashed var(--color-border); border-radius: var(--radius-md); color: var(--color-text-muted);
+}
+.empty strong { color: var(--color-text); }
+
+.rows { display: flex; flex-direction: column; }
+.row {
+  display: grid; grid-template-columns: 26px minmax(0, 1fr) auto auto; gap: 12px; align-items: center;
+  padding: 16px 0; border-bottom: 1px solid var(--color-border);
+}
+.icon { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 999px; background: var(--color-accent-soft); border: 1px solid var(--color-border); }
+.text { display: grid; gap: 4px; min-width: 0; }
+.text small { font-size: 12px; color: var(--color-text-muted); }
+.note { overflow-wrap: anywhere; }
+.note > span { display: block; }
+.chip {
+  border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 3px 8px;
+  font-family: var(--font-ui); font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--color-text-muted); white-space: nowrap;
+}
+.chip.chipBad { border-color: var(--color-danger-border); color: var(--color-danger-text); }
+.chipTip .chip { cursor: help; }
+/* An expired transaction changed nothing: its row dims and its sentence is struck out. The chip and the actions keep full strength. */
+.row[data-activity-state="expired"] .icon, .row[data-activity-state="expired"] .text { opacity: .55; }
+/* Amounts and addresses are inline blocks, which a parent's line does not cross. */
+.row[data-activity-state="expired"] .text > span, .row[data-activity-state="expired"] .text > span * { text-decoration: line-through; }
+.rowActions { grid-column: 2 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; min-width: 0; }
+.rowActions a { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+
+@media (max-width: 620px) {
+  .row { grid-template-columns: 26px minmax(0, 1fr); }
+  .chip, .chipTip { grid-column: 2; justify-self: start; }
+  /* The chip now sits at the left, so its tip opens rightward. */
+  .chipTip > [role="tooltip"] { left: 0; right: auto; }
+}
+
+.compact { margin-bottom: 0; font-size: 13px; }
+.compact .row { grid-template-columns: 24px minmax(0, 1fr) auto; gap: 9px; padding: 11px 0; }
+.compact .icon { width: 24px; height: 24px; }
+.compact .text { gap: 3px; font-size: 13px; line-height: 1.35; }
+.compact .text small { font-size: 11px; }
+.compact .chip, .compact .chipTip { grid-column: 3; grid-row: 1; }
+.compact .chipTip > [role="tooltip"] { left: auto; right: 0; }
+.compact .chip { padding: 3px 5px; font-size: 9px; letter-spacing: .02em; }
+.compact .rowActions button { padding: 6px 9px; font-size: 12px; }
+.compact [data-payment-highlighted="true"] { background: var(--color-accent-soft); border-radius: 6px; padding-inline: 8px; transition: background .2s; }

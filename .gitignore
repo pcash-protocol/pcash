@@ -1,0 +1,64 @@
+# Rust
+/target
+**/target
+
+# Node
+node_modules
+**/node_modules
+
+# Browser/client build output
+**/dist/
+
+# Playwright MCP scratch (screenshots / console / snapshot logs from E2E checks)
+.playwright-mcp/
+e2e/playwright-report/
+e2e/test-results/
+
+# Noir / Barretenberg
+circuits/**/target
+*.gz
+.pcash-tools/
+.pcash-tools
+
+# Local caches: circuit bundles, npm, CI runs
+.cache/
+.cache
+
+# scratch
+/tmp
+*.log
+.DS_Store
+
+# Local environment. Configuration lives in the ignored .envrc and .envrc.<name>
+# files; dotenv files remain ignored because they are commonly used for credentials.
+gha-creds-*.json
+.envrc
+.envrc.*
+!.envrc.example
+!.envrc.*.example
+.direnv/
+.env
+.env.local
+.env.*.local
+
+repomix-output.md
+
+# Compiled output must never land beside its TypeScript source.
+sdk/src/**/*.js
+sdk/src/**/*.js.map
+sdk/src/**/*.d.ts
+sdk/src/**/*.d.ts.map
+wallet/src/**/*.js
+wallet/src/**/*.d.ts
+marketplace/src/**/*.js
+marketplace/src/**/*.d.ts
+# ...but hand-written ambient declarations are source.
+!sdk/src/bundler-env.d.ts
+.git-pr/
+
+# Reproducible parameter experiment output; keep calibration data separate from code review.
+/bench/issuance/results/
+/bench/issuance/*-results/
+
+# Proof lab device results saved by `just bench`.
+/bench/results/
