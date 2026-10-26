@@ -3,6 +3,7 @@ name = "pcash-issuance"
 version = "0.0.0"
 edition.workspace = true
 license.workspace = true
+publish = false
 
 [lints]
 workspace = true

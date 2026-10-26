@@ -3,6 +3,7 @@ name = "pcash-verify"
 version = "0.0.0"
 edition = "2021"
 license = "Apache-2.0"
+publish = false
 description = "PCASH wire-proof verification behind a trait with a pinned-Barretenberg backend"
 
 [lints]

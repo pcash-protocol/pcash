@@ -42,6 +42,21 @@ import {
 
 const MAX_REQUEST_BODY_BYTES = 64 * 1024;
 
+/**
+ * What a submission carries when that changes which L1 publication is safe:
+ * signed registration, or an account request that is registration or an
+ * update depending on the account's state when it runs.
+ */
+export type SubmissionPurpose = "registration" | "account-update";
+
+/**
+ * The request's transport; `wallet` selects whose poster commitment an L1
+ * publication names. `node`, when set, is the node every adapter it returns
+ * publishes through.
+ */
+export type SubmissionFor = ((body: Record<string, unknown>, wallet: string | undefined, purpose?: SubmissionPurpose) => DurableSubmissionAdapter)
+  & { readonly node?: PcashNodeClient };
+
 export interface WalletHttpContext {
   token?: string;
   /** Where a failure's full error chain goes; a response carries only its message. */
@@ -57,8 +72,9 @@ export interface WalletHttpContext {
   createReceiveKey(wallet: string | undefined, body: Record<string, unknown>): Promise<unknown>;
   importReceiveKey(wallet: string | undefined, body: Record<string, unknown>): Promise<unknown>;
   listReceiveKeys(wallet: string | undefined): unknown | Promise<unknown>;
-  /** The request's transport; `wallet` selects whose poster commitment an L1 publication names. */
-  submissionFor(body: Record<string, unknown>, wallet: string | undefined): DurableSubmissionAdapter;
+  submissionFor: SubmissionFor;
+  /** Where signed registration goes when the request names no path. */
+  registrationSubmit: "l1" | "mempool";
   sync(wallet: string | undefined, full: boolean): Promise<SyncWalletResult>;
 }
 
@@ -138,11 +154,12 @@ function presentAction(result: unknown, account = false): unknown {
   };
 }
 
-/** Signed registration self-publishes unless the caller selects the mempool. */
+/** Signed registration takes the request's path, else the service's default: L1, or the mempool in Tor mode. */
 export function accountCreationSubmission(
-  submissionFor: WalletHttpContext["submissionFor"],
+  submissionFor: SubmissionFor,
   body: Record<string, unknown>,
   wallet: string | undefined,
+  defaultSubmit: WalletHttpContext["registrationSubmit"],
   recovery?: () => Promise<RelayJournalRecovery>,
 ): DurableSubmissionAdapter {
   if (body.submit === "selected") return {
@@ -150,11 +167,12 @@ export function accountCreationSubmission(
     preflight: async () => { throw new HttpValidationError("proof-free account creation cannot pay a selected relayer"); },
     submit: async () => { throw new HttpValidationError("proof-free account creation cannot pay a selected relayer"); },
   };
-  const submit = body.submit ?? "l1";
+  const submit = body.submit ?? defaultSubmit;
   let adapter: DurableSubmissionAdapter | undefined;
-  const transport = () => adapter ??= submissionFor({ ...body, submit }, wallet);
+  const transport = () => adapter ??= submissionFor({ ...body, submit }, wallet, "registration");
   return {
     mode: submit === "l1" ? "l1" : "mempool",
+    ...(submissionFor.node === undefined ? {} : { node: submissionFor.node }),
     ...(recovery === undefined ? {} : { l1Recovery: recovery }),
     preflight: async (context) => transport().preflight(context),
     submit: async (context) => transport().submit(context),
@@ -599,12 +617,12 @@ export async function handleWalletHttp(
         send(response, 400, { error: "openFeeAmount must be a decimal string" });
         return;
       }
-      const submission = context.submissionFor(body, bodyWallet);
+      const submission = context.submissionFor(body, bodyWallet, "account-update");
       send(response, 200, presentAction(await context.runtimeFor(bodyWallet).updateAccount({
         ...(openFeeAmount === undefined ? {} : { openFeeAmount }),
         ...privateRelayTerms(body, context.selectedRelayQuote),
         submission,
-        userAccountCreationSubmission: accountCreationSubmission(context.submissionFor, body, bodyWallet, async () => context.relayJournal),
+        userAccountCreationSubmission: accountCreationSubmission(context.submissionFor, body, bodyWallet, context.registrationSubmit, async () => context.relayJournal),
         onPrepared: journaled.record,
       }), true));
       return;

@@ -48,6 +48,18 @@ export function renderResult(cli: Cli, value: unknown): string {
         : "No wallets loaded. Run pcash-wallet-cli wallet create or pcash-wallet-cli wallet import.";
     }
     const connection = ` --wallet-url ${shell(cli.url)} --data-dir ${shell(cli.dataDir)}`;
+    if (result.networkPrivacy === "tor") return [
+      `Wallet ready locally: ${text(result.address)}`,
+      `PCASH chain ID: ${text(result.pcashChainId)}`,
+      "The wallet service reaches the network through Tor. Private payments publish through the PCASH mempool and need no Ethereum account or ETH.",
+      ...(result.serviceGasAddress === undefined ? []
+        : [
+          `Service gas account (publishes to L1 only when asked): ${text(result.serviceGasAddress)}`,
+          "Its L1 transactions are public and linked to each other and to how it was funded.",
+        ]),
+      "Registration needs a node that admits unpaid registration and a publisher that sponsors it. To register, run:",
+      `  pcash-wallet-cli account ensure --wallet ${text(result.address)}${connection}`,
+    ].join("\n");
     return [
       `Wallet ready locally: ${text(result.address)}`,
       `Ethereum funding address: ${text(result.ethereumFundingAddress)}`,

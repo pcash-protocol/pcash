@@ -727,6 +727,10 @@ export async function startControlledRpc({ status = TEST_STATUS, emptyMempool = 
     currentStatus() {
       return clone(state.status);
     },
-    close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve())),
+    // server.close() waits for active connections, and a page that is still open keeps its keep-alive connections active.
+    close: () => new Promise((resolve, reject) => {
+      server.close((error) => error ? reject(error) : resolve());
+      server.closeAllConnections();
+    }),
   };
 }

@@ -363,4 +363,15 @@ describe("controlled wallet journey RPC", () => {
     assert.equal(invalid.error.code, -32602);
     assert.match(invalid.error.message, /target is not the controlled head/);
   });
+
+  it("closes while a browser request is still in flight", { timeout: 5_000 }, async () => {
+    const server = await startControlledRpc();
+    server.holdReceipts();
+    const pending = rpc(server, 1, "eth_getTransactionReceipt", [`0x${"ab".repeat(32)}`]).catch(() => undefined);
+    while (!server.requests.some(({ method }) => method === "eth_getTransactionReceipt")) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    await server.close();
+    await pending;
+  });
 });

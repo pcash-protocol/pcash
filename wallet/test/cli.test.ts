@@ -601,6 +601,26 @@ describe("parseServeArgs", () => {
       .toThrow(/mutually exclusive/);
   });
 
+  it("routes through Tor only to remote endpoints and with no L1 configuration", () => {
+    const remote = ["serve", "--network-privacy", "tor", "--rpc-url", "https://rpc.example.org"];
+    expect(parseServeArgs(remote, {}).tor).toEqual({ host: "127.0.0.1", port: 9050 });
+    expect(parseServeArgs(["serve", "--network-privacy", "tor", "--rpc-url", `http://${"b".repeat(56)}.onion`, "--tor-socks", "127.0.0.1:9150"], {}).tor)
+      .toEqual({ host: "127.0.0.1", port: 9150 });
+    expect(parseServeArgs([], { PCASH_WALLET_NETWORK_PRIVACY: "tor", PCASH_WALLET_RPC_URL: "https://rpc.example.org" }).tor).toBeDefined();
+    expect(parseServeArgs(["serve"], {})).not.toHaveProperty("tor");
+    expect(() => parseServeArgs(["serve", "--network-privacy", "tor"], {})).toThrow(/--rpc-url must be https:\/\//);
+    expect(() => parseServeArgs(["serve", "--tor-socks", "127.0.0.1:9050"], {})).toThrow(/requires --network-privacy tor/);
+    expect(() => parseServeArgs(["serve", "--network-privacy", "i2p"], {})).toThrow(/expects none or tor/);
+    expect(parseServeArgs([...remote, "--l1-rpc", "https://l1.example", "--l1-key-file", "/tmp/key.json"], {}))
+      .toMatchObject({ l1Rpc: "https://l1.example", l1KeyFile: "/tmp/key.json" });
+    expect(parseServeArgs(remote, { PCASH_WALLET_L1_KEY: `0x${"ab".repeat(32)}` }).l1Key).toBeDefined();
+    expect(() => parseServeArgs([...remote, "--l1-rpc", "http://l1.example"], {})).toThrow(/--l1-rpc must be https:\/\//);
+    expect(() => parseServeArgs([...remote, "--l1-rpc", "https://127.0.0.1:8545"], {})).toThrow(/--l1-rpc must name a remote host/);
+    expect(() => parseServeArgs([...remote, "--dev"], {})).toThrow(/--dev/);
+    expect(() => parseServeArgs([...remote, "--selected-relayer-url", "http://relay.example"], {}))
+      .toThrow(/--selected-relayer-url must be https:\/\//);
+  });
+
   it("keeps automatic direct delivery by default and accepts an explicit carrier", () => {
     expect(parseServeArgs(["serve"], {}).daMode).toBe("auto");
     expect(parseServeArgs(["serve"], { PCASH_WALLET_DA_MODE: "calldata" }).daMode).toBe("calldata");

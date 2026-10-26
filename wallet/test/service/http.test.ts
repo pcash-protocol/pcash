@@ -128,6 +128,7 @@ function context(): WalletHttpContext {
     importReceiveKey: async () => ({}),
     listReceiveKeys: () => [],
     submissionFor: () => { throw new Error("submissionFor must not be called"); },
+    registrationSubmit: "l1",
     sync: async () => { throw new Error("sync must not be called"); },
   };
 }

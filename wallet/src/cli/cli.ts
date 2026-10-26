@@ -79,7 +79,7 @@ export const COMMAND_DEFINITIONS = {
   receive: { flags: WALLET_FLAGS, description: "Print the complete receive code", example: "receive", group: "Everyday use" },
   send: { flags: [...WALLET_FLAGS, ...SUBMISSION_FLAGS, "to", "amount", "fee", "shape", "memo", "include-sender", "record", "self-record", "public-record"], description: "Send PCASH (amounts and fees are atomic units)", example: "send --to <receive-code> --amount 10", group: "Everyday use" },
   sync: { flags: [...WALLET_FLAGS, "full"], description: "Synchronize with the node; normally automatic", example: "sync", group: "Everyday use" },
-  "account ensure": { flags: [...WALLET_FLAGS, ...SUBMISSION_FLAGS, "fee"], description: "Register or update the account to match this wallet; registration defaults to L1 publication", example: "account ensure", group: "Wallet management" },
+  "account ensure": { flags: [...WALLET_FLAGS, ...SUBMISSION_FLAGS, "fee"], description: "Register or update the account to match this wallet; registration defaults to L1 publication, or the mempool when the service runs with --network-privacy tor", example: "account ensure", group: "Wallet management" },
   "wallet create": { flags: COMMON_FLAGS, description: "Generate a recovery phrase and verify its backup in a terminal", example: "wallet create", group: "Wallet management" },
   "wallet import": { flags: [...COMMON_FLAGS, "seed-file", "dev", "key-file"], description: "Restore a 24-word phrase from hidden input or a private local seed file", example: "wallet import", group: "Wallet management" },
   "wallet list": { flags: COMMON_FLAGS, description: "List loaded wallet addresses", example: "wallet list", group: "Wallet management" },
@@ -126,7 +126,7 @@ const FLAG_HELP: Record<Flag, string> = {
   record: `<schema>=<value> Repeatable application record encrypted to the recipient; use a namespaced schema or record ID and hex bytes or @file (max ${MAX_RECORD_BYTES} bytes)`,
   "self-record": "<schema>=<value> Repeatable application record encrypted to this wallet; hex bytes or @file",
   "public-record": "<schema>=<value> Repeatable application record visible to everyone; hex bytes or @file",
-  submit: "<mempool|l1|selected> Publication path (default mempool, except initial registration: l1)",
+  submit: "<mempool|l1|selected> Publication path (default mempool, except initial registration: l1 unless the service runs with --network-privacy tor)",
   "l1-rpc": "<url> Override the server's Ethereum RPC for this request",
   "private-relay-fee": "<atomic-units> Positive private fee required for --submit selected",
   "retry-content-hash": "<hash> Retry the journaled asset action's exact bytes and quote",
@@ -163,7 +163,7 @@ export function cliHelp(path: readonly string[] = []): string {
     const commands = entries.filter(([, value]) => value.group === group);
     if (commands.length) help += `\n${group}:\n` + commands.map(([key, value]) => `  ${key.padEnd(24)} ${value.description}`).join("\n") + "\n";
   }
-  if (name === "") help += `\nStart here:\n  pcash-wallet --l1-rpc <ethereum-rpc-url>\n  pcash-wallet-cli wallet create\n  # Fund the displayed Ethereum address, then:\n  pcash-wallet-cli account ensure\n\nUse --json for scripts. Use --data-dir for a custom local connection.\n`;
+  if (name === "") help += `\nStart here:\n  pcash-wallet --l1-rpc <ethereum-rpc-url>\n  pcash-wallet-cli wallet create\n  # Fund the displayed Ethereum address, then:\n  pcash-wallet-cli account ensure\n\nOver Tor, with no Ethereum account:\n  pcash-wallet --network-privacy tor --rpc-url <https-or-onion-node-url>\n  pcash-wallet-cli wallet create\n  pcash-wallet-cli account ensure\n\nUse --json for scripts. Use --data-dir for a custom local connection.\n`;
   return help + `\nRun pcash-wallet-cli ${name ? name + " <subcommand>" : "<command>"} --help for options and an example.\n`;
 }
 export const CLI_USAGE = cliHelp();
@@ -207,7 +207,7 @@ export interface Cli {
   fee?: bigint;
   privateRelayFee?: bigint;
   retryContentHash?: string;
-  /** Absent lets the service choose L1 for initial registration and the mempool for updates and transfers. */
+  /** Absent lets the service choose: L1 for initial registration (the mempool in Tor mode) and the mempool for updates and transfers. */
   submit?: SubmitPath;
   l1Rpc?: string;
   waitMode: WaitMode;

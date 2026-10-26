@@ -3,6 +3,7 @@ name = "pcash-derive"
 version = "0.0.0"
 edition = "2021"
 license = "Apache-2.0"
+publish = false
 description = "PCASH L1 derivation engine: inbox framing, transaction admission and execution, issuance, and StateRoot commitment"
 
 [lints]

@@ -214,6 +214,9 @@ export function createWalletRuntime<Prepared = unknown, Output = unknown>(
     chainId: params.chainId,
     store: params.store,
   });
+  // An action reads from the node its submission publishes through; sync stays on the wallet's node.
+  const actionNode = (submission?: Pick<DurableSubmissionAdapter, "node">): PcashNodeClient =>
+    submission?.node ?? params.node;
   const retainReceiveKey = async (pair: MlKemKeyPair): Promise<void> => {
     await withWalletReservation(params.store, [FULL_RESCAN_RESOURCE], async () => {
       await params.store.transaction((current) => {
@@ -305,7 +308,7 @@ export function createWalletRuntime<Prepared = unknown, Output = unknown>(
     const submission = params.userAccountCreationSubmission ?? params.submission;
     if (submission === undefined || submission.mode !== "l1") throw new WalletCapabilityError("submission", "setup mining");
     const { preparedAction } = await prepareNoteFundedTransfer({
-      ...params, wallet: profile, signer, prover, submission,
+      ...params, node: actionNode(submission), wallet: profile, signer, prover, submission,
       kind: "mine", to: activationAddress, amount: 0n, openFeeAmount: 0n,
       validUntilTimestamp: BigInt(pending.validUntilTimestamp),
     }, [], PRIVATE_VALUE_PROFILES.S.shapeId);
@@ -444,6 +447,7 @@ export function createWalletRuntime<Prepared = unknown, Output = unknown>(
   const assertActivationContext = async (
     pending: PendingUserAccountCreation,
     status: StatusResult,
+    node: PcashNodeClient,
   ): Promise<void> => {
     if (
       BigInt(pending.pcashChainId) !== BigInt(status.pcashChainId)
@@ -458,7 +462,7 @@ export function createWalletRuntime<Prepared = unknown, Output = unknown>(
     if (status.latestBlockTimestamp > BigInt(pending.validUntilTimestamp)) {
       throw new Error("prepared account activation authorization has expired");
     }
-    const recent = await params.node.getBlock(BigInt(pending.recentPcashBlockNumber));
+    const recent = await node.getBlock(BigInt(pending.recentPcashBlockNumber));
     if (recent === null || recent.hash.toLowerCase() !== pending.recentPcashBlockHash.toLowerCase()) {
       throw new Error("prepared account activation recent PCASH block is no longer canonical");
     }
@@ -489,8 +493,9 @@ export function createWalletRuntime<Prepared = unknown, Output = unknown>(
             throw new Error(`direct account activation must be sent on Ethereum by ${activationAddress}`);
           }
         }
-        const status = await params.node.status();
-        await assertActivationContext(pending, status);
+        const node = actionNode(submission);
+        const status = await node.status();
+        await assertActivationContext(pending, status, node);
         const prepared = await submission.preflight({
           transactionBytes: entry,
           ...(pending.miningTransactionHex === undefined ? {} : { additionalTransactions: [fromHex(pending.miningTransactionHex)] }),
@@ -562,7 +567,7 @@ export function createWalletRuntime<Prepared = unknown, Output = unknown>(
    */
   const transferPublication = async (
     intent: Omit<NoteFundedTransferIntent, "to"> & { to?: string; expectedReview?: WalletTransferPreflight },
-    submission: Pick<DurableSubmissionAdapter, "mode">,
+    submission: Pick<DurableSubmissionAdapter, "mode" | "node">,
   ): Promise<PublicationPlan> => {
     const openFeeAmount = intent.openFeeAmount ?? intent.expectedReview?.openFeeAmount;
     if (intent.to !== undefined) {
@@ -591,7 +596,7 @@ export function createWalletRuntime<Prepared = unknown, Output = unknown>(
       privateRelayFeeAmount: intent.privateRelayFeeAmount,
       publication,
       selectedRelayQuote: intent.selectedRelayQuote,
-      node: params.node,
+      node: actionNode(submission),
     });
     let planned = await plan(shape);
     const data = await params.store.load() ?? emptyWalletState({ address: params.wallet.address, network: params.store.identity.network });
@@ -703,16 +708,18 @@ export function createWalletRuntime<Prepared = unknown, Output = unknown>(
     async preflightTransfer(intent: Omit<NoteFundedTransferIntent, "to"> & {
       to?: string;
       status?: StatusResult;
-      submission?: Pick<DurableSubmissionAdapter, "mode">;
+      submission?: Pick<DurableSubmissionAdapter, "mode" | "node">;
     }): Promise<WalletTransferPreflight> {
       intent = { ...intent, ...(intent.data === undefined ? {} : { data: structuredClone(intent.data) }) };
       const wallet = requirePcashProfile(params, "transfer preflight");
-      const status = intent.status ?? await params.node.status();
       // A preflight without a transport reviews the default relayed publication.
-      const plan = await transferPublication(intent, intent.submission ?? params.submission ?? { mode: "mempool" });
+      const submission = intent.submission ?? params.submission ?? { mode: "mempool" };
+      const node = actionNode(submission);
+      const status = intent.status ?? await node.status();
+      const plan = await transferPublication(intent, submission);
       const { submission: _submission, ...funding } = intent;
       const notes = await preflightNoteFundedTransferClient({
-        node: params.node, store: params.store, wallet, chainId: params.chainId,
+        node, store: params.store, wallet, chainId: params.chainId,
         ...funding, openFeeAmount: plan.openFeeAmount, privateRelayFeeAmount: plan.privateRelayFeeAmount, status,
       });
       return {
@@ -735,13 +742,14 @@ export function createWalletRuntime<Prepared = unknown, Output = unknown>(
     } & DurableSubmissionCallbacks) {
       intent = { ...intent, ...(intent.data === undefined ? {} : { data: structuredClone(intent.data) }) };
       const spend = requireSpendable(params, "transfer");
-      const status = intent.status ?? await params.node.status();
       const submission = intent.submission ?? params.submission;
       if (submission === undefined) throw new WalletCapabilityError("submission", "transfer");
+      const node = actionNode(submission);
+      const status = intent.status ?? await node.status();
       const plan = await transferPublication(intent, submission);
       if (params.provers?.privateValue === undefined) throw new WalletCapabilityError("prover", "transfer");
       const result = await runNoteFundedTransferClient({
-        node: params.node,
+        node,
         store: params.store,
         wallet: spend.wallet,
         signer: spend.signer,
@@ -794,7 +802,7 @@ export function createWalletRuntime<Prepared = unknown, Output = unknown>(
         for (let index = 0; index < intent.count; index += 1) {
           throwIfWalletActionCanceled(intent.signal);
           const { preparedAction, anchor } = await prepareNoteFundedTransfer({
-            ...params, wallet: spend.wallet, signer: spend.signer, prover, submission,
+            ...params, node: actionNode(submission), wallet: spend.wallet, signer: spend.signer, prover, submission,
             kind: "mine", to: activationAddress, amount: 0n, openFeeAmount: 0n,
             ...(intent.signal === undefined ? {} : { signal: intent.signal }),
             onProgress: (phase) => intent.onProgress?.(phase, `Proving ${index + 1} of ${intent.count}`),
@@ -805,7 +813,7 @@ export function createWalletRuntime<Prepared = unknown, Output = unknown>(
       const entries = actions.length > 0 ? actions.map(action => action.transactionBytes) : [...(intent.relayEntries ?? [])];
       if (entries.length === 0) throw new Error("No transactions available to relay.");
       throwIfWalletActionCanceled(intent.signal);
-      const status = await params.node.status();
+      const status = await actionNode(submission).status();
       // The batch is quoted and sent under this status's network.
       assertWalletStoreMatches(params.store, params.wallet, params.chainId, status);
       // Relay entries are node mempool bytes; a direct account creation among
@@ -834,11 +842,11 @@ export function createWalletRuntime<Prepared = unknown, Output = unknown>(
       try {
         for (const action of actions) await intent.onPrepared?.(action.pending.contentHash, action.pending.transactionHex);
         if (actions.length > 0) {
-          const current = await params.node.status();
+          const current = await actionNode(submission).status();
           const wallTime = BigInt(Math.floor((intent.nowUnixMilliseconds ?? Date.now)() / 1000));
           const inclusionTime = current.latestBlockTimestamp > wallTime ? current.latestBlockTimestamp : wallTime;
           for (const action of actions) {
-            const anchor = await params.node.getBlockByHash(bytes32Hex(action.anchor.blockHash));
+            const anchor = await actionNode(submission).getBlockByHash(bytes32Hex(action.anchor.blockHash));
             if (anchor === null || inclusionTime + 60n > action.anchor.timestamp + RECENT_PCASH_BLOCK_WINDOW_SECONDS
               || inclusionTime + 60n > BigInt(action.pending.validUntilTimestamp)) {
               throw new DurablePreBroadcastError(new Error("Mining proofs expired while preparing. Please try again."));
@@ -874,7 +882,7 @@ export function createWalletRuntime<Prepared = unknown, Output = unknown>(
       const submission = intent.submission ?? params.submission;
       if (submission === undefined) throw new WalletCapabilityError("submission", "asset creation");
       return runAssetCreationClient({
-        ...intent, node: params.node, store: params.store, wallet: spend.wallet, signer: spend.signer,
+        ...intent, node: actionNode(submission), store: params.store, wallet: spend.wallet, signer: spend.signer,
         chainId: params.chainId, prover: params.provers.assetCreation, submission,
         settlePollIntervalMs: settleInterval, settlePollMaxAttempts: settleAttempts, synchronize,
       });
@@ -886,7 +894,7 @@ export function createWalletRuntime<Prepared = unknown, Output = unknown>(
       const submission = intent.submission ?? params.submission;
       if (submission === undefined) throw new WalletCapabilityError("submission", "asset transfer");
       return runAssetTransferClient({
-        ...intent, node: params.node, store: params.store, wallet: spend.wallet, signer: spend.signer,
+        ...intent, node: actionNode(submission), store: params.store, wallet: spend.wallet, signer: spend.signer,
         chainId: params.chainId, prover: params.provers.assetAction, submission,
         settlePollIntervalMs: settleInterval, settlePollMaxAttempts: settleAttempts, synchronize,
       });
@@ -907,7 +915,7 @@ export function createWalletRuntime<Prepared = unknown, Output = unknown>(
         ...(intent.chunkIndex === undefined ? {} : { chunkIndex: intent.chunkIndex }),
         ...(intent.privateRelayFeeAmount === undefined ? {} : { privateRelayFeeAmount: intent.privateRelayFeeAmount }),
         ...(intent.selectedRelayQuote === undefined ? {} : { selectedRelayQuote: intent.selectedRelayQuote }),
-        node: params.node, store: params.store, wallet: spend.wallet, signer: spend.signer,
+        node: actionNode(submission), store: params.store, wallet: spend.wallet, signer: spend.signer,
         chainId: params.chainId, prover: params.provers.assetAction, submission,
         callbacks: durableSubmissionCallbacks(intent),
       });
@@ -921,7 +929,7 @@ export function createWalletRuntime<Prepared = unknown, Output = unknown>(
       const submission = intent.submission ?? params.submission;
       if (submission === undefined) throw new WalletCapabilityError("submission", "contract creation");
       return runSponsoredContractCreationClient({
-        node: params.node,
+        node: actionNode(submission),
         store: params.store,
         wallet: spend.wallet,
         signer: spend.signer,
@@ -948,7 +956,7 @@ export function createWalletRuntime<Prepared = unknown, Output = unknown>(
       if (submission === undefined) throw new WalletCapabilityError("submission", "contract sponsorship");
       return runSponsoredContractAssetActionClient({
         ...intent,
-        node: params.node,
+        node: actionNode(submission),
         store: params.store,
         wallet: spend.wallet,
         signer: spend.signer,
@@ -970,7 +978,7 @@ export function createWalletRuntime<Prepared = unknown, Output = unknown>(
         const submission = intent.submission ?? params.submission;
         if (submission === undefined) throw new WalletCapabilityError("submission", "account");
         return runUserAccountUpdateClient({
-          node: params.node,
+          node: actionNode(submission),
           store: params.store,
           address: spend.wallet.address,
           wallet: spend.wallet,

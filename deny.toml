@@ -1,0 +1,66 @@
+# Supply-chain policy for the Rust workspace, checked by `cargo deny check`.
+# Every exception below names the crate it covers and why; widen nothing globally.
+
+[graph]
+# Check every feature, on the platforms the node is built for.
+all-features = true
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+]
+
+[advisories]
+unmaintained = "all"
+unsound = "all"
+yanked = "deny"
+ignore = [
+    { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5 has no patched release and arrives through k256 0.13, which every alloy release still uses. The node never holds a secp256k1 secret: production code only recovers and verifies public signatures, so there is no secret operand to leak through timing." },
+    { id = "RUSTSEC-2024-0436", reason = "paste is an archived proc-macro used by alloy-primitives at compile time only; no runtime code and no known vulnerability." },
+]
+
+[licenses]
+confidence-threshold = 0.93
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "MIT",
+    "Unicode-3.0",
+    "Zlib",
+]
+exceptions = [
+    # Exact issuance arithmetic links GMP statically; see PROVENANCE.md.
+    { crate = "rug", allow = ["LGPL-3.0-or-later"] },
+    { crate = "gmp-mpfr-sys", allow = ["LGPL-3.0-or-later"] },
+    # UPnP port mapping in libp2p (via igd-next); used unmodified.
+    { crate = "attohttpc", allow = ["MPL-2.0"] },
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+deny = [
+    # TLS goes through rustls only.
+    { crate = "openssl", reason = "use rustls" },
+    { crate = "openssl-sys", reason = "use rustls" },
+    { crate = "native-tls", reason = "use rustls" },
+]
+
+[bans.build]
+# No dependency may ship a prebuilt native binary. Executable-bit scripts
+# (assembly generators, release helpers) are common in -sys crates and allowed.
+include-dependencies = true
+include-workspace = true
+executables = "deny"
+interpreted = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

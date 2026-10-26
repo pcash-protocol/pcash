@@ -3,6 +3,7 @@ name = "pcash-node"
 version = "0.0.0"
 edition = "2021"
 license = "Apache-2.0"
+publish = false
 description = "PCASH node: L1 follow loop, reorg-aware derivation, redb state, and the pcash_* RPC server"
 
 [lints]

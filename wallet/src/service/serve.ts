@@ -19,6 +19,7 @@ import type { WalletDatabase } from "@pcash/sdk/wallet/database";
 import { existsSync, readdirSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { join } from "node:path";
+import type { Transport } from "viem";
 import { Config } from "@pcash/sdk/bcfg";
 import { Logger, type LoggerContext } from "@pcash/sdk/blgr";
 import { PcashNodeClient } from "@pcash/sdk/clients";
@@ -51,7 +52,7 @@ import {
   type Keystore,
   type StoredWallet,
 } from "./credentials.ts";
-import { accountCreationSubmission, handleWalletHttp, privateRelayTerms } from "./http.ts";
+import { accountCreationSubmission, handleWalletHttp, privateRelayTerms, type SubmissionFor, type SubmissionPurpose } from "./http.ts";
 import {
   createPrometheusWalletMetrics,
   type PrometheusWalletMetrics,
@@ -60,6 +61,17 @@ import {
   hasExpectedLoopbackOrigin,
   loopbackRequestAuthority,
 } from "./requestSecurity.ts";
+import {
+  assertTorDestination,
+  DEFAULT_TOR_SOCKS,
+  parseTorSocks,
+  torL1Transport,
+  torTransport,
+  type SocksEndpoint,
+  type TorFetch,
+  type TorSession,
+  type TorTransport,
+} from "./torTransport.ts";
 
 export const DEFAULT_LISTEN = "127.0.0.1:8745";
 export const DEFAULT_NODE_RPC = "http://127.0.0.1:8645";
@@ -79,6 +91,15 @@ Options:
   --listen <host:port>           Loopback HTTP address (default ${DEFAULT_LISTEN})
   --metrics-addr <host:port>     Loopback OpenMetrics address (disabled by default)
   --rpc-url <url>                PCASH node RPC (default ${DEFAULT_NODE_RPC})
+  --network-privacy none|tor     tor: reach the node, selected relayer and L1 RPC only
+                                 through Tor. Private actions publish through the PCASH
+                                 mempool, or to L1 only from a separate service gas key;
+                                 registration may self-publish when asked (default none).
+                                 Each wallet's sync and each request's actions use
+                                 separate Tor circuits
+  --tor-socks <host:port>        Tor SOCKS5 port for --network-privacy tor (default ${DEFAULT_TOR_SOCKS}).
+                                 Circuits are separated by SOCKS credentials, so the port
+                                 must not set NoIsolateSOCKSAuth
   --data-dir <path>              Private wallet state directory
   --dev                          Use memory state and import Anvil account 0
   --prover wasm|native           Proof backend (default wasm)
@@ -108,6 +129,8 @@ Environment:
 export interface ServeOptions {
   listen: string;
   rpc: string;
+  /** Present with `--network-privacy tor`: the node, selected-relay and L1 clients connect through this SOCKS5 port. */
+  tor?: SocksEndpoint;
   dataDir: string;
   dev: boolean;
   prover: ProverKind;
@@ -128,7 +151,7 @@ export interface ServeOptions {
 }
 
 const SERVE_OPTIONS = [
-  "listen", "rpc-url", "data-dir", "dev", "prover", "scan-interval-ms", "metrics-addr", "l1-rpc", "l1-key-file",
+  "listen", "rpc-url", "network-privacy", "tor-socks", "data-dir", "dev", "prover", "scan-interval-ms", "metrics-addr", "l1-rpc", "l1-key-file",
   "selected-relayer-url", "max-fee-per-gas", "min-value-per-byte", "da-mode", "token", "payout-wallet", "log-level", "log-file",
 ];
 
@@ -220,9 +243,21 @@ export function parseServeArgs(argv: readonly string[], env: NodeJS.ProcessEnv =
     throw new Error(`--log-level expects ${Logger.levelsByVal.join(", ")}`);
   }
   const logFile = config.str("log-file");
+  const rpc = config.str("rpc-url", DEFAULT_NODE_RPC);
+  const networkPrivacy = config.str("network-privacy", "none");
+  if (networkPrivacy !== "none" && networkPrivacy !== "tor") throw new Error("--network-privacy expects none or tor");
+  const torSocks = config.str("tor-socks");
+  if (networkPrivacy !== "tor" && torSocks !== null) throw new Error("--tor-socks requires --network-privacy tor");
+  if (networkPrivacy === "tor") {
+    if (dev) throw new Error("--network-privacy tor cannot be combined with --dev");
+    assertTorDestination(rpc, "--rpc-url");
+    if (l1Rpc !== null) assertTorDestination(l1Rpc, "--l1-rpc");
+    if (selectedRelayerUrl !== null) assertTorDestination(selectedRelayerUrl, "--selected-relayer-url");
+  }
   return {
     listen,
-    rpc: config.str("rpc-url", DEFAULT_NODE_RPC),
+    rpc,
+    ...(networkPrivacy === "tor" ? { tor: parseTorSocks(torSocks ?? DEFAULT_TOR_SOCKS) } : {}),
     dataDir: config.str("data-dir", defaultWalletDataDir()),
     dev,
     prover,
@@ -484,6 +519,13 @@ export async function startWalletServiceListeners(params: {
   }
 }
 
+/** One request's transport for the actions it runs: their submissions and selected-relay quotes. */
+interface ActionSession {
+  submissionFor: SubmissionFor;
+  selectedRelayQuote?: SelectedRelayHttpClient;
+  close(): Promise<void>;
+}
+
 interface WalletServer {
   close: () => Promise<void>;
   closed: Promise<void>;
@@ -515,6 +557,14 @@ export interface ServiceSubmissionOptions {
   node: PcashNodeClient;
   /** Default Ethereum RPC for --submit l1. */
   l1Rpc?: string;
+  /**
+   * Tor mode. A request's L1 endpoint must be reachable through Tor. Only a
+   * service gas key that is no loaded wallet's account may publish an action
+   * to L1: a seed's Ethereum account is its PCASH address, so the transaction
+   * would name a wallet on-chain. Registration names its account anyway and
+   * may self-publish.
+   */
+  tor?: { serviceGasAddress?: string; isLoadedWallet: (address: string) => boolean };
   daMode: RelayDaMode;
   submitterFor: (l1Rpc?: string, wallet?: string) => RelaySubmitter;
   recovery?: () => Promise<RelayJournalRecovery>;
@@ -527,8 +577,15 @@ export interface ServiceSubmissionOptions {
  * `--submit l1`. The selected wallet pays gas unless a service gas key was
  * configured. Payouts belong to the selected wallet in either case.
  */
-export function serviceSubmissionFor(options: ServiceSubmissionOptions) {
-  return (body: Record<string, unknown>, wallet: string | undefined): DurableSubmissionAdapter => {
+export function serviceSubmissionFor(options: ServiceSubmissionOptions): SubmissionFor {
+  const torL1Refusal = (): string | undefined => {
+    const gas = options.tor?.serviceGasAddress;
+    if (gas !== undefined && !options.tor!.isLoadedWallet(gas)) return undefined;
+    return "with --network-privacy tor, this action publishes to L1 only from a separate service gas key "
+      + "(--l1-key-file or PCASH_WALLET_L1_KEY) that is no loaded wallet's account: a wallet's Ethereum account "
+      + "is its PCASH address, so the L1 transaction would name it. Use --submit mempool or --submit selected";
+  };
+  const transportFor = (body: Record<string, unknown>, wallet: string | undefined, purpose?: SubmissionPurpose): DurableSubmissionAdapter => {
     const path = enumValue(body.submit, ["mempool", "l1", "selected"] as const, "mempool", "submit");
     const waitMode = enumValue(body.waitMode, ["latest", "finalized", "none"] as const, "latest", "waitMode");
     const waiting = <Prepared>(transport: DurableSubmissionAdapter<Prepared, SubmissionOutput>): DurableSubmissionAdapter =>
@@ -541,6 +598,19 @@ export function serviceSubmissionFor(options: ServiceSubmissionOptions) {
     if (body.l1Rpc !== undefined && typeof body.l1Rpc !== "string") {
       throw new RelayValidationError("l1Rpc must be a string");
     }
+    if (options.tor !== undefined && typeof body.l1Rpc === "string") {
+      try {
+        assertTorDestination(body.l1Rpc, "l1Rpc");
+      } catch (error) {
+        throw new RelayValidationError((error as Error).message, error);
+      }
+    }
+    // An account request is registration or an update, which is known only when it runs.
+    const checkTorL1 = (): void => {
+      const refusal = options.tor === undefined || path !== "l1" || purpose === "registration" ? undefined : torL1Refusal();
+      if (refusal !== undefined) throw new RelayValidationError(refusal);
+    };
+    if (purpose !== "account-update") checkTorL1();
     if (path !== "l1") return waiting({
       ...createMempoolSubmissionAdapter(options.node),
       ...(options.recovery === undefined ? {} : { l1Recovery: options.recovery }),
@@ -557,12 +627,19 @@ export function serviceSubmissionFor(options: ServiceSubmissionOptions) {
     // Registration carries its own signature, even when the same account posts it.
     return waiting(createL1SubmissionAdapter({
       node: options.node,
-      submitterFor: () => options.submitterFor(l1Rpc, wallet),
+      submitterFor: () => {
+        checkTorL1();
+        return options.submitterFor(l1Rpc, wallet);
+      },
       payoutRecipient: () => options.profileFor(wallet),
       daMode: options.daMode,
       ...(options.recovery === undefined ? {} : { recovery: options.recovery }),
     }));
   };
+  // The action's own reads go to the node it publishes through.
+  const submissionFor = (body: Record<string, unknown>, wallet: string | undefined, purpose?: SubmissionPurpose): DurableSubmissionAdapter =>
+    ({ ...transportFor(body, wallet, purpose), node: options.node });
+  return Object.assign(submissionFor, { node: options.node });
 }
 
 /** One nonce queue and journal per Ethereum signer, shared by posting and recovery. */
@@ -571,6 +648,8 @@ export function createServiceRelayJournals(options: {
   dev: boolean;
   node: PcashNodeClient;
   l1Rpc?: string;
+  /** Carries the recovery reads, e.g. through Tor. */
+  transportFor?: (rpcUrl: string) => Transport;
 }) {
   const directory = join(options.dataDir, "relay-journal");
   const signers = new Map<string, {
@@ -587,6 +666,7 @@ export function createServiceRelayJournals(options: {
       const recovery = new RelayJournalRecoveryManager({
         journal, node: options.node, runExclusive,
         ...(options.l1Rpc === undefined ? {} : { l1Rpc: options.l1Rpc }),
+        ...(options.transportFor === undefined ? {} : { transportFor: options.transportFor }),
       });
       signer = { journal, runExclusive, recovery };
       signers.set(key, signer);
@@ -630,11 +710,12 @@ export async function startWalletServer(opts: ServeOptions, logger: LoggerContex
   if (!opts.dev && !opts.password) throw new Error("wallet vault password is required");
   if (!opts.dev) ensurePrivateDirectory(opts.dataDir, "wallet data directory");
   const vault = opts.dev ? undefined : await openKeystore(opts.dataDir, opts.password!);
+  const tor = opts.tor === undefined ? undefined : torTransport(opts.tor);
   let database: WalletDatabase | undefined;
   try {
     database = opts.dev ? await openMemoryWalletDatabase()
       : await openNodeWalletDatabase(inventoryPath(opts.dataDir), { cipher: vault!.storageCipher });
-    const service = await startWalletServerWithDatabase(opts, database, vault, logger);
+    const service = await startWalletServerWithDatabase(opts, database, vault, logger, tor);
     try {
       if (generatedToken) saveWalletConnection(opts.dataDir, { url: service.url, token: opts.token! });
     } catch (error) {
@@ -642,7 +723,7 @@ export async function startWalletServer(opts: ServeOptions, logger: LoggerContex
       throw error;
     }
     const closed = service.closed.then(async () => {
-      try { await database!.close(); } finally { vault?.close(); }
+      try { await database!.close(); } finally { vault?.close(); await tor?.close(); }
     });
     return {
       ...service,
@@ -652,7 +733,7 @@ export async function startWalletServer(opts: ServeOptions, logger: LoggerContex
       },
     };
   } catch (error) {
-    try { await database?.close(); } finally { vault?.close(); }
+    try { await database?.close(); } finally { vault?.close(); await tor?.close(); }
     throw error;
   }
 }
@@ -662,22 +743,39 @@ async function startWalletServerWithDatabase(
   database: WalletDatabase,
   vault: Awaited<ReturnType<typeof openKeystore>> | undefined,
   logger: LoggerContext,
+  /**
+   * Carries every outbound request in Tor mode, on separate circuits: one for
+   * the service's own reads, one per wallet for its sync, and one per request
+   * for the actions it runs. Absent, requests use the global fetch.
+   */
+  tor?: TorTransport,
 ): Promise<WalletServer> {
   const metrics = opts.metricsAddr === undefined
     ? undefined
     : createPrometheusWalletMetrics();
-  const node = new PcashNodeClient(opts.rpc);
+  const fetchFn = tor?.session().fetch;
+  const nodeOn = (fetch: TorFetch) => new PcashNodeClient(opts.rpc, { fetchFn: fetch });
+  const node = fetchFn === undefined ? new PcashNodeClient(opts.rpc, {}) : nodeOn(fetchFn);
   const network = networkConfigFromStatus(await node.status());
   const selectedSession = opts.selectedRelayerUrl === undefined
-    ? undefined : await SelectedRelayHttpClient.connect(opts.selectedRelayerUrl);
+    ? undefined : await SelectedRelayHttpClient.connect(opts.selectedRelayerUrl, fetchFn);
   const provers = createWalletProvers(opts.prover);
   const configuredL1Key = opts.l1KeyFile === undefined ? opts.l1Key : parseL1KeyFile(opts.l1KeyFile);
   const l1PrivateKey = configuredL1Key === undefined
     ? undefined
     : fixedHex(configuredL1Key, 32, "L1 private key");
+  // In Tor mode every L1 read and broadcast uses this transport; the endpoint is a trust boundary.
+  const l1TransportFor = fetchFn === undefined ? undefined : (rpcUrl: string): Transport => {
+    try {
+      return torL1Transport(fetchFn, rpcUrl);
+    } catch (error) {
+      throw new RelayValidationError((error as Error).message, error);
+    }
+  };
   const journals = createServiceRelayJournals({
     dataDir: opts.dataDir, dev: opts.dev, node,
     ...(opts.l1Rpc === undefined ? {} : { l1Rpc: opts.l1Rpc }),
+    ...(l1TransportFor === undefined ? {} : { transportFor: l1TransportFor }),
   });
   const recovery = async () => journals.recovery;
   const gasAddress = l1PrivateKey === undefined ? undefined
@@ -689,9 +787,11 @@ async function startWalletServerWithDatabase(
         "L1 submission requires --l1-rpc. Configure it and fund the Ethereum account paying gas, or explicitly choose --submit mempool",
       );
     }
+    const transport = l1TransportFor?.(rpcUrl);
     const { journal, runExclusive } = journals.forAddress(address);
     return new PrivateKeyRelaySubmitter({
       rpcUrl, privateKey, node, journal, runExclusive,
+      ...(transport === undefined ? {} : { transport }),
       ...(opts.maxFeePerGas === undefined ? {} : { maxFeePerGas: opts.maxFeePerGas }),
     });
   };
@@ -721,17 +821,23 @@ async function startWalletServerWithDatabase(
     identities.push({ address: dev.address, identity: { privateKey, profile: derivePcashProfileFromPrivateKey(privateKey, network) } });
   }
   const buildRuntime = async (identity: RuntimeIdentity): Promise<Wallet> => {
+    // Each wallet syncs on its own circuit, so a server cannot count or link the wallets one service holds.
+    const session = tor?.session();
+    const walletNode = session === undefined ? node : nodeOn(session.fetch);
     try {
       if (opts.dev && identity.profile.recoveryContract !== "seed-derived") {
         devSigningKeys.set(addressHex(identity.profile.address), toHex(identity.privateKey));
       }
       return await Wallet[OPEN_WALLET_INTERNAL]({
-        node, database, profile: identity.profile,
+        node: walletNode, database, profile: identity.profile,
         signer: privateKeyPcashActionSigner(identity.privateKey),
         provers,
-        submission: awaitingAcceptance({ ...createMempoolSubmissionAdapter(node), l1Recovery: recovery }, { node }),
+        submission: awaitingAcceptance({ ...createMempoolSubmissionAdapter(walletNode), l1Recovery: recovery }, { node: walletNode }),
         ...(metrics === undefined ? {} : { metrics }),
       });
+    } catch (error) {
+      await session?.close();
+      throw error;
     } finally {
       identity.privateKey.fill(0);
     }
@@ -755,14 +861,40 @@ async function startWalletServerWithDatabase(
     return makeSubmitter(devSigningKeys.get(address)!, address, l1RpcOverride);
   };
 
-  const submissionFor = serviceSubmissionFor({
-    node,
+  const registrationSubmit = opts.tor === undefined ? "l1" : "mempool";
+  const submissionOptions: Omit<ServiceSubmissionOptions, "node"> = {
     ...(opts.l1Rpc === undefined ? {} : { l1Rpc: opts.l1Rpc }),
+    ...(opts.tor === undefined ? {} : {
+      tor: {
+        ...(gasAddress === undefined ? {} : { serviceGasAddress: gasAddress }),
+        isLoadedWallet: (address: string) => profiles.has(address),
+      },
+    }),
     daMode: opts.daMode,
     submitterFor: walletSubmitterFor,
     profileFor,
     recovery,
-  });
+  };
+  const sharedAction: ActionSession = {
+    submissionFor: serviceSubmissionFor({ ...submissionOptions, node }),
+    ...(selectedSession === undefined ? {} : { selectedRelayQuote: selectedSession }),
+    close: async () => undefined,
+  };
+  /**
+   * The transport for one request's actions. In Tor mode it is a circuit of
+   * its own, opened on first use: the action's quote, admission, receipt and
+   * mempool lookups share it, and nothing else does.
+   */
+  const actionSession = (): ActionSession => {
+    if (tor === undefined) return sharedAction;
+    let session: TorSession | undefined;
+    const fetch: TorFetch = (input, init) => (session ??= tor.session()).fetch(input, init);
+    return {
+      submissionFor: serviceSubmissionFor({ ...submissionOptions, node: nodeOn(fetch) }),
+      ...(selectedSession === undefined ? {} : { selectedRelayQuote: selectedSession.withFetch(fetch) }),
+      close: async () => { await session?.close(); },
+    };
+  };
   const optionalOpenFeeAmount = (body: Record<string, unknown>): bigint | undefined => {
     if (body.openFeeAmount === undefined) return undefined;
     if (typeof body.openFeeAmount !== "string" || !/^(0|[1-9][0-9]*)$/.test(body.openFeeAmount)) {
@@ -795,20 +927,21 @@ async function startWalletServerWithDatabase(
   };
 
   const updateReceiveKey = async (
+    action: ActionSession,
     wallet: string | undefined,
     body: Record<string, unknown>,
     pair: ReturnType<typeof generateMlKemKeyPair>,
   ) => {
     const runtime = runtimeFor(wallet);
     const openFeeAmount = optionalOpenFeeAmount(body);
-    const submission = submissionFor(body, wallet);
+    const submission = action.submissionFor(body, wallet, "account-update");
     const published = publishesReceiveKey(body)
       ? await runtime.updateAccount({
           receiveKey: { operation: "replace", keyPair: pair },
           ...(openFeeAmount === undefined ? {} : { openFeeAmount }),
-          ...privateRelayTerms(body, selectedSession),
+          ...privateRelayTerms(body, action.selectedRelayQuote),
           submission,
-          userAccountCreationSubmission: accountCreationSubmission(submissionFor, body, wallet, recovery),
+          userAccountCreationSubmission: accountCreationSubmission(action.submissionFor, body, wallet, registrationSubmit, recovery),
         })
       : await runtime.importReceiveKey(pair).then(() => undefined);
     return {
@@ -821,6 +954,7 @@ async function startWalletServerWithDatabase(
   const { host, port } = parseListen(opts.listen);
   const requests = createRequestDrain();
   const server = createServer((request, response) => {
+    const action = actionSession();
     void requests.track(handleWalletHttp(request, response, {
       logger,
       node,
@@ -830,8 +964,9 @@ async function startWalletServerWithDatabase(
       ...(opts.token === undefined ? {} : { token: opts.token }),
       runtimeFor,
       listWallets: () => [...runtimes.keys()].map(address => ({ address })),
-      submissionFor,
-      ...(selectedSession === undefined ? {} : { selectedRelayQuote: selectedSession }),
+      submissionFor: action.submissionFor,
+      registrationSubmit,
+      ...(action.selectedRelayQuote === undefined ? {} : { selectedRelayQuote: action.selectedRelayQuote }),
       async sync(wallet, full) {
         const runtime = runtimeFor(wallet);
         return runtime.sync(full ? { rescan: true } : {});
@@ -860,7 +995,9 @@ async function startWalletServerWithDatabase(
         );
         return {
           address: runtime.address,
-          ethereumFundingAddress: gasAddress ?? runtime.address,
+          ...(opts.tor === undefined
+            ? { ethereumFundingAddress: gasAddress ?? runtime.address }
+            : { networkPrivacy: "tor", ...(gasAddress === undefined ? {} : { serviceGasAddress: gasAddress }) }),
           l1ChainId: network.l1ChainId.toString(),
           pcashChainId: network.pcashChainId.toString(),
           syncedThrough: (await runtime.snapshot()).syncedThrough,
@@ -868,14 +1005,14 @@ async function startWalletServerWithDatabase(
       },
       async createReceiveKey(wallet, body) {
         if (profileFor(wallet).recoveryContract === "seed-derived") throw new RelayValidationError("seed wallets use one recoverable receive key; rotation is not supported");
-        return updateReceiveKey(wallet, body, generateMlKemKeyPair());
+        return updateReceiveKey(action, wallet, body, generateMlKemKeyPair());
       },
       async importReceiveKey(wallet, body) {
         if (profileFor(wallet).recoveryContract === "seed-derived") throw new RelayValidationError("seed wallets do not import receive keys");
         if (typeof body.file !== "string") {
           throw new RelayValidationError("receive-key import requires file");
         }
-        return updateReceiveKey(wallet, body, parseReceiveKeyFile(body.file));
+        return updateReceiveKey(action, wallet, body, parseReceiveKeyFile(body.file));
       },
       async listReceiveKeys(wallet) {
         const runtime = runtimeFor(wallet);
@@ -884,7 +1021,7 @@ async function startWalletServerWithDatabase(
           receiveKeys: await runtime.receiveKeys(),
         };
       },
-    })).catch(() => undefined);
+    }).finally(() => action.close())).catch(() => undefined);
   });
 
   let metricsServer: Awaited<ReturnType<typeof startWalletMetricsServer>> | undefined;
@@ -971,6 +1108,9 @@ export async function main(argv: readonly string[]): Promise<number> {
   await logger.open();
   try {
     if (options.dev) logger.warning(DEV_MODE_WARNING);
+    if (options.tor !== undefined && (options.l1Key !== undefined || options.l1KeyFile !== undefined)) {
+      logger.warning("Tor hides this service's IP, not its service gas account: L1 transactions from that account are public and linked to each other and to how it was funded.");
+    }
     if (!options.dev && options.password === undefined) {
       options.password = await promptSecret("Wallet vault password: ");
       if (!existsSync(keystorePath(options.dataDir))) {

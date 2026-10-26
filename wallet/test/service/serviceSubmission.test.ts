@@ -167,7 +167,7 @@ describe("service account creation default", () => {
     posted.length = 0;
     const admitted: string[] = [];
     const submissionFor = factory(admitted, creationContentHash);
-    await run(accountCreationSubmission(submissionFor, {}, undefined), creation, creationContentHash);
+    await run(accountCreationSubmission(submissionFor, {}, undefined, "l1"), creation, creationContentHash);
     expect(posted).toHaveLength(1);
     expect(admitted).toEqual([]);
   });
@@ -176,7 +176,7 @@ describe("service account creation default", () => {
     posted.length = 0;
     const admitted: string[] = [];
     const submissionFor = factory(admitted, creationContentHash);
-    await run(accountCreationSubmission(submissionFor, { submit: "mempool" }, undefined), creation, creationContentHash);
+    await run(accountCreationSubmission(submissionFor, { submit: "mempool" }, undefined, "l1"), creation, creationContentHash);
     expect(admitted).toEqual([toHex(creation)]);
 
     const transferAdmitted: string[] = [];
@@ -185,22 +185,74 @@ describe("service account creation default", () => {
     expect(posted).toEqual([]);
   });
 
+  describe("in Tor mode", () => {
+    const serviceGas = addressHex(privateKeyPcashActionSigner(key(0x61)).address);
+    const other = stored(key(0x52));
+    const loaded = new Set<string>([served.address, other.address]);
+    const torFactory = (gas: { serviceGasAddress?: string }, admitted: string[] = [], receipt = creationContentHash) => serviceSubmissionFor({
+      node: node(admitted, receipt),
+      l1Rpc: "https://l1.example.org",
+      tor: { ...gas, isLoadedWallet: (address) => loaded.has(address) },
+      daMode: "calldata",
+      submitterFor: () => ({}) as never,
+      profileFor: (wallet) => selectServedWallet(new Map([[served.address, served]]), wallet).profile,
+    });
+
+    it("registers through the mempool by default and self-publishes registration only when asked", async () => {
+      posted.length = 0;
+      const admitted: string[] = [];
+      const submissionFor = torFactory({}, admitted);
+      await run(accountCreationSubmission(submissionFor, {}, undefined, "mempool"), creation, creationContentHash);
+      expect(admitted).toEqual([toHex(creation)]);
+      expect(posted).toEqual([]);
+      await run(accountCreationSubmission(submissionFor, { submit: "l1" }, undefined, "mempool"), creation, creationContentHash);
+      expect(posted).toHaveLength(1);
+    });
+
+    it("refuses to publish an action to L1 from any loaded wallet's account", async () => {
+      posted.length = 0;
+      // No gas key, the requesting wallet's own account, or another loaded wallet's account.
+      for (const tor of [{}, { serviceGasAddress: served.address }, { serviceGasAddress: other.address }]) {
+        expect(() => torFactory(tor)({ submit: "l1" }, undefined)).toThrow(/separate service gas key/);
+        // An account request may turn out to be registration, so it is refused when it runs.
+        const update = torFactory(tor)({ submit: "l1" }, undefined, "account-update");
+        await expect(update.preflight({ transactionBytes: entry, status, retry: false })).rejects.toThrow(/separate service gas key/);
+      }
+      expect(posted).toEqual([]);
+    });
+
+    it("publishes an action to L1 from a separate service gas key", async () => {
+      posted.length = 0;
+      const adapter = torFactory({ serviceGasAddress: serviceGas }, [], contentHash)({ submit: "l1" }, undefined);
+      const prepared = await adapter.preflight({ transactionBytes: entry, status, retry: false });
+      await expect(adapter.submit({ transactionBytes: entry, status, retry: false, prepared })).resolves.toMatchObject({ accepted: true });
+      expect(posted).toHaveLength(1);
+    });
+
+    it("accepts only a request L1 endpoint reachable through Tor", () => {
+      const submissionFor = torFactory({ serviceGasAddress: serviceGas });
+      expect(() => submissionFor({ submit: "l1", l1Rpc: "http://l1.example.org" }, undefined)).toThrow(/l1Rpc must be https/);
+      expect(() => submissionFor({ submit: "l1", l1Rpc: "https://127.0.0.1:8545" }, undefined)).toThrow(/remote host/);
+      expect(() => submissionFor({ submit: "l1", l1Rpc: "https://l1.example.org" }, undefined)).not.toThrow();
+    });
+  });
+
   it("does not construct an unused L1 creation adapter for a mempool account update", () => {
     const submissionFor = factory([], creationContentHash);
     const body = { waitMode: "none" };
     expect(submissionFor(body, undefined).mode).toBe("mempool");
-    expect(() => accountCreationSubmission(submissionFor, body, undefined)).not.toThrow();
+    expect(() => accountCreationSubmission(submissionFor, body, undefined, "l1")).not.toThrow();
   });
 
   it("uses L1 registration while allowing an explicit mempool choice", async () => {
     posted.length = 0;
     const admitted: string[] = [];
     const submissionFor = factory(admitted, creationContentHash);
-    await run(accountCreationSubmission(submissionFor, {}, undefined), creation, creationContentHash);
+    await run(accountCreationSubmission(submissionFor, {}, undefined, "l1"), creation, creationContentHash);
     expect(posted).toHaveLength(1);
     expect(posted[0]!.posterOwnerCommitment).toBe(posterCommitmentOf(walletKey, posted[0]!.posterContext));
     expect(admitted).toEqual([]);
-    await run(accountCreationSubmission(submissionFor, { submit: "mempool" }, undefined), creation, creationContentHash);
+    await run(accountCreationSubmission(submissionFor, { submit: "mempool" }, undefined, "l1"), creation, creationContentHash);
     expect(admitted).toEqual([toHex(creation)]);
     expect(posted).toHaveLength(1);
   });
@@ -210,7 +262,7 @@ describe("service account creation default", () => {
       node: node([], creationContentHash), daMode: "calldata", submitterFor: () => { throw new Error("must not use L1"); },
       profileFor: () => served.profile,
     });
-    const adapter = accountCreationSubmission(unconfigured, { submit: "mempool" }, undefined);
+    const adapter = accountCreationSubmission(unconfigured, { submit: "mempool" }, undefined, "l1");
     expect(adapter.mode).toBe("mempool");
     await expect(run(adapter, creation, creationContentHash)).resolves.toMatchObject({ accepted: true });
   });
@@ -219,7 +271,7 @@ describe("service account creation default", () => {
     const recovery = { show: vi.fn(), reconcile: vi.fn(), resolve: vi.fn() };
     const openRecovery = async () => recovery;
     const unavailableTransport = vi.fn(() => { throw new Error("L1 configuration was removed"); });
-    const lazy = accountCreationSubmission(unavailableTransport, {}, undefined, openRecovery);
+    const lazy = accountCreationSubmission(unavailableTransport, {}, undefined, "l1", openRecovery);
     await expect(lazy.l1Recovery!()).resolves.toBe(recovery);
     expect(unavailableTransport).not.toHaveBeenCalled();
 

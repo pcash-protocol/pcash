@@ -75,5 +75,15 @@ describe("injected provider HTTP bridge", () => {
     assert.equal(missing.status, 404);
     assert.deepEqual(provider.requestLog, []);
   });
+
+  it("closes while a browser request is still in flight", { timeout: 5_000 }, async () => {
+    let received;
+    const reached = new Promise((resolve) => { received = resolve; });
+    const bridge = await startInjectedProviderBridge({ request: () => { received(); return new Promise(() => {}); } });
+    const pending = request(bridge.url, { method: "eth_signTypedData_v4" }).catch(() => undefined);
+    await reached;
+    await bridge.close();
+    await pending;
+  });
 });
 

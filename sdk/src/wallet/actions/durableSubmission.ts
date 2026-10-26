@@ -25,6 +25,13 @@ export interface DurableSubmissionResult<Output = unknown> {
 
 export interface DurableSubmissionAdapter<Prepared = unknown, Output = unknown> {
   mode: "mempool" | "l1";
+  /**
+   * The node this adapter publishes through. The action's own reads (fees,
+   * anchors, receipts and mempool lookups) go to it as well, so a host can
+   * keep each action on a connection separate from the wallet's sync.
+   * Absent, they use the wallet's node.
+   */
+  node?: PcashNodeClient;
   /** Retain the signed action and input reservations without broadcasting it. */
   prepareOnly?: boolean;
   /** The Ethereum account that sends this adapter's L1 batches, when it is fixed. */

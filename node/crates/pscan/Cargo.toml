@@ -3,6 +3,7 @@ name = "pcash-pscan"
 version = "0.0.0"
 edition = "2021"
 license = "Apache-2.0"
+publish = false
 description = "PCASH contract source verification: the pscan_* JSON-RPC namespace, its registry, and its permissionless submission channel"
 
 [lints]

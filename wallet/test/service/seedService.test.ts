@@ -10,7 +10,7 @@ import { fieldToHex } from "@pcash/sdk/crypto";
 import { addressHex, fromHex, toHex } from "@pcash/sdk/utils";
 import { privateKeyPcashActionSigner } from "@pcash/sdk/eip712";
 import { ChainSim } from "../chainFixture.ts";
-import { deriveSeedWalletIdentity } from "@pcash/sdk/wallet";
+import { deriveSeedWalletIdentity, generateWalletMnemonic } from "@pcash/sdk/wallet";
 import { WalletHttpClient } from "../../src/cli/client.ts";
 import { createServiceRelayJournals, parseServeArgs, startWalletServer } from "../../src/service/serve.ts";
 import { Wallet, OPEN_WALLET_INTERNAL } from "@pcash/sdk/wallet";
@@ -21,9 +21,24 @@ import { markPendingUserAccountCreationBroadcastRequested } from "@pcash/sdk/wal
 
 const fixture = vi.hoisted(() => ({ node: null as PcashNodeClient | null }));
 const l1Senders = vi.hoisted(() => [] as string[]);
+const recoveryConfigs = vi.hoisted(() => [] as { transportFor?: (rpcUrl: string) => unknown }[]);
+/** Each constructed node client's fetch, and every method call by the index of the client that made it. */
+const nodeClients = vi.hoisted(() => ({ fetches: [] as unknown[], calls: [] as { client: number; method: string }[] }));
 vi.mock("@pcash/sdk/clients", async (original) => ({
   ...await original<typeof import("@pcash/sdk/clients")>(),
-  PcashNodeClient: vi.fn(function () { return fixture.node; }),
+  PcashNodeClient: vi.fn(function (_url: string, options?: { fetchFn?: unknown }) {
+    const client = nodeClients.fetches.push(options?.fetchFn) - 1;
+    return new Proxy(fixture.node!, {
+      get(target, property) {
+        const value = Reflect.get(target, property) as unknown;
+        if (typeof value !== "function") return value;
+        return (...args: unknown[]) => {
+          nodeClients.calls.push({ client, method: String(property) });
+          return (value as (...args: unknown[]) => unknown).apply(target, args);
+        };
+      },
+    });
+  }),
 }));
 
 // Registration is proof-free; this service test does not load proving artifacts.
@@ -31,19 +46,39 @@ vi.mock("@pcash/sdk/wallet/node", async (original) => ({
   ...await original<typeof import("@pcash/sdk/wallet/node")>(),
   createWalletProvers: () => ({}),
 }));
-vi.mock("@pcash/sdk/relay", async (original) => ({
-  ...await original<typeof import("@pcash/sdk/relay")>(),
-  prepareTransactionForL1: async (_entry: unknown, _status: unknown, submitter: { address: string }) => {
-    l1Senders.push(submitter.address.toLowerCase());
-    throw new Error("test stopped after selecting the L1 signer");
-  },
-}));
+vi.mock("@pcash/sdk/relay", async (original) => {
+  const actual = await original<typeof import("@pcash/sdk/relay")>();
+  return {
+    ...actual,
+    RelayJournalRecoveryManager: class extends actual.RelayJournalRecoveryManager {
+      constructor(config: ConstructorParameters<typeof actual.RelayJournalRecoveryManager>[0]) {
+        recoveryConfigs.push(config);
+        super(config);
+      }
+    },
+    prepareTransactionForL1: async (_entry: unknown, _status: unknown, submitter: { address: string }) => {
+      l1Senders.push(submitter.address.toLowerCase());
+      throw new Error("test stopped after selecting the L1 signer");
+    },
+  };
+});
+
+vi.mock("../../src/service/torTransport.ts", async (original) => {
+  const actual = await original<typeof import("../../src/service/torTransport.ts")>();
+  return { ...actual, torL1Transport: vi.fn(actual.torL1Transport) };
+});
 
 const MNEMONIC = `${"abandon ".repeat(23)}art`;
 const TOKEN = "seed-service-test-token";
 const PASSWORD = "local vault test password";
 const services: Awaited<ReturnType<typeof startWalletServer>>[] = [];
-afterEach(async () => { for (const service of services.splice(0)) await service.close(); l1Senders.length = 0; });
+afterEach(async () => {
+  for (const service of services.splice(0)) await service.close();
+  l1Senders.length = 0;
+  recoveryConfigs.length = 0;
+  nodeClients.fetches.length = 0;
+  nodeClients.calls.length = 0;
+});
 
 function setup(directory: string, password = PASSWORD, l1Key?: string) {
   return parseServeArgs(["--listen", "127.0.0.1:0", "--data-dir", directory, "--scan-interval-ms", "60000"], {
@@ -141,6 +176,124 @@ it.each([false, true])("defaults registration to the selected wallet key with op
   });
   await expect(client.request("POST", "/account", {})).rejects.toThrow("test stopped after selecting the L1 signer");
   expect(l1Senders).toEqual([expectedSender]);
+  expect(recoveryConfigs).toHaveLength(1);
+  expect(recoveryConfigs[0]).not.toHaveProperty("transportFor");
+});
+
+it("in Tor mode builds the node client on the Tor fetch and registers through the mempool by default", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "seed-service-tor-"));
+  const sim = new ChainSim(123456n);
+  fixture.node = sim.client();
+  fixture.node.status = async () => ({ ...sim.status(), acceptedTransactionTypes: [0, 1, 2, 3] });
+  fixture.node.getBlock = async number => ({ hash: fieldToHex(sim.block(BigInt(number)).hash) }) as never;
+  const published: string[] = [];
+  fixture.node.submitRawTransaction = async (hex) => {
+    published.push(hex);
+    return { contentHash: transactionIdentity(fromHex(hex)).contentHash, status: "ready" } as never;
+  };
+  const { PcashNodeClient } = await import("@pcash/sdk/clients");
+  vi.mocked(PcashNodeClient).mockClear();
+  const service = await startWalletServer(parseServeArgs([
+    "--listen", "127.0.0.1:0", "--data-dir", directory, "--scan-interval-ms", "60000",
+    "--network-privacy", "tor", "--rpc-url", "https://rpc.example.org",
+  ], { PCASH_WALLET_PASSWORD: PASSWORD, PCASH_WALLET_TOKEN: TOKEN }), { error: () => undefined } as never);
+  services.push(service);
+  expect(vi.mocked(PcashNodeClient).mock.calls).toEqual([["https://rpc.example.org", { fetchFn: expect.any(Function) }]]);
+  expect(nodeClients.fetches).toEqual([expect.any(Function)]);
+  const client = new WalletHttpClient(service.url, TOKEN);
+  const imported = await client.importMnemonic(MNEMONIC);
+  expect(imported).toMatchObject({ networkPrivacy: "tor", pcashChainId: "123456" });
+  expect(imported).not.toHaveProperty("ethereumFundingAddress");
+  expect(imported).not.toHaveProperty("serviceGasAddress");
+  await expect(client.request("POST", "/relay", { l1Rpc: "https://l1.example" })).rejects.toMatchObject({ status: 400 });
+  expect(published).toEqual([]);
+  await client.request("POST", "/account", { waitMode: "none" });
+  expect(published).toHaveLength(1);
+  expect(decodeTransaction(fromHex(published[0]!))).toMatchObject({ kind: 1, authorization: { kind: "signed" } });
+  expect(l1Senders).toEqual([]);
+});
+
+it("in Tor mode syncs each wallet and runs each request's actions on node clients of their own", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "seed-service-tor-isolation-"));
+  const sim = new ChainSim(123456n);
+  fixture.node = sim.client();
+  fixture.node.status = async () => ({ ...sim.status(), acceptedTransactionTypes: [0, 1, 2, 3] });
+  fixture.node.getBlock = async number => ({ hash: fieldToHex(sim.block(BigInt(number)).hash) }) as never;
+  fixture.node.submitRawTransaction = async (hex) =>
+    ({ contentHash: transactionIdentity(fromHex(hex)).contentHash, status: "ready" }) as never;
+  const service = await startWalletServer(parseServeArgs([
+    "--listen", "127.0.0.1:0", "--data-dir", directory, "--scan-interval-ms", "60000",
+    "--network-privacy", "tor", "--rpc-url", "https://rpc.example.org",
+  ], { PCASH_WALLET_PASSWORD: PASSWORD, PCASH_WALLET_TOKEN: TOKEN }), { error: () => undefined } as never);
+  services.push(service);
+  const client = new WalletHttpClient(service.url, TOKEN);
+  const syncMethods = new Set(["getOutputs", "getAccountChanges", "getOutputFrontier"]);
+  const syncClients = () => new Set(nodeClients.calls.filter(({ method }) => syncMethods.has(method)).map(({ client }) => client));
+  const callsBy = (client: number) => nodeClients.calls.filter((call) => call.client === client).map(({ method }) => method);
+
+  const first = await client.importMnemonic(MNEMONIC) as { address: string };
+  const [firstSync] = [...syncClients()];
+  expect(syncClients().size).toBe(1);
+  const second = await client.importMnemonic(generateWalletMnemonic()) as { address: string };
+  const secondSync = [...syncClients()].find((index) => index !== firstSync);
+  expect(syncClients().size).toBe(2);
+
+  const before = nodeClients.calls.length;
+  await client.request("POST", "/account", { wallet: first.address, waitMode: "none" });
+  // Registration's anchor check and admission share one client, which nothing else used.
+  const admission = nodeClients.calls.find(({ method }) => method === "submitRawTransaction")!.client;
+  expect(callsBy(admission).sort()).toEqual(["getBlock", "status", "status", "submitRawTransaction"]);
+  expect(nodeClients.calls.slice(0, before).some(({ client }) => client === admission)).toBe(false);
+  // The wallet's own client only syncs; the other wallet's is not touched.
+  const walletReads = new Set(["status", "getBlockHeader", ...syncMethods]);
+  const registration = nodeClients.calls.slice(before);
+  expect(registration.filter(({ client }) => client !== admission).every(({ client, method }) => client === firstSync && walletReads.has(method))).toBe(true);
+  expect(registration.some(({ client }) => client === secondSync)).toBe(false);
+
+  // A request that waits for acceptance looks its receipt up on its own action client too.
+  fixture.node.getReceipt = async () => [{
+    transactionId: "0x01", kind: "user_account_creation", outcome: "succeeded", inclusion: { l1BlockNumber: 1n },
+  }] as never;
+  const waited = nodeClients.calls.length;
+  await client.request("POST", "/account", { wallet: second.address });
+  const receiptClients = new Set(nodeClients.calls.slice(waited).filter(({ method }) => method === "getReceipt").map(({ client }) => client));
+  expect(receiptClients.size).toBe(1);
+  const [secondAction] = [...receiptClients];
+  expect(secondAction).not.toBe(admission);
+  expect(nodeClients.calls.filter(({ method }) => method === "submitRawTransaction").map(({ client }) => client)).toEqual([admission, secondAction]);
+  expect(nodeClients.calls.slice(0, waited).some(({ client }) => client === secondAction)).toBe(false);
+  expect([firstSync, secondSync]).not.toContain(secondAction);
+  // Every client has a fetch of its own: the service's, one per wallet and one per request.
+  expect(new Set(nodeClients.fetches).size).toBe(nodeClients.fetches.length);
+  expect(nodeClients.fetches.every((fetch) => typeof fetch === "function")).toBe(true);
+});
+
+it("in Tor mode self-publishes registration through a Tor-reachable L1 endpoint only when asked", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "seed-service-tor-l1-"));
+  const sim = new ChainSim(123456n);
+  fixture.node = sim.client();
+  fixture.node.status = async () => ({ ...sim.status(), acceptedTransactionTypes: [0, 1, 2, 3] });
+  fixture.node.getBlock = async number => ({ hash: fieldToHex(sim.block(BigInt(number)).hash) }) as never;
+  const address = addressHex(deriveSeedWalletIdentity(MNEMONIC, networkConfigFromStatus(await fixture.node.status())).profile.address);
+  const service = await startWalletServer(parseServeArgs([
+    "--listen", "127.0.0.1:0", "--data-dir", directory, "--scan-interval-ms", "60000",
+    "--network-privacy", "tor", "--rpc-url", "https://rpc.example.org", "--l1-rpc", "https://l1.example.org",
+  ], { PCASH_WALLET_PASSWORD: PASSWORD, PCASH_WALLET_TOKEN: TOKEN }), { error: () => undefined } as never);
+  services.push(service);
+  const client = new WalletHttpClient(service.url, TOKEN);
+  await expect(client.importMnemonic(MNEMONIC)).resolves.toMatchObject({ address, networkPrivacy: "tor" });
+  await expect(client.request("POST", "/account", { submit: "l1", l1Rpc: "http://l1.example.org" })).rejects.toThrow(/l1Rpc must be https/);
+  expect(l1Senders).toEqual([]);
+  const { torL1Transport } = await import("../../src/service/torTransport.ts");
+  vi.mocked(torL1Transport).mockClear();
+  await expect(client.request("POST", "/account", { submit: "l1" })).rejects.toThrow("test stopped after selecting the L1 signer");
+  expect(l1Senders).toEqual([address]);
+  expect(vi.mocked(torL1Transport).mock.calls).toEqual([[expect.any(Function), "https://l1.example.org"]]);
+  // Journal recovery reads L1 through Tor too.
+  expect(recoveryConfigs).toHaveLength(1);
+  recoveryConfigs[0]!.transportFor!("https://l1.example.org");
+  expect(vi.mocked(torL1Transport).mock.calls).toHaveLength(2);
+  expect(() => recoveryConfigs[0]!.transportFor!("http://l1.example.org")).toThrow(/L1 RPC URL must be https/);
 });
 
 it("recovers an old sender's activation hash after restart without L1 configuration and releases it after resolution", async () => {

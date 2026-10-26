@@ -92,6 +92,7 @@ export async function startInjectedProviderBridge(provider, { host = "127.0.0.1"
       closed = true;
       await new Promise((resolve, reject) => {
         server.close((error) => error === undefined ? resolve() : reject(error));
+        server.closeAllConnections();
       });
     },
   };

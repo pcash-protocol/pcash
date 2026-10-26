@@ -171,6 +171,20 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  cargo-deny:
+    name: Rust dependency policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+        with:
+          tool: cargo-deny@0.20.2
+      - name: Check advisories, licenses, bans and sources
+        run: cargo deny --locked check
+
   p2p-nat:
     name: P2P discovery and real NAT traversal
     runs-on: ubuntu-24.04

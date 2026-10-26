@@ -245,6 +245,7 @@ describe("wallet service lifecycle", () => {
       runtimeFor: () => { throw new Error("unused"); },
       listWallets: () => [],
       submissionFor: () => { throw new Error("unused"); },
+      registrationSubmit: "l1",
       sync: async () => { throw new Error("unused"); },
       createReceiveKey: async () => { throw new Error("unused"); },
       importReceiveKey: async () => { throw new Error("unused"); },

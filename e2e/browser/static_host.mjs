@@ -92,6 +92,9 @@ export async function startStaticHost({ root: inputRoot, host = "127.0.0.1", por
   if (address === null || typeof address === "string") throw new Error("static host did not bind a TCP port");
   return {
     url: `http://${host}:${address.port}`,
-    close: () => new Promise((resolveClose, reject) => server.close((error) => error ? reject(error) : resolveClose())),
+    close: () => new Promise((resolveClose, reject) => {
+      server.close((error) => error ? reject(error) : resolveClose());
+      server.closeAllConnections();
+    }),
   };
 }

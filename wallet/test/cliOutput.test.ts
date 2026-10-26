@@ -51,6 +51,20 @@ describe("human-readable wallet results", () => {
     expect(output).toContain("pcash-wallet-cli account ensure --wallet 0xwallet");
   });
 
+  it("gives Tor-mode onboarding with no Ethereum funding step", () => {
+    const output = renderResult(cli(["wallet", "create"]), {
+      address: "0xwallet", networkPrivacy: "tor", l1ChainId: "1", pcashChainId: "2",
+    });
+    expect(output).toContain("through Tor");
+    expect(output).not.toContain("Ethereum funding address");
+    expect(output).not.toContain("--l1-rpc");
+    expect(output).toContain("pcash-wallet-cli account ensure --wallet 0xwallet");
+    expect(output).not.toContain("Service gas account");
+    expect(renderResult(cli(["wallet", "create"]), {
+      address: "0xwallet", networkPrivacy: "tor", serviceGasAddress: "0xgas", l1ChainId: "1", pcashChainId: "2",
+    })).toMatch(/Service gas account \(publishes to L1 only when asked\): 0xgas\nIts L1 transactions are public and linked/);
+  });
+
   it("lists candidates when wallet selection is ambiguous", () => {
     expect(() => selectServedWallet(new Map(), undefined)).toThrow("pcash-wallet-cli wallet create");
     const wallets = new Map([["0xfirst", {}], ["0xsecond", {}]]);
