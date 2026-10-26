@@ -20,7 +20,7 @@ const OWNER_HEX = `0x${"0".repeat(38)}12`;
 const hash = (byte: string) => `0x${byte.repeat(32)}`;
 
 function sources(overrides: Partial<ActivitySources>): ActivitySources {
-  return { owner: OWNER, payments: [], canonical: [], historyCurrent: true, accountEvents: [], offers: [], sold: new Map(), purchased: new Map(), tokens: [], receipts: new Map(), pendingContentHashes: new Set(), ...overrides };
+  return { owner: OWNER, payments: [], canonical: [], historyCurrent: true, accountEvents: [], offers: [], sold: new Map(), purchased: new Map(), tokens: [], receipts: new Map(), pendingContentHashes: new Set(), directSends: new Map(), ...overrides };
 }
 const text = (node: unknown) => renderToStaticMarkup(<MemoryRouter>{node as never}</MemoryRouter>).replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
 /** The text of each line of a row's note. */
@@ -156,12 +156,19 @@ describe("activity rows", () => {
     ]);
   });
 
+  it("finds attached account setup from canonical account history after local history is lost", () => {
+    const event = { kind: "privateValue", accountCreation: 1, outcome: "succeeded", transactionId: hash("a4"), timestamp: 50n } as TransactionSummaryResult;
+    expect(activityRows(sources({ accountEvents: [event] }))).toMatchObject([
+      { id: `account:${hash("a4")}`, kind: "setup", title: "Set up account", state: { state: "complete" } },
+    ]);
+  });
+
   it("gives a listing one row per transaction and reports a sale at the claim that took it", () => {
     const listed: StoredOffer = {
       key: "listed", pub: publication("1"), source: "created", savedAt: 1_000,
-      publish: { phase: "funded", l2ContractContentHash: hash("c1"), fundingContentHash: hash("f1"), catalogPublishedAt: 2_000, catalogPublicationId: "1", updatedAt: 2_000 },
+      publish: { phase: "funded", fundingContentHash: hash("f1"), catalogPublishedAt: 2_000, catalogPublicationId: "1", updatedAt: 2_000 },
     };
-    const pending: StoredOffer = { key: "pending", pub: publication("2"), source: "created", savedAt: 3_000, publish: { phase: "l2-contract-submitted", l2ContractContentHash: hash("c2"), updatedAt: 3_000 } };
+    const pending: StoredOffer = { key: "pending", pub: publication("2"), source: "created", savedAt: 3_000, publish: { phase: "funding-submitted", fundingContentHash: hash("f2"), updatedAt: 3_000 } };
     const draft: StoredOffer = { key: "draft", pub: publication("3"), source: "created", savedAt: 4_000, publish: { phase: "draft", updatedAt: 4_000 } };
     const reclaiming: StoredOffer = { key: "reclaiming", pub: publication("4"), source: "created", savedAt: 500, publish: { phase: "funded", updatedAt: 600 },
       reclaim: { phase: "prepared", publication: publication("4"), contentHash: hash("e4"), updatedAt: 5_000 } };
@@ -175,10 +182,9 @@ describe("activity rows", () => {
       ["reclaiming:reclaimed", "reclaimed", "Reclaimed listing", "pending"],
       ["pending:listed", "listed", "Listed 100 PCASH for 0.01 ETH", "pending"],
       ["listed:sold", "sold", "Sold 100 PCASH for 0.01 ETH", "complete"],
-      ["listed:escrow", "escrow", "Funded escrow", "complete"],
       ["listed:listed", "listed", "Listed 100 PCASH for 0.01 ETH", "complete"],
     ]);
-    expect(rows.find((row) => row.id === "listed:escrow")!.at).toBe(7_000);
+    expect(rows.find((row) => row.id === "listed:listed")!.at).toBe(7_000);
     expect(rows.find((row) => row.id === "listed:sold")).toMatchObject({ at: 9_000, href: `/tx/${hash("5a")}` });
     expect(rows[0]!.href).toBe(`/marketplace?offer=0x${"cc".repeat(20)}`);
     // Until the node names the claim, a sale links to its listing and has no time.
@@ -187,46 +193,25 @@ describe("activity rows", () => {
     expect(unnamed.href).toBe(`/marketplace?offer=0x${"cc".repeat(20)}`);
   });
 
-  it("shows a listing's escrow funding once, as its escrow row, not also as a payment to the contract", () => {
+  it("shows a listing's escrow funding once, as one listing row", () => {
     const offer: StoredOffer = { key: "funding", pub: publication("5"), source: "created", savedAt: 1_000,
-      publish: { phase: "funding-submitted", l2ContractContentHash: hash("c5"), l2ContractAcceptedBlock: "4", fundingContentHash: hash("f5"), updatedAt: 2_000 } };
+      publish: { phase: "funding-submitted", fundingContentHash: hash("f5"), updatedAt: 2_000 } };
     const funding = payment({ contentHash: hash("f5"), status: "pending", recipientAddress: `0x${"cc".repeat(20)}` });
     const rows = activityRows(sources({ offers: [offer], payments: [funding, payment({ contentHash: hash("a5") })] }));
-    expect(rows.map((row) => row.id).sort()).toEqual([hash("a5"), "funding:escrow", "funding:listed"].sort());
+    expect(rows.map((row) => row.id).sort()).toEqual([hash("a5"), "funding:listed"].sort());
   });
 
-  it("keeps a created listing whose funding never started pending until it is funded", () => {
-    const unfunded: StoredOffer = { key: "unfunded", pub: publication("6"), source: "created", savedAt: 1_000,
-      publish: { phase: "l2-contract-submitted", l2ContractContentHash: hash("c6"), l2ContractAcceptedBlock: "4", updatedAt: 2_000 } };
-    const [row] = activityRows(sources({ offers: [unfunded] }));
-    expect(row).toMatchObject({ id: "unfunded:listed", state: { state: "pending", detail: "Not funded yet" } });
-    const funded = activityRows(sources({ offers: [{ ...unfunded, publish: { ...unfunded.publish!, phase: "funded", fundingContentHash: hash("f6") } }] }));
-    expect(funded.find((listed) => listed.id === "unfunded:listed")!.state).toEqual({ state: "complete" });
-    // A staged listing continued away from its form reports a rejection through its row.
-    const staged: StoredOffer = { ...unfunded, publish: { phase: "l2-contract-submitted", l2ContractContentHash: hash("c6"), updatedAt: 2_000 } };
-    const [rejected] = activityRows(sources({ offers: [staged], receipts: new Map([[hash("c6"), receipt(hash("c6"), hash("e6"), "expired")]]) }));
-    expect(rejected!.state).toEqual({ state: "failed", reason: "This transaction expired before it was included." });
-  });
-
-  it("keeps a listing's funding pending until the funded listing is published for buyers", () => {
-    const finalizing: StoredOffer = { key: "finalizing", pub: publication("7"), source: "created", savedAt: 1_000,
-      publish: { phase: "finalizing", l2ContractContentHash: hash("c7"), l2ContractAcceptedBlock: "4", fundingContentHash: hash("f7"), fundingAcceptedBlock: "5", updatedAt: 2_000 } };
-    const escrow = (offer: StoredOffer, extra: Partial<ActivitySources> = {}) => activityRows(sources({ offers: [offer], ...extra })).find((row) => row.id === `${offer.key}:escrow`)!.state;
-    expect(escrow(finalizing)).toEqual({ state: "pending", detail: "Not published yet" });
-    // The funding's receipt tells the same before a refresh records it.
-    const submitted: StoredOffer = { ...finalizing, publish: { phase: "funding-submitted", l2ContractContentHash: hash("c7"), l2ContractAcceptedBlock: "4", fundingContentHash: hash("f7"), updatedAt: 2_000 } };
-    expect(escrow(submitted, { receipts: new Map([[hash("f7"), receipt(hash("f7"), hash("e7"))]]) })).toEqual({ state: "pending", detail: "Not published yet" });
-    expect(escrow({ ...finalizing, publish: { ...finalizing.publish!, catalogPublishedAt: 3_000, catalogPublicationId: "7" } })).toEqual({ state: "complete" });
-    // A failed publication is the listing row's to report.
-    const failed = activityRows(sources({ offers: [{ ...finalizing, publish: { ...finalizing.publish!, catalogError: "Catalog unavailable" } }] }));
-    expect(failed.map((row) => [row.id, row.state.state])).toEqual([["finalizing:escrow", "complete"], ["finalizing:listed", "failed"]]);
-  });
-
-  it("reads a created listing as not funded from its creation's receipt, before a refresh records it", () => {
-    const created: StoredOffer = { key: "created", pub: publication("8"), source: "created", savedAt: 1_000,
-      publish: { phase: "l2-contract-submitted", l2ContractContentHash: hash("c8"), updatedAt: 2_000 } };
-    const [row] = activityRows(sources({ offers: [created], receipts: new Map([[hash("c8"), receipt(hash("c8"), hash("e8"))]]) }));
-    expect(row!.state).toEqual({ state: "pending", detail: "Not funded yet" });
+  it("keeps the single publication pending until inclusion and catalog publication", () => {
+    const offer: StoredOffer = { key: "pending", pub: publication("6"), source: "created", savedAt: 1_000,
+      publish: { phase: "funding-submitted", fundingContentHash: hash("f6"), updatedAt: 2_000 } };
+    const row = (value: StoredOffer, extra: Partial<ActivitySources> = {}) => activityRows(sources({ offers: [value], ...extra }))[0]!;
+    expect(row(offer).state).toEqual({ state: "pending", contentHash: hash("f6"), submissionUnknown: true });
+    expect(row(offer, { receipts: new Map([[hash("f6"), receipt(hash("f6"), hash("e6"))]]) }).state).toEqual({ state: "pending", detail: "Not published yet" });
+    const included: StoredOffer = { ...offer, publish: { ...offer.publish!, phase: "finalizing", fundingAcceptedBlock: "5" } };
+    expect(row(included).state).toEqual({ state: "pending", detail: "Not published yet" });
+    expect(row({ ...included, publish: { ...included.publish!, catalogPublishedAt: 3_000, catalogPublicationId: "6" } }).state).toEqual({ state: "complete" });
+    expect(row({ ...included, publish: { ...included.publish!, catalogError: "Catalog unavailable" } }).state).toEqual({ state: "failed" });
+    expect(row(offer, { receipts: new Map([[hash("f6"), receipt(hash("f6"), hash("e6"), "expired")]]) }).state).toEqual({ state: "failed", reason: "This transaction expired before it was included." });
   });
 
   it("shows a purchase once its Ethereum payment has a hash", () => {
@@ -284,6 +269,20 @@ describe("activity rows", () => {
     expect(shown("ambiguous")).toMatchObject({ state: "pending", detail: "Paid, claiming" });
     expect(shown("absent")).toEqual({ state: "pending", detail: "Claim not posted" });
     expect(shown("confirmed")).toEqual({ state: "complete" });
+  });
+
+  it("marks a direct send's row with its recipient's setup, before and after a restore", () => {
+    const send = { opening: { chainId: 1n, contentHash: hash("f1"), slot: 0, owner: 0x34n, amount: 5n * PCASH, noteSecret: 1n }, included: true, recipientSetUp: false };
+    const directSends = new Map([[hash("f1"), send]]);
+    const [local] = activityRows(sources({ payments: [payment({ contentHash: hash("f1") })], directSends }));
+    expect(local!.directSend).toEqual({ contentHash: hash("f1"), recipientSetUp: false });
+    // A restored wallet has no local payment, only the canonical spend.
+    const [canonical] = activityRows(sources({ directSends: new Map([[hash("f1"), { ...send, recipientSetUp: true }]]), canonical: [
+      { transactionId: hash("0f"), contentHash: hash("f1"), direction: "spent", amount: 5n * PCASH, blockNumber: 3n, blockHash: "0x03", timestamp: 300n, commitments: [], payout: null },
+    ] }));
+    expect(canonical!.directSend).toEqual({ contentHash: hash("f1"), recipientSetUp: true });
+    const [ordinary] = activityRows(sources({ payments: [payment({ contentHash: hash("f2") })], directSends }));
+    expect(ordinary!.directSend).toBeUndefined();
   });
 
   it("follows a recorded token action to its receipt, or to expiry once the wallet lets it go", () => {

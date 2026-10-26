@@ -4,7 +4,7 @@ import { rootFromIndex } from "../crypto/merkle.ts";
 import { TRANSACTION_RESULTS_ROOT_DOMAIN } from "../constants/domainTags.ts";
 import { parseCurrentBoundaryEnvelope, type CurrentBoundaryEnvelopeRpc } from "../protocol/boundary.ts";
 import { transactionOutcomeFromCode, payoutResultLeaf, transactionResultLeaf, transactionStatementHash, verifyBlockHeaderPath, verifyHistoryPath } from "../protocol/block.ts";
-import { CONTRACT_CREATION_PUBLIC_INPUTS, decodeTransactionForChain, privateValuePublicInputs, USER_ACCOUNT_UPDATE_PUBLIC_INPUTS, userAccountUpdatePublicInputs, contractCreationPublicInputs } from "../protocol/codec.ts";
+import { decodeTransactionForChain, decodeTransaction, type RawUserAccountCreation, privateValuePublicInputs, USER_ACCOUNT_UPDATE_PUBLIC_INPUTS, userAccountUpdatePublicInputs } from "../protocol/codec.ts";
 import { PRIVATE_VALUE_PROFILES } from "../constants/privateValueProfiles.ts";
 import { decodeContractBody, verifyContract } from "../protocol/contract.ts";
 import { noteBodyCommitment, outputCommitment } from "../protocol/notes.ts";
@@ -39,7 +39,7 @@ export interface ResultProofRpc {
   leafIndex: string;
   siblings: string[];
   recentBoundary: CurrentBoundaryEnvelopeRpc;
-  leaf: { kind: "transaction"; txType: number; fundingMode: number; l1TransactionIndex: string; batchItemIndex: string; outcome: number; posterOwnerCommitment: string; outputStartIndex: string; statementHash: string; statement: TransactionStatementRpc | null }
+  leaf: { kind: "transaction"; txType: number; accountCreation: number; l1TransactionIndex: string; batchItemIndex: string; outcome: number; posterOwnerCommitment: string; outputStartIndex: string; statementHash: string; statement: TransactionStatementRpc | null }
     | { kind: "payout"; outputIndex: string; ownerCommitment: string; openFeeAmount: string; issuanceAmount: string; outputSiblings: string[] };
 }
 function requireProof(condition: boolean, message: string): asserts condition {
@@ -54,24 +54,13 @@ function u64(value: string): bigint {
 
 const PRIVATE_VALUE_STATEMENT_LENGTHS = Object.values(PRIVATE_VALUE_PROFILES).map((profile) => profile.publicInputs);
 
-function statementLengths(txType: number, fundingMode: number): readonly number[] {
-  requireProof(Number.isInteger(txType) && txType >= 0 && txType < 1 << 8, "invalid transaction type");
-  requireProof(Number.isInteger(fundingMode) && fundingMode >= 0 && fundingMode < 1 << 8, "invalid funding mode");
+function statementLengths(txType: number): readonly number[] {
   switch (txType) {
-    case 0:
-      requireProof(fundingMode === 0, "unsupported transaction funding mode");
-      return PRIVATE_VALUE_STATEMENT_LENGTHS;
+    case 0: return PRIVATE_VALUE_STATEMENT_LENGTHS;
     case 1:
-      requireProof(fundingMode === 0, "unsupported transaction funding mode");
-      return [4];
-    case 2:
-      requireProof(fundingMode === 0 || fundingMode === 1, "unsupported transaction funding mode");
-      return [fundingMode === 0 ? 4 : CONTRACT_CREATION_PUBLIC_INPUTS];
-    case 3:
-      requireProof(fundingMode === 0, "unsupported transaction funding mode");
-      return [USER_ACCOUNT_UPDATE_PUBLIC_INPUTS];
-    default:
-      throw new Error("result proof: unsupported transaction type");
+    case 2: return [4];
+    case 3: return [USER_ACCOUNT_UPDATE_PUBLIC_INPUTS];
+    default: throw new Error("result proof: unsupported transaction type");
   }
 }
 
@@ -84,10 +73,41 @@ export interface AuthenticatedAccountState {
 }
 
 export type AuthenticatedSuccessfulTransactionStatement =
-  | { kind: "privateValue"; shape: 0 | 1; publicInputs: readonly bigint[] }
+  | { kind: "privateValue"; shape: 0 | 1; publicInputs: readonly bigint[]; accountCreation: AuthenticatedAccountCreationAttachment | null }
   | { kind: "userAccountCreation"; account: AuthenticatedAccountState; publicInputs: readonly bigint[] }
-  | { kind: "contractAccountCreation"; fundingMode: "unfunded" | "sponsored"; account: AuthenticatedAccountState; publicInputs: readonly bigint[] }
+  | { kind: "contractAccountCreation"; account: AuthenticatedAccountState; publicInputs: readonly bigint[] }
   | { kind: "userAccountUpdate"; receiveKeyOperation: "keep" | "clear" | "replace"; currentAccount: AuthenticatedAccountState; newAccount: AuthenticatedAccountState; publicInputs: readonly bigint[] };
+
+export interface AuthenticatedAccountCreationAttachment {
+  kind: "user" | "contract";
+  outcome: "inserted" | "reused";
+  address: bigint;
+  nullifierKeyCommitment: bigint;
+  /** Reusing a user attachment leaves the account's live mutable fields unchanged. */
+  insertedAccount: AuthenticatedAccountState | null;
+}
+
+function userCreationAccount(tx: RawUserAccountCreation, network: NetworkConfigLike, directSender?: bigint): AuthenticatedAccountState {
+  const nk = toField(bytesToBigInt(tx.nullifierKeyCommitment), "nullifier key commitment");
+  const rules = toField(bytesToBigInt(tx.ruleSetCommitment), "rule set commitment");
+  const receive = tx.mlKemPublicKey === null ? 0n : receiveKeyHash(tx.mlKemPublicKey);
+  let address = directSender;
+  if (tx.authorization.kind === "signed") address = recoverAddress(pcashSigningHash(accountCreationTypedData(network, {
+    pcashChainId: tx.pcashChainId, nullifierKeyCommitment: nk, ruleSetCommitment: rules,
+    receiveKeyHash: receive, recentPcashBlockHash: bytesToBigInt(tx.recentPcashBlockHash), validUntilTimestamp: tx.validUntilTimestamp,
+  })), { r: bytesToBigInt(tx.authorization.sigR), s: bytesToBigInt(tx.authorization.sigS), yParity: tx.authorization.yParity });
+  requireProof(address !== undefined, "direct creation requires its L1 sender");
+  requireProof(address >= 0n && address < 1n << 160n, "account address is out of range");
+  return { address, nullifierKeyCommitment: nk, ruleSetCommitment: rules, revision: 1n, receiveKeyHash: receive };
+}
+
+function contractCreationAccount(body: Uint8Array): AuthenticatedAccountState {
+  const material = verifyContract(decodeContractBody(body));
+  return {
+    address: material.address, nullifierKeyCommitment: material.nullifierKeyCommitment,
+    ruleSetCommitment: material.functionSetCommitment, revision: 1n, receiveKeyHash: material.receiveKeyHash,
+  };
+}
 
 function parseAccountUpdateOpening(opening: AccountUpdateOpeningRpc): Omit<AuthenticatedAccountState, "address"> {
   requireProof(opening !== null && typeof opening === "object" && opening.currentAccountState !== null && typeof opening.currentAccountState === "object", "invalid account update opening");
@@ -132,7 +152,8 @@ export function verifyResultProof(proof: ResultProofRpc, recentHash: bigint, blo
     requireProof("pcashTransactionIndex" in position, "wrong result kind");
     const outcome = transactionOutcomeFromCode(leaf.outcome);
     requireProof(outcome.supported, "unknown outcome");
-    const expectedStatementLengths = statementLengths(leaf.txType, leaf.fundingMode);
+    const expectedStatementLengths = statementLengths(leaf.txType);
+    requireProof(leaf.accountCreation === 0 || leaf.accountCreation === 1 || leaf.accountCreation === 2, "invalid account creation outcome");
     commitment = transactionResultLeaf({ ...leaf, outcome: outcome.outcome, l1TransactionIndex: u64(leaf.l1TransactionIndex), batchItemIndex: u64(leaf.batchItemIndex), outputStartIndex: u64(leaf.outputStartIndex) });
     if (leaf.outcome === 0) {
       const statement = leaf.statement;
@@ -182,12 +203,31 @@ export function verifySuccessfulTransactionStatement(
   requireProof(leaf.kind === "transaction", "expected transaction result");
   requireProof(leaf.outcome === 0 && leaf.statement !== null, "transaction did not succeed");
   const tx = decodeTransactionForChain(bytes, network.pcashChainId);
-  requireProof(tx.kind === leaf.txType && leaf.fundingMode === (tx.kind === 2 && tx.funding.mode === "sponsored" ? 1 : 0), "transaction type mismatch");
+  requireProof(tx.kind === leaf.txType, "transaction type mismatch");
   switch (tx.kind) {
     case 0: {
       const words = privateValuePublicInputs(tx);
       requireDecodedStatement(leaf.statement, words);
-      return { kind: "privateValue", shape: tx.shape, publicInputs: words };
+      let accountCreation: AuthenticatedAccountCreationAttachment | null = null;
+      if (tx.accountCreation === undefined) {
+        requireProof(leaf.accountCreation === 0, "unexpected account creation result");
+      } else {
+        requireProof(leaf.accountCreation === 1 || leaf.accountCreation === 2, "missing account creation result");
+        const attached = tx.accountCreation;
+        let account: AuthenticatedAccountState;
+        if (attached.kind === "contract") account = contractCreationAccount(attached.body);
+        else {
+          const user = decodeTransaction(attached.transactionBytes);
+          requireProof(user.kind === 1, "invalid user account attachment");
+          account = userCreationAccount(user, network);
+        }
+        accountCreation = {
+          kind: attached.kind, outcome: leaf.accountCreation === 1 ? "inserted" : "reused",
+          address: account.address, nullifierKeyCommitment: account.nullifierKeyCommitment,
+          insertedAccount: leaf.accountCreation === 1 ? account : null,
+        };
+      }
+      return { kind: "privateValue", shape: tx.shape, publicInputs: words, accountCreation };
     }
     case 3: {
       const opening = leaf.statement.accountUpdateOpening;
@@ -248,37 +288,18 @@ export function verifySuccessfulTransactionStatement(
       };
     }
     case 2: {
-      const material = verifyContract(decodeContractBody(tx.body));
-      const words = tx.funding.mode === "sponsored" ? contractCreationPublicInputs(tx, material.address) : [material.address, material.nullifierKeyCommitment, material.functionSetCommitment, material.receiveKeyHash];
+      requireProof(leaf.accountCreation === 1, "contract creation result must insert an account");
+      const account = contractCreationAccount(tx.body);
+      const words = [account.address, account.nullifierKeyCommitment, account.ruleSetCommitment, account.receiveKeyHash];
       requireDecodedStatement(leaf.statement, words);
-      return {
-        kind: "contractAccountCreation",
-        fundingMode: tx.funding.mode,
-        account: {
-          address: material.address,
-          nullifierKeyCommitment: material.nullifierKeyCommitment,
-          ruleSetCommitment: material.functionSetCommitment,
-          revision: 1n,
-          receiveKeyHash: material.receiveKeyHash,
-        },
-        publicInputs: words,
-      };
+      return { kind: "contractAccountCreation", account, publicInputs: words };
     }
     case 1: {
-      const nk = toField(bytesToBigInt(tx.nullifierKeyCommitment), "nullifier key commitment");
-      const rules = toField(bytesToBigInt(tx.ruleSetCommitment), "rule set commitment");
-      const receive = tx.mlKemPublicKey === null ? 0n : receiveKeyHash(tx.mlKemPublicKey);
-      let address = directSender;
-      if (tx.authorization.kind === "signed") address = recoverAddress(pcashSigningHash(accountCreationTypedData(network, { pcashChainId: tx.pcashChainId, nullifierKeyCommitment: nk, ruleSetCommitment: rules, receiveKeyHash: receive, recentPcashBlockHash: bytesToBigInt(tx.recentPcashBlockHash), validUntilTimestamp: tx.validUntilTimestamp })), { r: bytesToBigInt(tx.authorization.sigR), s: bytesToBigInt(tx.authorization.sigS), yParity: tx.authorization.yParity });
-      requireProof(address !== undefined, "direct creation requires its L1 sender");
-      requireProof(address >= 0n && address < 1n << 160n, "account address is out of range");
-      const words = [address, nk, rules, receive];
+      requireProof(leaf.accountCreation === 1, "user creation result must insert an account");
+      const account = userCreationAccount(tx, network, directSender);
+      const words = [account.address, account.nullifierKeyCommitment, account.ruleSetCommitment, account.receiveKeyHash];
       requireDecodedStatement(leaf.statement, words);
-      return {
-        kind: "userAccountCreation",
-        account: { address, nullifierKeyCommitment: nk, ruleSetCommitment: rules, revision: 1n, receiveKeyHash: receive },
-        publicInputs: words,
-      };
+      return { kind: "userAccountCreation", account, publicInputs: words };
     }
   }
 }

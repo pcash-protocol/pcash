@@ -2,9 +2,9 @@
 // it is installed, and whether what is installed there is what is pinned.
 
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { arch, platform } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { Config } from "../bcfg/index.ts";
@@ -46,6 +46,30 @@ export function pinnedComponents(
   key: ToolchainPlatform = platformKey(),
 ): Record<"nargo" | "barretenberg", ToolchainArchive> & Record<ToolchainComponent, ToolchainPin> {
   return { nargo: TOOLCHAIN.nargo.archives[key], barretenberg: TOOLCHAIN.barretenberg.archives[key], ...TOOLCHAIN.crs };
+}
+
+/**
+ * The primary checkout root when `repoRoot` is a linked git worktree;
+ * otherwise `repoRoot`.
+ */
+export function primaryRepositoryRoot(repoRoot: string = REPO_ROOT): string {
+  try {
+    const gitPath = join(repoRoot, ".git");
+    if (!existsSync(gitPath)) return repoRoot;
+    const stat = lstatSync(gitPath);
+    if (!stat.isFile()) return repoRoot;
+    const content = readFileSync(gitPath, "utf8");
+    const match = content.match(/^gitdir:\s*(.+)$/m);
+    if (!match || !match[1]) return repoRoot;
+    const gitDir = resolve(repoRoot, match[1].trim());
+    const commonDirFile = join(gitDir, "commondir");
+    if (!existsSync(commonDirFile)) return repoRoot;
+    const commonDirRel = readFileSync(commonDirFile, "utf8").trim();
+    const commonDir = resolve(gitDir, commonDirRel);
+    return dirname(commonDir);
+  } catch {
+    return repoRoot;
+  }
 }
 
 /** The one tool root: `PCASH_TOOL_ROOT`, else `.pcash-tools` in this checkout. */

@@ -20,7 +20,6 @@ import {
 import { createMempoolSubmissionAdapter, DurablePreBroadcastError } from "@pcash/sdk/wallet";
 import {
   anchoredPrivateValueTransaction,
-  sponsoredContractFunding,
   fixtureContractBody,
 } from "./anchoredTransaction.ts";
 
@@ -57,7 +56,6 @@ function mempoolItem(status: string): MempoolItemResult {
     stableId: `0x${"22".repeat(32)}`,
     conflictKeys: [],
     kind: "privateValue",
-    fundingMode: null,
     byteSize: BigInt(restoredEntry.length),
     openFeeAmount: 0n,
     issuanceOwnerCommitment: `0x${"00".repeat(32)}`,
@@ -330,9 +328,11 @@ test("marketplace restore keeps bytes whose anchor is exactly at the window edge
   }), "retained");
 });
 
-for (const funding of [sponsoredContractFunding(ANCHOR), { mode: "unfunded", recentPcashBlockHash: ANCHOR, validUntilTimestamp: 1n } as const]) {
-  test(`marketplace restore checks the anchor of a ${funding.mode} contract creation`, async () => {
-    const contractEntry = encodeContractAccountCreation(DEFAULT_NETWORK_CONFIG.pcashChainId, fixtureContractBody(), funding);
+for (const [kind, contractEntry] of [
+  ["standalone", encodeContractAccountCreation(DEFAULT_NETWORK_CONFIG.pcashChainId, fixtureContractBody(), { recentPcashBlockHash: ANCHOR, validUntilTimestamp: 1n })],
+  ["attached", anchoredPrivateValueTransaction(ANCHOR, 1n, 0n, 0n, 0n, { kind: "contract", body: fixtureContractBody() })],
+] as const) {
+  test(`marketplace restore checks the anchor of ${kind} contract creation`, async () => {
     const node = anchoredNode({
       getReceipt: async () => [],
       getMempoolTransaction: async () => ({ ...mempoolItem("ready"), contentHash: keccak256(contractEntry) }),
@@ -409,7 +409,7 @@ test("marketplace admission frees inputs only on the node's pre-insert refusal",
 
 test("proof-free USER creation is refused, while a zero-open-fee proved creation reaches the public mempool", async () => {
   const { createMarketplaceTransactionSubmitter } = await import("../src/client/submitBuiltTransaction.ts");
-  const creation = encodeContractAccountCreation(DEFAULT_NETWORK_CONFIG.pcashChainId, fixtureContractBody(), sponsoredContractFunding(ANCHOR, 1n, 0n));
+  const creation = anchoredPrivateValueTransaction(ANCHOR, 1n, 0n, 0n, 0n, { kind: "contract", body: fixtureContractBody() });
   const { node, admitted } = admittingNode();
   const submit = createMarketplaceTransactionSubmitter(mempoolWallet(node));
   assert.deepEqual(await submit(creation, { node }), { contentHash: keccak256(creation), receipt: null, queued: true });

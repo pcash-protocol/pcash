@@ -26,6 +26,7 @@
   color: var(--color-text-muted); white-space: nowrap;
 }
 .chip.chipBad { border-color: var(--color-danger-border); color: var(--color-danger-text); }
+.chip.chipDone { border-color: var(--color-success-border); color: var(--color-success-text); }
 .chipTip .chip { cursor: help; }
 /* An expired transaction changed nothing: its row dims and its sentence is struck out. The chip and the actions keep full strength. */
 .row[data-activity-state="expired"] .icon, .row[data-activity-state="expired"] .text { opacity: .55; }

@@ -8,7 +8,7 @@ import { PCASH_UNIT } from "../../components/pcashAmount.ts";
 import type { MarketplaceProgress, OfferPublication } from "@pcash/marketplace/app";
 
 const contentHash = `0x${"ab".repeat(32)}`;
-const progress: MarketplaceProgress = { action: "publish", phase: "confirming", message: "Waiting for your listing creation to be confirmed.", elapsedMs: 0, publication: { step: "contract", contentHash } };
+const progress: MarketplaceProgress = { action: "publish", phase: "confirming", message: "Waiting for your listing creation to be confirmed.", elapsedMs: 0, publication: { step: "funding", contentHash } };
 const publication = { terms: { assetId: "0", amount: "1000000000000000000", ethPriceWei: "1000000000000000", deadlineT: "2000000000" } } as OfferPublication;
 const roots: ReturnType<typeof createRoot>[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await act(async () => root.unmount()); document.body.innerHTML = ""; vi.useRealTimers(); });
@@ -37,9 +37,9 @@ it("changes the human readable message as approvals and proof generation progres
   const { container, render } = setup();
   const funding = { ...progress, phase: "proving" as const, publication: { step: "funding" as const } };
   await render({ progress: funding, busy: true, awaitingSignature: true });
-  expect(container.querySelector('[role="status"]')?.textContent).toBe("Sign in your wallet to fund the listing. Signing is free.");
-  await render({ progress: { ...funding, publication: { step: "contract" } }, busy: true, awaitingSignature: true });
-  expect(container.querySelector('[role="status"]')?.textContent).toBe("Sign in your wallet to create the listing. Signing is free.");
+  expect(container.querySelector('[role="status"]')?.textContent).toBe("Sign in your wallet to create and fund the listing. Signing is free.");
+  await render({ progress: { ...funding, publication: { step: "funding" } }, busy: true, awaitingSignature: true });
+  expect(container.querySelector('[role="status"]')?.textContent).toBe("Sign in your wallet to create and fund the listing. Signing is free.");
   await render({ progress: { ...funding, phase: "submitting" }, busy: true, confirmInWallet: true });
   expect(container.querySelector('[role="status"]')?.textContent).toBe("Confirm in your wallet");
   await render({ progress: funding, busy: true, proof: { phase: "proving", step: "crs", message: "CRS", elapsedMs: 0 } });
@@ -68,7 +68,7 @@ it("offers one Continue after an interruption and shows transaction details", as
 it("says progress is saved only once a listing transaction exists", async () => {
   const { container, render } = setup();
   const failed = { ...progress, phase: "error" as const, message: "User rejected the request" };
-  await render({ progress: { ...failed, publication: { step: "contract" } }, busy: false, onFinalize: vi.fn() });
+  await render({ progress: { ...failed, publication: { step: "funding" } }, busy: false, onFinalize: vi.fn() });
   expect(container.querySelector("h2")?.textContent).toBe("Your listing was not created");
   expect(container.querySelector('[role="status"]')?.textContent).toBe("Nothing was submitted. You can change the listing and publish it again.");
   expect(container.textContent).not.toContain("Review Ethereum submission");
@@ -91,10 +91,10 @@ it("labels the listing link as a submission for the current stage", async () => 
   const { container, render } = setup();
   await render({ progress, busy: true });
   const link = () => container.querySelector<HTMLAnchorElement>(`a[href="/tx/${contentHash}"]`)!;
-  expect(link().textContent).toBe("View listing creation submission");
+  expect(link().textContent).toBe("View listing submission");
   expect(container.textContent).not.toContain("View PCASH transaction");
   await render({ progress: { ...progress, publication: { step: "funding", contentHash } }, busy: true });
-  expect(link().textContent).toBe("View escrow funding submission");
+  expect(link().textContent).toBe("View listing submission");
 });
 
 it("repeats the listed terms only when no listing form shows them", async () => {

@@ -46,7 +46,7 @@ describe("transaction results root", () => {
   const poster = 0x5151n;
   const result = (index: number, outcome: TransactionOutcome = "succeeded"): TransactionResultCommitment => ({
     txType: 0,
-    fundingMode: 0,
+    accountCreation: 0,
     l1TransactionIndex: BigInt(index),
     batchItemIndex: BigInt(index * 2),
     outcome,

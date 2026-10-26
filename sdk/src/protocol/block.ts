@@ -75,6 +75,7 @@ export const TRANSACTION_OUTCOME_CODE = Object.freeze({
   emptyContractFunctionSet: 22,
   selectorsNotStrictlyIncreasing: 23,
   carrierContextMismatch: 24,
+  accountCreationMismatch: 25,
 } as const);
 
 export type TransactionOutcome = keyof typeof TRANSACTION_OUTCOME_CODE;
@@ -86,7 +87,7 @@ export const TRANSACTION_OUTCOMES = Object.freeze(
 export interface TransactionResultCommitment {
   txType: number;
   /** A contract-account creation's funding mode; zero for other types. */
-  fundingMode: number;
+  accountCreation: number;
   l1TransactionIndex: bigint;
   batchItemIndex: bigint;
   outcome: TransactionOutcome;
@@ -173,7 +174,7 @@ export function transactionResultLeaf(result: TransactionResultCommitment): bigi
   return poseidon([
     TRANSACTION_RESULT_DOMAIN,
     uintBelow(result.txType, 1n << 8n, "txType"),
-    uintBelow(result.fundingMode, 1n << 8n, "fundingMode"),
+    uintBelow(result.accountCreation, 1n << 8n, "accountCreation"),
     uintBelow(result.l1TransactionIndex, U64_LIMIT, "l1TransactionIndex"),
     uintBelow(result.batchItemIndex, U64_LIMIT, "batchItemIndex"),
     BigInt(transactionOutcomeCode(result.outcome)),

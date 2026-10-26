@@ -79,11 +79,13 @@ export async function recoverPaymentPublication(input: {
   const contract = await input.node.getContract(address);
   if (contract.status !== "contract") throw new Error("payment escrow contract is unavailable");
   const creation = decodeTransaction(hexToBytes(contract.transaction as Hex));
-  if (!("body" in creation)) throw new Error("escrow origin is not a contract creation");
+  const body = creation.kind === 2 ? creation.body
+    : creation.kind === 0 && creation.accountCreation?.kind === "contract" ? creation.accountCreation.body : undefined;
+  if (body === undefined) throw new Error("escrow origin carries no contract creation");
   const publication = parsePublication(JSON.stringify({ version: 1, chainId: fieldToHex(BigInt(input.status.pcashChainId)),
     terms: { router: fieldToHex(BigInt(input.router)), seller: fieldToHex(BigInt(seller)), id: offerId,
       assetId: fieldToHex(assetId), amount: fieldToHex(amount), ethPriceWei: fieldToHex(ethPriceWei), deadlineT: fieldToHex(deadlineT) },
-    l2Contract: { bodyHex: bytesToHex(creation.body), claimConfigurationSalt: fieldToHex(claimSalt), reclaimConfigurationSalt: fieldToHex(reclaimSalt) },
+    l2Contract: { bodyHex: bytesToHex(body), claimConfigurationSalt: fieldToHex(claimSalt), reclaimConfigurationSalt: fieldToHex(reclaimSalt) },
     reclaimAuthority: authority.toLowerCase(), ...(definition === "0x" ? {} : { assetDefinition: definition }),
     escrow: { leafIndex: Number(outputIndex), noteSecret: fieldToHex(noteSecret), amount: fieldToHex(amount) },
   }));

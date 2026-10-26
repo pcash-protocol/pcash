@@ -5,7 +5,6 @@ import { join, resolve } from "node:path";
 import {
   WIRE_PROOF_BYTES, PRIVATE_VALUE_PUBLIC_INPUTS,
   USER_ACCOUNT_UPDATE_PUBLIC_INPUTS,
-  CONTRACT_CREATION_PUBLIC_INPUTS,
 } from "../../../../../sdk/src/protocol/codec.ts";
 import { CHONK_VK_LEN } from "../../../../../sdk/src/protocol/account.ts";
 
@@ -44,13 +43,7 @@ const profiles = [
     proofBytes: WIRE_PROOF_BYTES,
     publicInputs: USER_ACCOUNT_UPDATE_PUBLIC_INPUTS,
   },
-  {
-    name: "contract_creation",
-    directory: join(bundleDir, "known-answers", "contract_creation"),
-    vk: join(bundleDir, "vks", "contract_creation_hiding_kernel.chonk.vk"),
-    proofBytes: WIRE_PROOF_BYTES,
-    publicInputs: CONTRACT_CREATION_PUBLIC_INPUTS,
-  },
+
 ];
 
 if (config.argv.length > 0 || Object.keys(config.args).some((key) => key !== "circuitbundle")) throw new Error("usage: node check.mjs");

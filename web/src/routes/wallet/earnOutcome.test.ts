@@ -13,7 +13,7 @@ const word = (value: bigint) => `0x${value.toString(16).padStart(64, "0")}`;
 function summary(blockNumber: bigint, outcome: TransactionSummaryResult["outcome"] = "succeeded", blockHash = hash("ef"), transactionId = hash("cd")): TransactionSummaryResult {
   return {
     transactionId, contentHash: HASH, outcome, failureDetail: null, declaredOpenFeeAmount: 0n, declaredIssuanceOwnerCommitment: word(0n),
-    issuanceRoute: "open", kind: "privateValue", fundingMode: null, block: { blockNumber, blockHash }, pcashTransactionIndex: 0n, timestamp: 1_000n,
+    issuanceRoute: "open", kind: "privateValue", accountCreation: 0, block: { blockNumber, blockHash }, pcashTransactionIndex: 0n, timestamp: 1_000n,
     inclusion: { l1BlockNumber: 1n, l1BlockHash: hash("01"), l1TransactionIndex: 0n, l1TransactionHash: hash("02"), batchItemIndex: 0n },
     l1Sender: `0x${"11".repeat(20)}`, issuanceOwnerCommitment: null, settledOpenFeeAmount: 0n, settledIssuanceAmount: 0n,
     byteSize: 1n, outputLeafStart: null, outputsAdded: 5n, nullifiers: null, account: null,

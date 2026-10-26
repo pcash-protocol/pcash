@@ -1,10 +1,9 @@
 // Shared plumbing for the token flows: wallet-bound execution, creator record
-// updates, and the two creator steps every template contract needs, publishing
-// the contract and funding its notes.
+// updates, and atomic contract creation with funding in every chunk.
 
 import { walletAction, type DurableSubmissionAdapter, type Wallet } from "@pcash/sdk/wallet";
 import { PRIVATE_VALUE_PROFILES } from "@pcash/sdk/constants";
-import { awaitAcceptedReceipt, pollReceipt, type PcashNodeClient } from "@pcash/sdk/clients";
+import { pollReceipt, type PcashNodeClient } from "@pcash/sdk/clients";
 import type { FundingChunk } from "../witness.ts";
 import type { AssetProver } from "@pcash/sdk/browser-prover/requests";
 import { addressHex, sameHex, sleep } from "@pcash/sdk/utils";
@@ -92,27 +91,6 @@ export async function walletToken(rt: TokensRuntime<unknown, unknown>, assetId: 
   return asset.definition;
 }
 
-/** Publish a template contract once; the wallet's journal resumes an interrupted creation. */
-export async function ensureContract<Prepared, Output>(
-  rt: TokensRuntime<Prepared, Output>,
-  key: string,
-  contract: { body: Uint8Array; address: bigint },
-  openFeeAmount: bigint | undefined,
-  onProgress: TokensProgressCallback | undefined,
-): Promise<void> {
-  if ((await rt.node.getAccountProof(addressHex(contract.address))).status === "present") return;
-  notify(onProgress, "creating-contract", "Publishing the claim contract…");
-  const created = await rt.wallet.sponsorContractCreation({
-    contract,
-    ...(openFeeAmount === undefined ? {} : { openFeeAmount }),
-    ...(rt.submission === undefined ? {} : { submission: rt.submission }),
-    ...walletProgress(onProgress, "creating-contract"),
-  });
-  if (!created.accepted) {
-    await awaitAcceptedReceipt(rt.node, created.contentHash, { pollIntervalMs: rt.pollIntervalMs, pollMaxAttempts: rt.pollMaxAttempts });
-  }
-}
-
 /**
  * Fund a contract's notes through one wallet bulk job of S chunks and return
  * its chunks in note order once every one is accepted. Each chunk is proved as
@@ -124,7 +102,7 @@ export async function fundContractNotes<Prepared, Output>(
   rt: TokensRuntime<Prepared, Output>,
   key: string,
   params: {
-    contract: bigint;
+    contract: { address: bigint; body: Uint8Array };
     assetId: bigint;
     notes: readonly { noteSecret: bigint; amount: bigint }[];
     jobId: string | undefined;
@@ -133,7 +111,7 @@ export async function fundContractNotes<Prepared, Output>(
   },
   onProgress: TokensProgressCallback | undefined,
 ): Promise<FundingChunk[]> {
-  const to = addressHex(params.contract);
+  const to = addressHex(params.contract.address);
   let jobId = params.jobId ?? (await rt.wallet.bulkJobs()).find((job) =>
     job.assetId === params.assetId
     && job.recipients.length === params.notes.length
@@ -141,6 +119,7 @@ export async function fundContractNotes<Prepared, Output>(
   if (jobId === undefined) {
     const job = await rt.wallet.startBulkJob({
       kind: "payment",
+      accountCreation: { kind: "contract", body: params.contract.body },
       assetId: params.assetId,
       recipients: params.notes.map((note) => ({ to, amount: note.amount, noteSecret: note.noteSecret })),
       maxTransactions: params.notes.length,

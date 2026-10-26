@@ -185,7 +185,7 @@ data: memoData({recipientAddress: RECIPIENT, recipientReceiveKey: recipientKeys.
 
   it("is written even when the build pays no one", () => {
     const build = payment({ paymentAmount: 0n, sender });
-    expect(senderRecords(build)).toEqual({ records: [], sentEnvelopes: [], sentOpenings: [] });
+    expect(senderRecords(build)).toEqual({ records: [], sentEnvelopes: [], sentOpenings: [], directSendOpenings: [] });
   });
 
   it("exists only with a sender, opens only with its outgoing key, and only in its own section", () => {

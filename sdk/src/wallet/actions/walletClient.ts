@@ -1,3 +1,4 @@
+import { resumeValueTransaction, type ResumeValueTransactionIntent, type ResumeValueTransactionResult } from "./resumeValueTransaction.ts";
 import { restoreTransactionData, type TransactionData, type DataRecord } from "@pcash/sdk/delivery";
 import type { StoredTransactionRecords } from "../noteStore.ts";
 import { planNativeConsolidation, ConsolidationRequiredError } from "../consolidation.ts";
@@ -42,6 +43,16 @@ import type {
 import { assertPcashProfileAccount, outputScanBoundary, readyOutputScanBoundary, synchronizedThrough } from "./scan.ts";
 import { watchNodeTip } from "./tipFollow.ts";
 import { localReceiveKeyLookup } from "./localChain.ts";
+import { parseDirectSendLink } from "@pcash/sdk/delivery";
+import { directSendOutputKey, type DirectSendOpening } from "@pcash/sdk/protocol";
+import {
+  addDirectSendOpening,
+  DirectSendOwnerError,
+  inspectDirectSend,
+  paidDirectSends,
+  receivedDirectSends,
+  type WalletReceivedDirectSend,
+} from "../directSends.ts";
 import { retryWhileSyncConflict } from "./syncConflictRetry.ts";
 import {
   createWalletRuntime,
@@ -271,6 +282,15 @@ interface WalletPendingPayment {
   state: "submission-unknown" | "admitted";
   /** The Ethereum transaction this wallet posted it in. */
   l1TxHash?: string;
+}
+
+/** A direct send this wallet paid. Its opening rebuilds the link. */
+export interface WalletDirectSend {
+  opening: DirectSendOpening;
+  /** Accepted on the synced chain; otherwise still journaled. */
+  included: boolean;
+  /** The recipient's account exists in the synced account set. */
+  recipientSetUp: boolean;
 }
 
 export interface WalletPaymentHistory extends Omit<WalletPendingPayment, "state" | "l1TxHash"> {
@@ -779,6 +799,47 @@ export class Wallet<Prepared = unknown, Output = unknown> {
     return this.#trackedOperation(async () => await localReceiveKeyLookup(this.#store)(address) !== null);
   }
 
+  /**
+   * Direct sends this wallet paid. A restored wallet reads them back from the
+   * sender regions it wrote, so every link can be copied again.
+   */
+  directSends(): Promise<WalletDirectSend[]> {
+    return this.#trackedOperation(async () => {
+      const paid = paidDirectSends(await this.#store.load(), this.network.chainId);
+      return this.#store.readChain((chain) => paid.map((send) => ({
+        ...send, recipientSetUp: chain !== null && chain.account(addressHex(send.opening.owner)) !== null,
+      })));
+    });
+  }
+
+  receivedDirectSends(): Promise<WalletReceivedDirectSend[]> {
+    return this.#trackedOperation(async () => receivedDirectSends(await this.#store.load()));
+  }
+
+  /**
+   * Keep the opening a direct-send link carries, then synchronize, which adds
+   * the note. The link must pay this wallet's address on this network, and its
+   * funding output must be accepted and hold the note the link opens.
+   */
+  importDirectSend(link: string): Promise<WalletReceivedDirectSend> {
+    return this.#trackedOperation(async () => {
+      const opening = parseDirectSendLink(link);
+      if (opening.chainId !== this.network.chainId) throw new Error("this direct send is on another PCASH network");
+      if (opening.owner !== BigInt(this.address)) throw new DirectSendOwnerError(addressHex(opening.owner));
+      const funding = await inspectDirectSend(this.#node, opening);
+      if (funding.status === "invalid") throw new Error("this link does not match the payment it names");
+      if (funding.status !== "landed") throw new Error("this payment is not accepted on PCASH yet");
+      await this.#store.transaction((current) => {
+        const data = current ?? emptyWalletState({ address: this.#profile.address, network: this.network });
+        addDirectSendOpening(data, opening);
+        return { data, value: undefined };
+      });
+      await this.sync();
+      const key = directSendOutputKey(opening);
+      return receivedDirectSends(await this.#store.load()).find((received) => directSendOutputKey(received.opening) === key)!;
+    });
+  }
+
   receiveKeys(): Promise<string[]> {
     return this.#trackedOperation(async () => {
       const data = await this.#store.load();
@@ -1037,6 +1098,20 @@ export class Wallet<Prepared = unknown, Output = unknown> {
     }
   }
 
+  /** Resume a retained wallet-funded value transaction without selecting inputs or producing another proof. */
+  resumeValueTransaction(intent: ResumeValueTransactionIntent<Prepared, Output>): Promise<ResumeValueTransactionResult> {
+    return this.#action("resume-value", lifecycle => {
+      const submission = intent.submission ?? this.#submission;
+      if (submission === undefined) throw new WalletCapabilityError("submission", "transaction resumption");
+      return resumeValueTransaction({
+        transactionHex: intent.transactionHex, node: this.#node, store: this.#store,
+        wallet: this.#profile, chainId: this.network.chainId, submission,
+        ...(intent.beforeSubmit === undefined ? {} : { beforeSubmit: intent.beforeSubmit }),
+        callbacks: lifecycle.durableCallbacks(intent), synchronize: () => this.#scan(),
+      });
+    });
+  }
+
   async preflightSend(
     intent: Omit<Parameters<WalletRuntimeInstance<Prepared, Output>["preflightTransfer"]>[0], "kind">,
   ): Promise<Awaited<ReturnType<WalletRuntimeInstance<Prepared, Output>["preflightTransfer"]>>> {
@@ -1256,19 +1331,6 @@ export class Wallet<Prepared = unknown, Output = unknown> {
     });
   }
 
-  /** Publish a contract account, paying its creation fee from this wallet's notes. */
-  async sponsorContractCreation(
-    intent: Parameters<WalletRuntimeInstance<Prepared, Output>["contractCreation"]>[0],
-  ): Promise<Awaited<ReturnType<WalletRuntimeInstance<Prepared, Output>["contractCreation"]>>> {
-    return this.#action("contract-creation", (lifecycle) => {
-      this.#requireSpendable("contract-creation");
-      return this.#runtime.contractCreation({
-        ...intent,
-        ...lifecycle.durableCallbacks(intent),
-      });
-    });
-  }
-
   /**
    * Pay the open fee or selected relay output of one Contract Account's asset
    * action from this wallet's notes. The caller supplies the contract's side
@@ -1342,6 +1404,19 @@ export class Wallet<Prepared = unknown, Output = unknown> {
       };
       const submission = this.#submission === undefined ? undefined : {
         mode: this.#submission.mode,
+        ...(this.#submission.node === undefined ? {} : { node: this.#submission.node }),
+        ...(this.#submission.prepareOnly === undefined ? {} : { prepareOnly: this.#submission.prepareOnly }),
+        ...(this.#submission.l1Sender === undefined ? {} : { l1Sender: this.#submission.l1Sender }),
+        ...(this.#submission.l1Recovery === undefined ? {} : {
+          l1Recovery: () => track(async () => {
+            const recovery = await this.#submission!.l1Recovery!();
+            return {
+              show: () => track(() => recovery.show()),
+              reconcile: () => track(() => recovery.reconcile()),
+              resolve: (resolutionId: string) => track(() => recovery.resolve(resolutionId)),
+            };
+          }),
+        }),
         ...(this.#submission.preflightL1Budget === undefined ? {} : {
           preflightL1Budget: (context: Parameters<NonNullable<DurableSubmissionAdapter["preflightL1Budget"]>>[0]) =>
             track(() => this.#submission!.preflightL1Budget!(context)),

@@ -1,6 +1,6 @@
 # Issuance conformance
 
-The selected bounded-memory ASERT policy has no parameter sweep in this repository. Consensus arithmetic is pinned by exact vectors checked through independent Rust and Python-integer paths.
+Consensus arithmetic is pinned by exact vectors checked through independent Rust and Python-integer paths.
 
 ```sh
 cargo run --locked -p pcash-issuance --bin issuance-vectors -- --check vectors/issuance.json

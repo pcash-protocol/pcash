@@ -39,7 +39,7 @@
     "source:reproduce": "npm run source-verification -- reproduce-contract",
     "boundaries": "node scripts/check_package_boundaries.mjs",
     "boundaries:test": "node --test scripts/check_package_boundaries.test.mjs scripts/explorer_boundary_plugin.test.mjs",
-    "dev:test": "node --test scripts/dev/run.test.mts",
+    "dev:test": "node --test scripts/dev/run.test.mts scripts/dev/worktree.test.mts",
     "web": "npm run dev --workspace @pcash/web",
     "bench": "npm run dev --workspace @pcash/bench",
     "e2e:typecheck": "npm run typecheck --workspace @pcash/e2e",

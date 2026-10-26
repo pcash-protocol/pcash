@@ -14,9 +14,8 @@ use alloy_primitives::{Address, Bytes, B256, U256};
 use pcash_crypto::Fr;
 use pcash_derive::private_value_profiles::PrivateValueShape;
 use pcash_derive::{
-    AccountCreationAuthorization, ContractAccountCreation, ContractBody, ContractFunction,
-    ContractFunding, PrivateValueSection, ReceiveKeyUpdate, SectionLayout, Transaction,
-    UserAccountCreation, UserAccountUpdate,
+    AccountCreationAuthorization, ContractBody, ContractFunction, PrivateValueSection,
+    ReceiveKeyUpdate, SectionLayout, Transaction, UserAccountCreation, UserAccountUpdate,
 };
 use pcash_state::{
     AcceptedEffects, AccountResult, Codec, ReceiveKeyOperation, TransactionEffects,
@@ -69,7 +68,7 @@ fn settlement_lookup_keeps_an_older_success_after_one_hundred_replays() {
                 has_open_fee: true,
                 byte_size: 0,
                 kind: pcash_derive::KIND_PRIVATE_VALUE,
-                funding_mode: None,
+                account_creation: 0,
                 lifecycle_address: None,
                 output_leaf_start: None,
                 outputs_added: 0,
@@ -175,7 +174,7 @@ fn open_fee_samples_skip_ineligible_receipts_before_applying_the_limit() {
                     has_open_fee,
                     byte_size: 1_000,
                     kind,
-                    funding_mode: None,
+                    account_creation: 0,
                     lifecycle_address: None,
                     output_leaf_start: None,
                     outputs_added: 0,
@@ -223,7 +222,7 @@ fn open_fee_samples_skip_ineligible_receipts_before_applying_the_limit() {
 fn entry_result(tx_index: u64, entry_index: u64, outcome: TransactionOutcome) -> TransactionResult {
     TransactionResult {
         tx_type: 0,
-        funding_mode: 0,
+        account_creation: 0,
         l1_transaction_index: tx_index,
         batch_item_index: entry_index,
         outcome,
@@ -557,7 +556,7 @@ fn fixture_with_logs(
         has_open_fee: true,
         byte_size: 0,
         kind: pcash_derive::KIND_USER_ACCOUNT_CREATION,
-        funding_mode: None,
+        account_creation: 0,
         output_leaf_start: None,
         outputs_added: 0,
         nullifiers: None,
@@ -811,7 +810,7 @@ fn stored_bytes(store: &DerivedIndexStore) -> u64 {
 #[test]
 fn the_index_stores_an_s_transaction_in_well_under_its_wire_size() {
     let (store, block, before) = private_value_store();
-    assert_eq!(block.boundary.block.transaction_bytes[0].len(), 31_647);
+    assert_eq!(block.boundary.block.transaction_bytes[0].len(), 31_648);
     let stored = stored_bytes(&store) - before;
     assert!(stored < 12_000, "the index stored {stored} bytes");
 }
@@ -1628,7 +1627,7 @@ fn keep_material_resolves_sequentially_within_one_index_block() {
         has_open_fee: true,
         byte_size: 0,
         kind: pcash_derive::KIND_USER_ACCOUNT_UPDATE,
-        funding_mode: None,
+        account_creation: 0,
         output_leaf_start: None,
         outputs_added: 0,
         nullifiers: None,
@@ -1694,22 +1693,23 @@ struct ContractFixture {
 }
 
 fn contract_creation_transaction(function: &ContractFunctionMaterial) -> Vec<u8> {
-    Transaction::ContractAccountCreation(ContractAccountCreation {
-        body: ContractBody::new(
-            false,
-            B256::repeat_byte(6),
-            None,
-            vec![ContractFunction {
-                selector: function.selector,
-                application_vk_hash: function.application_vk_hash,
-                configuration_commitment: function.configuration_commitment,
-            }],
-        )
-        .unwrap(),
-        funding: ContractFunding::Sponsored(zero_fee_private_value_section(
-            SectionLayout::ContractAccountCreation,
-        )),
-    })
+    Transaction::PrivateValue(
+        (zero_fee_private_value_section(SectionLayout::PrivateValue(PrivateValueShape::S)))
+            .with_account_creation(pcash_derive::AccountCreationAttachment::Contract(
+                ContractBody::new(
+                    false,
+                    B256::repeat_byte(6),
+                    None,
+                    vec![ContractFunction {
+                        selector: function.selector,
+                        application_vk_hash: function.application_vk_hash,
+                        configuration_commitment: function.configuration_commitment,
+                    }],
+                )
+                .unwrap(),
+            ))
+            .unwrap(),
+    )
     .encode(TEST_PCASH_CHAIN_ID)
     .unwrap()
 }
@@ -1837,7 +1837,7 @@ fn contract_fixture(
             has_open_fee: true,
             byte_size: transaction.len() as u64,
             kind: pcash_derive::KIND_CONTRACT_ACCOUNT_CREATION,
-            funding_mode: pcash_rpc::dto::ContractFundingMode::of(transaction),
+            account_creation: 1,
             output_leaf_start: None,
             outputs_added: 0,
             nullifiers: None,
@@ -2108,7 +2108,7 @@ fn verified_contract_page_pages_the_verified_subset_in_creation_order() {
 }
 
 fn node_inner_for(index: DerivedIndexStore, path: &std::path::Path) -> crate::node::NodeInner {
-    let rules = pcash_derive::ProtocolRules::new([vec![0xaa], vec![]], vec![0xcc], vec![0xdd]);
+    let rules = pcash_derive::ProtocolRules::new([vec![0xaa], vec![]], vec![0xcc]);
     let state = pcash_state::RedbState::create(
         path,
         pcash_state::DerivationSource {

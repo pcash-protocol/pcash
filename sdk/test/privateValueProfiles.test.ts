@@ -11,7 +11,7 @@ function transaction(shape: 0 | 1): PrivateValue {
   const profile = privateValueProfile(shape);
   return {
     global: { openFeeAmount: 1n, issuanceOwnerCommitment: 0n,
-      notBeforeTimestamp: 0n, validUntilTimestamp: 100n, carrierContextHash: 0n, assetBurnAmount: 0n, deliveryCommitment: 300n },
+      notBeforeTimestamp: 0n, validUntilTimestamp: 100n, carrierContextHash: 0n, assetBurnAmount: 0n, deliveryCommitment: 300n, accountCreationCommitment: 0n },
     inputs: Array.from({ length: profile.inputs }, (_, i) => ({ slotClass: SlotClass.NATIVE,
       inputCommitment: BigInt(i + 1), nullifier: BigInt(i + 100) })),
     outputs: Array.from({ length: profile.outputs }, (_, i) => ({ slotClass: SlotClass.NATIVE,
@@ -23,13 +23,13 @@ describe("private-value compile-time profiles", () => {
   it("defines exactly two shapes and rejects unassigned selectors", () => {
     expect(Object.keys(PRIVATE_VALUE_PROFILES)).toEqual(["S", "L"]);
     expect(privateValueProfile(0)).toMatchObject({
-      publicInputs: 18,
+      publicInputs: 19,
       wireInputs: 16,
       arenaBytes: 2632,
       offsets: { deliveryCommitment: 11, openFeeAmount: 12, issuanceOwner: 13, notBefore: 14, validUntil: 15, carrierContextHash: 16, eventsCommitment: 17 },
     });
     expect(privateValueProfile(1)).toMatchObject({
-      publicInputs: 73,
+      publicInputs: 74,
       wireInputs: 71,
       arenaBytes: 16672,
       offsets: { deliveryCommitment: 66, openFeeAmount: 67, issuanceOwner: 68, notBefore: 69, validUntil: 70, carrierContextHash: 71, eventsCommitment: 72 },
@@ -88,6 +88,7 @@ describe("private-value compile-time profiles", () => {
       outputs: Array.from({ length: 32 }, (_, i) => ({ recipient: BigInt(i + 1), amount: 1n, assetId: 0n })),
       openFeeAmount: 1n, issuanceRecipient: 0n, issuanceOwnerCommitment: 0n,
       relayFeeAmount: 0n, relayFeeOwnerCommitment: 0n,
+  accountCreationCommitment: 0n,
       transactionContext: 9n, notBefore: 0n, validUntil: 100n };
     const typed = batchTransferTypedData(undefined, message, 1);
     expect(typed.types.PcashBatchTransfer!.some((field) => field.name === "out31Amount")).toBe(true);

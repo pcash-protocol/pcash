@@ -26,7 +26,7 @@ export const TEST_RELAY_RAW = toHex(encodePrivateValueTransaction({
   shape: relayProfile.shapeId,
   publicInputs: [0x50435348n, 9n, ...relayNullifiers,
     ...Array.from({ length: relayProfile.outputs }, (_, index) => BigInt(100 + index)),
-    deliveryCommitment(relayOutputData, relayArena), 10n ** 18n, 0n, 0n, 2_000_000_000n, 0n, 0n],
+    deliveryCommitment(relayOutputData, relayArena), 10n ** 18n, 0n, 0n, 2_000_000_000n, 0n, 0n, 0n],
   proof: new Uint8Array(WIRE_PROOF_BYTES).fill(1), outputData: relayOutputData, arena: relayArena,
 }));
 export const TEST_RELAY_CONTENT_HASH = toHex(keccak256(fromHex(TEST_RELAY_RAW)));
@@ -472,7 +472,7 @@ function resultFor(input, state) {
           stableId: zeroWord,
           conflictKeys: [],
           kind: "privateValue",
-          fundingMode: null,
+          accountCreation: 0,
           byteSize: `0x${fromHex(TEST_RELAY_RAW).length.toString(16)}`,
           openFeeAmount: "0xde0b6b3a7640000",
           issuanceOwnerCommitment: zeroWord,
@@ -499,7 +499,7 @@ function resultFor(input, state) {
         stableId: zeroWord,
         conflictKeys: [],
         kind: "privateValue",
-        fundingMode: null,
+        accountCreation: 0,
         byteSize: `0x${fromHex(TEST_RELAY_RAW).length.toString(16)}`,
         openFeeAmount: "0xde0b6b3a7640000",
         issuanceOwnerCommitment: zeroWord,
@@ -565,7 +565,7 @@ function resultFor(input, state) {
         settledOpenFeeAmount: "0x0",
         settledIssuanceAmount: "0x0",
         kind: "privateValue",
-        fundingMode: null,
+        accountCreation: 0,
         inclusion: {
           l1BlockNumber: relayBlock.blockNumber,
           l1BlockHash: relayBlock.blockHash,

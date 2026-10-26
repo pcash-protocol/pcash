@@ -51,11 +51,19 @@ export function transactionDataHash(data: TransactionData | undefined): string |
   const stored = storeTransactionData(data);
   return stored === undefined ? undefined : toHex(keccak_256(utf8(JSON.stringify(stored))));
 }
-export async function resolveTransactionData(data: TransactionData | undefined, chainId: bigint, lookup: ReceiveKeyLookup): Promise<ResolvedTransactionData | undefined> {
+/** With `directSend`, a recipient with no receive key resolves without one: the payment's direct send carries its records. */
+export async function resolveTransactionData(
+  data: TransactionData | undefined,
+  chainId: bigint,
+  lookup: ReceiveKeyLookup,
+  options: { directSend?: boolean } = {},
+): Promise<ResolvedTransactionData | undefined> {
   if (data === undefined) return undefined;
   data = restoreTransactionData(storeTransactionData(data))!;
   return { ...data, recipients: await Promise.all((data.recipients ?? []).map(async ({ to, records }) => {
-    const resolved = await resolveRecipientDelivery(to, chainId, lookup);
-    return { recipientAddress: resolved.recipientAddress, receiveKey: resolved.recipientReceiveKey ?? parseExtendedCode(resolved.recipientExtendedCode!).mlKemPublicKey, records };
+    const resolved = await resolveRecipientDelivery(to, chainId, lookup, options);
+    const receiveKey = resolved.recipientReceiveKey
+      ?? (resolved.recipientExtendedCode === undefined ? undefined : parseExtendedCode(resolved.recipientExtendedCode).mlKemPublicKey);
+    return { recipientAddress: resolved.recipientAddress, ...(receiveKey === undefined ? {} : { receiveKey }), records };
   })) };
 }

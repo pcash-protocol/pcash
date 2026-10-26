@@ -12,6 +12,8 @@ import {
   toNonnegativeBigInt,
 } from "@pcash/sdk/crypto";
 import {
+  OutputOpeningMismatchError,
+  pollReceipt,
   samePcashIdentity,
   statusPcashIdentity,
   type OutputResult,
@@ -26,11 +28,14 @@ import {
   claimedSenderSchema,
   type DataRecord,
   decodeAssetDefinition,
+  directSendOutputCommitment,
+  directSendOutputKey,
   encodeAssetDefinition,
   openEnvelope,
   openSenderRecords,
   readPublicRecords,
   deliveryRecords,
+  directSendRecords,
   noteAssetRecords,
   payoutSeed,
   recoverPayoutOpening,
@@ -41,11 +46,11 @@ import {
   noteNk,
   nullifier,
   ownerCommitment,
-  TX_KIND_CONTRACT_ACCOUNT_CREATION,
   TX_KIND_PRIVATE_VALUE,
   TX_KIND_USER_ACCOUNT_UPDATE,
   type ArenaTransactionType,
   type AssetDefinition,
+  type DirectSendOpening,
   type NotePayload,
   type OutputArena,
   type PayoutComponent,
@@ -82,6 +87,7 @@ import {
   retainWalletReceiveKey,
 } from "../receiveKeyring.ts";
 import { reconcileBulkRecoveryObservations } from "../bulkJobs.ts";
+import { addDirectSendOpening, directSendNote, directSendOpenings, dropDirectSendRecords } from "../directSends.ts";
 
 export interface SpendableNote {
   chainId: bigint;
@@ -129,6 +135,8 @@ export type ScanFeedItem = {
   kind: number;
   shape: PrivateValueShape | null;
   outputData: Uint8Array;
+  /** The transaction's content hash, which names a direct send's funding output. */
+  contentHash?: string;
   /** Without it the output's records are unavailable; the note itself is unaffected. */
   arena?: ScanArena;
 } | {
@@ -146,6 +154,8 @@ export interface ScanParams {
   feed: Iterable<ScanFeedItem>;
   recoveryWallet?: Pick<WalletProfile, "address" | "nkRoot">;
   knownPayoutOpenings?: Map<bigint, KnownPayoutOpening>;
+  /** Direct sends whose funding outputs open without an envelope, by `directSendOutputKey`. */
+  directSendOpenings?: ReadonlyMap<string, DirectSendOpening>;
 }
 
 export interface ScanReport {
@@ -158,7 +168,7 @@ export interface ScanReport {
 }
 
 const ARENA_TRANSACTION_TYPES: ReadonlySet<number> = new Set([
-  TX_KIND_PRIVATE_VALUE, TX_KIND_CONTRACT_ACCOUNT_CREATION, TX_KIND_USER_ACCOUNT_UPDATE,
+  TX_KIND_PRIVATE_VALUE, TX_KIND_USER_ACCOUNT_UPDATE,
 ]);
 
 /**
@@ -244,33 +254,44 @@ export async function scanFeed(params: ScanParams): Promise<ScanReport> {
     } else {
       const profile = item.kind === 0 ? privateValueProfile(item.shape!) : PRIVATE_VALUE_PROFILES.S;
       if (!Number.isInteger(item.outputIndex) || item.outputIndex < 0 || item.outputIndex >= profile.outputs) continue;
-      let opened: ReturnType<typeof trialOpenEnvelope> = null;
-      for (const secretKey of secretKeys) {
-        trialDecryptAttempts += 1;
-        opened = trialOpenEnvelope(secretKey, item.outputData);
-        if (opened !== null) break;
-      }
-      if (opened === null) continue;
-      try {
-        const delivery = decodeDeliveryPayload(opened.plaintext, { chainId });
-        if (delivery.outputIndex !== item.outputIndex) continue;
-        if ("kind" in delivery) {
+      const direct = item.contentHash === undefined ? undefined
+        : params.directSendOpenings?.get(directSendOutputKey({ contentHash: item.contentHash, slot: item.outputIndex }));
+      if (direct !== undefined) {
+        // The kept opening is checked against the commitment below; it also opens the envelope that carries the records.
+        payload = { version: 1, chainId, assetId: 0n, amount: direct.amount, owner: direct.owner, noteSecret: direct.noteSecret, outputIndex: item.outputIndex };
+        records = () => {
           const source = outputArena(chainId, item.kind, item.shape, item.arena);
-          const records = source === null ? null : deliveryRecords(delivery, opened.sharedSecret, source);
-          if (records !== null) receivedData.push({ leafIndex: item.leafIndex, slot: item.outputIndex, records });
-          decrypted++;
+          return source === null ? null : directSendRecords(direct, item.outputData, source);
+        };
+      } else {
+        let opened: ReturnType<typeof trialOpenEnvelope> = null;
+        for (const secretKey of secretKeys) {
+          trialDecryptAttempts += 1;
+          opened = trialOpenEnvelope(secretKey, item.outputData);
+          if (opened !== null) break;
+        }
+        if (opened === null) continue;
+        try {
+          const delivery = decodeDeliveryPayload(opened.plaintext, { chainId });
+          if (delivery.outputIndex !== item.outputIndex) continue;
+          if ("kind" in delivery) {
+            const source = outputArena(chainId, item.kind, item.shape, item.arena);
+            const records = source === null ? null : deliveryRecords(delivery, opened.sharedSecret, source);
+            if (records !== null) receivedData.push({ leafIndex: item.leafIndex, slot: item.outputIndex, records });
+            decrypted++;
+            continue;
+          }
+          payload = delivery;
+        } catch {
           continue;
         }
-        payload = delivery;
-      } catch {
-        continue;
+        const { sharedSecret } = opened;
+        const decoded = payload;
+        records = () => {
+          const source = outputArena(chainId, item.kind, item.shape, item.arena);
+          return source === null ? null : deliveryRecords(decoded, sharedSecret, source);
+        };
       }
-      const { sharedSecret } = opened;
-      const decoded = payload;
-      records = () => {
-        const source = outputArena(chainId, item.kind, item.shape, item.arena);
-        return source === null ? null : deliveryRecords(decoded, sharedSecret, source);
-      };
     }
     decrypted += 1;
     if (payload.outputIndex !== item.outputIndex
@@ -317,6 +338,8 @@ export interface RecoveredSentOutput {
   noteSecret: bigint;
   /** The recipient region's records, for an output delivered by envelope. */
   records?: DataRecord[];
+  /** A direct send, delivered to its owner by link. */
+  directSend?: true;
 }
 
 /** A transaction whose sender region this wallet's outgoing key opened. */
@@ -331,6 +354,8 @@ export interface RecoveredSentTransaction {
   /** The application records this wallet published in the transaction's public segment. */
   public: DataRecord[];
   messages: { slot: number; to: string; records: DataRecord[] }[];
+  /** Direct sends this wallet received, as it recorded them. Not checked against any output. */
+  directSendOpenings: DirectSendOpening[];
 }
 
 /** One whole transaction from the output feed. */
@@ -392,9 +417,13 @@ export function recoverSentTransaction(params: {
   for (const opening of region.sentOpenings) {
     const row = rows.get(opening.slot);
     if (row === undefined || !opens(opening.slot, opening.recipientAddress, opening.noteSecret, opening.assetId, opening.amount)) continue;
+    const records = opening.directSend ? directSendRecords({ chainId, slot: opening.slot, noteSecret: opening.noteSecret }, row.outputData, source) : null;
+    if (records !== null) messages.push({ slot: opening.slot, to: addressHex(opening.recipientAddress), records });
     outputs.push({
       slot: opening.slot, leafIndex: row.leafIndex, recipientAddress: opening.recipientAddress,
       assetId: opening.assetId, amount: opening.amount, noteSecret: opening.noteSecret,
+      ...(records === null ? {} : { records }),
+      ...(opening.directSend ? { directSend: true as const } : {}),
     });
   }
   outputs.sort((left, right) => left.slot - right.slot);
@@ -407,6 +436,7 @@ export function recoverSentTransaction(params: {
     self: region.records,
     public: readPublicRecords(source.arena) ?? [],
     messages,
+    directSendOpenings: region.directSendOpenings,
   };
 }
 
@@ -480,6 +510,7 @@ function storedSentOutputs(sent: RecoveredSentTransaction, first: OrdinaryOutput
       ...(definition === undefined ? {} : { assetDefinition: toHex(encodeAssetDefinition(definition)) }),
       ...(memo === undefined ? {} : { memo: toHex(memo) }),
       senderIncluded: records.sender !== undefined,
+      ...(output.directSend ? { directSend: true as const } : {}),
       ...(senderRecords.length === 0 ? {} : { senderRecords }),
       blockNumber: first.origin.pcashNumber.toString(),
       blockHash: first.origin.pcashHash.toLowerCase(),
@@ -566,6 +597,12 @@ export async function scanOutputPages(params: {
   /** Opens the sender regions this wallet wrote. */
   outgoingKey?: Uint8Array;
   knownPayoutOpenings?: Map<bigint, KnownPayoutOpening>;
+  /**
+   * Direct sends to match by funding output. Openings the owners' own sender
+   * regions record are added as their pages are read, before the page is
+   * matched, so a funding output in the same page is found.
+   */
+  directSendOpenings?: Map<string, DirectSendOpening>;
   onPage?: (report: OutputScanReport, outputs: readonly OutputResult[]) => void | Promise<void>;
 }): Promise<OutputScanReport & { outputCount: bigint }> {
   const chainId = toNonnegativeBigInt(params.chainId, "chainId");
@@ -577,6 +614,8 @@ export async function scanOutputPages(params: {
   let trialDecryptAttempts = 0;
   let decrypted = 0;
   const knownPayoutOpenings = params.knownPayoutOpenings ?? new Map<bigint, KnownPayoutOpening>();
+  const directOpenings = params.directSendOpenings ?? new Map<string, DirectSendOpening>();
+  const owners = new Set(params.owners.map((owner) => toAddressField(owner, "owner")));
   let continuation: Record<string, unknown> | null | undefined;
   let outputCount: bigint | undefined;
   let lastOutputIndex: bigint | undefined;
@@ -595,24 +634,28 @@ export async function scanOutputPages(params: {
     const transactions = pageTransactions(page.outputs);
     const arenas = new Map(transactions.flatMap(({ transaction }) =>
       transaction.outputs.map((row) => [row.leafIndex, transaction.arena] as const)));
+    const pageSent = params.outgoingKey === undefined ? [] : transactions.flatMap(({ transaction }) => {
+      const opened = recoverSentTransaction({ chainId, outgoingKey: params.outgoingKey!, transaction });
+      return opened === null ? [] : [opened];
+    });
+    for (const opening of pageSent.flatMap((sent) => sent.directSendOpenings)) {
+      if (opening.chainId === chainId && owners.has(opening.owner)) directOpenings.set(directSendOutputKey(opening), opening);
+    }
     const pageReport = await scanFeed({
       chainId,
       mlKemSecretKeys: params.mlKemSecretKeys,
       owners: params.owners,
       ...(params.recoveryWallet === undefined ? {} : { recoveryWallet: params.recoveryWallet }),
       knownPayoutOpenings,
+      directSendOpenings: directOpenings,
       feed: page.outputs.map((output): ScanFeedItem => output.kind === "ordinary" ? {
         outputData: output.outputData, kind: output.transactionType, shape: output.privateValueShape, outputIndex: output.outputSlot,
-        leafIndex: output.outputIndex, outputCommitment: BigInt(output.outputCommitment),
+        leafIndex: output.outputIndex, outputCommitment: BigInt(output.outputCommitment), contentHash: output.contentHash,
         ...(arenas.has(output.outputIndex) ? { arena: arenas.get(output.outputIndex)! } : {}),
       } : {
         kind: "system", payout: scanPayout(output.payout), outputIndex: SYSTEM_NOTE_OUTPUT_INDEX,
         leafIndex: output.outputIndex, outputCommitment: BigInt(output.outputCommitment),
       }),
-    });
-    const pageSent = params.outgoingKey === undefined ? [] : transactions.flatMap(({ transaction }) => {
-      const opened = recoverSentTransaction({ chainId, outgoingKey: params.outgoingKey!, transaction });
-      return opened === null ? [] : [opened];
     });
     scanned += pageReport.scanned;
     trialDecryptAttempts += pageReport.trialDecryptAttempts;
@@ -755,12 +798,110 @@ function watchedNullifiers(data: WalletFileData, nk: bigint): Set<string> {
 
 function dropConfirmedNotes(data: WalletFileData, fromLeafIndex: bigint): void {
   data.notes = data.notes.filter((note) => note.pending || note.leafIndex === null || BigInt(note.leafIndex) < fromLeafIndex);
+  dropDirectSendRecords(data, fromLeafIndex);
   if (data.sentOutputs !== undefined) {
     data.sentOutputs = data.sentOutputs.filter((output) => BigInt(output.leafIndex) < fromLeafIndex);
     if (data.sentOutputs.length === 0) delete data.sentOutputs;
   }
   if (data.transactionRecords !== undefined) data.transactionRecords = data.transactionRecords.filter(row => BigInt(row.leafIndex) < fromLeafIndex);
   data.historyRevision = (BigInt(data.historyRevision ?? "0") + 1n).toString();
+}
+
+/** A direct send whose funding output a scan passed before the wallet knew its opening. */
+interface PassedDirectSend {
+  opening: DirectSendOpening;
+  leafIndex: bigint;
+  commitment: bigint;
+  nullifier: string;
+}
+
+/**
+ * The note of a direct send whose funding output the scan already passed. The
+ * feed from that output to the step's target gives the note's provenance and
+ * any transaction that consumed its nullifier, so a note spent before this
+ * wallet knew the opening, as by another device on the same seed, stays spent.
+ * A note not spent in a final block also needs its path, which must open the
+ * wallet's own output root. Null while the node's answers do not match the
+ * opening, so a later step tries again.
+ */
+async function passedDirectSendNote(
+  node: PcashNodeClient,
+  chain: WalletChainState,
+  target: { pcashNumber: bigint; pcashHash: string },
+  finalizedBlock: bigint,
+  passed: PassedDirectSend,
+): Promise<WalletNote | null> {
+  const { opening, leafIndex, commitment, nullifier: spent } = passed;
+  // From the funding transaction's first output, which carries its arena.
+  const firstLeaf = leafIndex - BigInt(opening.slot);
+  let first: OrdinaryOutput | undefined;
+  let row: OrdinaryOutput | undefined;
+  let spender: OrdinaryOutput | undefined;
+  let continuation: Record<string, unknown> | null | undefined;
+  const seen = new Set<string>();
+  do {
+    const page = await node.getOutputs({ fromOutputIndex: firstLeaf, target, ...(continuation === undefined ? {} : { continuation }) });
+    for (const output of page.outputs) {
+      if (output.kind !== "ordinary") continue;
+      if (output.outputIndex === firstLeaf) first = output;
+      if (output.outputIndex === leafIndex) row = output;
+      if (output.nullifiers.some((value) => value.toLowerCase() === spent)) spender ??= output;
+    }
+    if (page.complete || spender !== undefined) break;
+    continuation = page.continuation;
+    const key = JSON.stringify(continuation);
+    if (seen.has(key)) throw new Error("output continuation did not advance");
+    seen.add(key);
+  } while (continuation !== null);
+  if (row === undefined || row.contentHash.toLowerCase() !== opening.contentHash
+    || row.outputSlot !== opening.slot || BigInt(row.outputCommitment) !== commitment) return null;
+  if (spender !== undefined && !chain.consumed.has(spent)) {
+    chain.recordConsumption(spent, {
+      pcashNumber: spender.origin.pcashNumber,
+      pcashHash: spender.origin.pcashHash.toLowerCase(),
+      timestamp: spender.origin.timestamp,
+      transactionId: spender.transactionId.toLowerCase(),
+      contentHash: spender.contentHash.toLowerCase(),
+      nullifiers: spender.nullifiers.map((value) => value.toLowerCase()),
+    });
+  }
+  // A spend a reorganization can still remove leaves the note spendable again, so it keeps its witness until final.
+  const spentBy = chain.consumed.get(spent);
+  if (spentBy === undefined || spentBy.pcashNumber > finalizedBlock) {
+    let paths: Awaited<ReturnType<PcashNodeClient["getOutputPaths"]>>;
+    try {
+      paths = await node.getOutputPaths([{ outputIndex: leafIndex, outputCommitment: commitment }]);
+    } catch (error) {
+      if (error instanceof OutputOpeningMismatchError) return null;
+      throw error;
+    }
+    if (paths === null || !chain.outputs.markPath(leafIndex, commitment, paths.paths[0]!.siblings)) return null;
+  }
+  const source = first?.arena == null ? null
+    : outputArena(opening.chainId, first.transactionType, first.privateValueShape, { arena: first.arena, nullifiers: first.nullifiers });
+  const { memo, sender } = noteRecords(source === null ? null : directSendRecords(opening, row.outputData, source));
+  return {
+    leafIndex: leafIndex.toString(),
+    outputIndex: opening.slot,
+    assetId: "0x0",
+    amount: opening.amount.toString(),
+    owner: `0x${opening.owner.toString(16)}`,
+    noteSecret: `0x${opening.noteSecret.toString(16)}`,
+    commitment: bytes32Hex(commitment),
+    spent: false,
+    pending: false,
+    cursor: {
+      kind: "ordinary",
+      payout: null,
+      blockNumber: row.origin.pcashNumber.toString(),
+      blockHash: row.origin.pcashHash.toLowerCase(),
+      blockTimestamp: row.origin.timestamp.toString(),
+      transactionId: row.transactionId.toLowerCase(),
+      outputIndex: opening.slot.toString(),
+    },
+    ...(memo.length === 0 ? {} : { memo: toHex(memo) }),
+    ...(sender === undefined ? {} : { sender: addressHex(sender) }),
+  };
 }
 
 /** The newest checkpoint still on the node's canonical chain, or null when a reorganization passed them all. */
@@ -846,7 +987,10 @@ interface SynchronizeWalletInventoryOptions {
  * headers by number for reorganization checks, the output frontier at the
  * birthday, every account change and every output in the interval, and the
  * anchor header. Trial decryption, nullifier matching, witness maintenance,
- * and account-tree updates all happen locally.
+ * and account-tree updates all happen locally. The exception is a direct send
+ * the wallet holds the opening of but has not matched: its funding
+ * transaction's receipt, and once the scan has passed that output, the feed
+ * from it and its path, all of which name that output to the node.
  */
 export async function synchronizeWalletInventory(
   node: PcashNodeClient,
@@ -947,6 +1091,28 @@ export async function synchronizeWalletInventory(
     const startedAtOutputIndex = synced.outputs.count;
     const watched = watchedNullifiers(data, nk);
     const sentOutputs: StoredSentOutput[] = [];
+    // The scan finds the funding output of every direct send it knows before
+    // passing it. One it passed before learning the opening is added after the scan.
+    const directOpenings = new Map(directSendOpenings(data)
+      .filter((opening) => opening.owner === wallet.address && opening.chainId === chainId)
+      .map((opening) => [directSendOutputKey(opening), opening]));
+    const passed = new Map<string, PassedDirectSend>();
+    const resolvePassed = async (opening: DirectSendOpening, before: bigint): Promise<void> => {
+      const receipt = await pollReceipt(node, opening.contentHash);
+      if (receipt?.outcome !== "succeeded" || receipt.outputLeafStart === null || BigInt(opening.slot) >= receipt.outputsAdded) return;
+      const leafIndex = receipt.outputLeafStart + BigInt(opening.slot);
+      if (leafIndex >= before) return;
+      const commitment = directSendOutputCommitment(opening, leafIndex);
+      // Watched from here on; a spend the scan already passed is read back from the feed.
+      const spent = bytes32Hex(nullifier(commitment, nk, opening.noteSecret));
+      watched.add(spent);
+      passed.set(directSendOutputKey(opening), { opening, leafIndex, commitment, nullifier: spent });
+    };
+    if (stepTarget === target) {
+      for (const opening of directOpenings.values()) {
+        if (directSendNote(data, opening) === undefined) await resolvePassed(opening, startedAtOutputIndex);
+      }
+    }
     const { outputCount, ...report } = stepTarget !== target ? {
       scanned: 0, trialDecryptAttempts: 0, decrypted: 0, recovered: [], receivedData: [], transactionRecords: [], sent: [], outputCount: startedAtOutputIndex,
     } : await scanOutputPages({
@@ -958,8 +1124,9 @@ export async function synchronizeWalletInventory(
       owners: [wallet.address],
       recoveryWallet: wallet,
       ...(wallet.outgoingKey === undefined ? {} : { outgoingKey: wallet.outgoingKey }),
+      directSendOpenings: directOpenings,
       knownPayoutOpenings: new Map(data.notes.filter((note) => !note.pending).map((note) => [ownerCommitment(BigInt(note.owner), BigInt(note.noteSecret)), { owner: BigInt(note.owner), noteSecret: BigInt(note.noteSecret) }])),
-      onPage: (pageReport, outputs) => {
+      onPage: async (pageReport, outputs) => {
         data.transactionRecords = [...data.transactionRecords ?? [], ...pageReport.transactionRecords];
         const recoveredLeaves = new Set(pageReport.recovered.map((note) => note.leafIndex));
         for (const note of pageReport.recovered) {
@@ -971,6 +1138,15 @@ export async function synchronizeWalletInventory(
           // The wallet's own copy of an action's definition, recovered with or without sent outputs.
           if (sent.assetDefinition !== undefined) {
             addWalletAsset(data, { assetId: assetDefinitionAssetId(sent.assetDefinition), definition: sent.assetDefinition });
+          }
+          for (const opening of sent.directSendOpenings) {
+            if (first?.kind !== "ordinary" || opening.owner !== wallet.address || opening.chainId !== chainId) continue;
+            const learned = addDirectSendOpening(data, opening, {
+              leafIndex: sent.leafIndex.toString(), blockNumber: first.origin.pcashNumber.toString(), blockHash: first.origin.pcashHash.toLowerCase(),
+            });
+            const found = pageReport.recovered.some((note) => note.owner === opening.owner
+              && note.noteSecret === opening.noteSecret && note.amount === opening.amount);
+            if (learned && !found) await resolvePassed(opening, synced.outputs.count);
           }
         }
         for (const output of outputs) {
@@ -1038,6 +1214,11 @@ export async function synchronizeWalletInventory(
       if (output.assetDefinition !== undefined) {
         addWalletAsset(data, { assetId: BigInt(output.assetId), definition: decodeAssetDefinition(fromHex(output.assetDefinition)) });
       }
+    }
+    for (const direct of passed.values()) {
+      if (directSendNote(data, direct.opening) !== undefined) continue;
+      const note = await passedDirectSendNote(node, synced, stepTarget, status.finalizedBlock, direct);
+      if (note !== null) mergeRecoveredWalletNotes(data, [note]);
     }
 
     const anchor = (await node.getBlockHeader(stepTarget.pcashNumber)).boundary;

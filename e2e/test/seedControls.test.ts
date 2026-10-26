@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ML_KEM_768_PUBLIC_KEY_LENGTH, OUTPUT_DATA_BYTES, PRIVATE_VALUE_PROFILES } from "@pcash/sdk/constants";
 import {
   buildContractBody,
+  accountCreationAttachmentCommitment,
   decodeBatch,
   decodeTransaction,
   encodeBatch,
@@ -54,7 +55,7 @@ function privateValueTemplate(): Uint8Array {
     11n, 12n, 13n, 14n,
     21n, 22n, 23n, 24n, 25n,
     deliveryCommitment(outputData, ARENA),
-    7n, 0n, 0n, 1_900_000_000n, 0n, 123n,
+    7n, 0n, 0n, 1_900_000_000n, 0n, 123n, 0n,
   ];
   return encodePrivateValueTransaction({ publicInputs, proof: filled(WIRE_PROOF_BYTES, 0xaa), outputData, arena: ARENA });
 }
@@ -84,29 +85,17 @@ function contractTemplate(mlKemPublicKey?: Uint8Array): Uint8Array {
       { selector: functionSelector(1), applicationVkHash: 0x1001n, configurationCommitment: 0x2001n },
     ],
   });
-  // A sponsored creation; the body controls below edit only body bytes, which
-  // follow the funding mode and the section.
-  return encodeContractAccountCreation(CHAIN_ID, build.body, {
-    mode: "sponsored",
-    section: {
-      publicInputs: [
-        CHAIN_ID,
-        0x4321n,
-        1n, 2n, 3n, 4n,
-        5n, 6n, 7n, 8n, 9n,
-        deliveryCommitment(EMPTY_OUTPUT_DATA, ARENA),
-        0n, 0n, 0n,
-        1_900_000_000n, 0n, 123n,
-      ],
-      proof: filled(WIRE_PROOF_BYTES, 0xcc),
-      outputData: EMPTY_OUTPUT_DATA,
-      arena: ARENA,
-    },
+  const accountCreation = { kind: "contract" as const, body: build.body };
+  return encodePrivateValueTransaction({
+    publicInputs: [CHAIN_ID, 0x4321n, 1n, 2n, 3n, 4n, 5n, 6n, 7n, 8n, 9n,
+      deliveryCommitment(EMPTY_OUTPUT_DATA, ARENA), 0n, 0n, 0n, 1_900_000_000n, 0n, 123n,
+      accountCreationAttachmentCommitment(accountCreation, CHAIN_ID)],
+    proof: filled(WIRE_PROOF_BYTES, 0xcc), outputData: EMPTY_OUTPUT_DATA, arena: ARENA, accountCreation,
   });
 }
 
-/** envelope(5) ‖ fundingMode(1) ‖ the sponsor's section, then the body. */
-const BODY_OFFSET = 6 + privateValueSectionBytes(WIRE_PROOF_BYTES, { kind: "contractAccountCreation" });
+/** envelope, shape, section, attachment tag, then body. */
+const BODY_OFFSET = 7 + privateValueSectionBytes(WIRE_PROOF_BYTES);
 
 function updateTemplate(): Uint8Array {
   return encodeUserAccountUpdate({
@@ -125,7 +114,7 @@ function updateTemplate(): Uint8Array {
         5n, 6n, 7n, 8n, 9n,
         deliveryCommitment(EMPTY_OUTPUT_DATA, ARENA),
         0n, 0n, 0n,
-        1_900_000_000n, 0n, 123n,
+        1_900_000_000n, 0n, 123n, 0n,
       ],
       proof: filled(WIRE_PROOF_BYTES, 0xbb),
       outputData: EMPTY_OUTPUT_DATA,
@@ -152,8 +141,15 @@ function update(entry: Uint8Array) {
 
 function contract(entry: Uint8Array) {
   const decoded = decodeTransaction(entry);
-  if (decoded.kind !== 2) throw new Error("expected a contract entry");
-  return decoded;
+  if (decoded.kind === 2) return decoded;
+  if (decoded.kind === 0 && decoded.accountCreation?.kind === "contract") {
+    const body = decodeTransaction(encodeContractAccountCreation(decoded.pcashChainId, decoded.accountCreation.body, {
+      recentPcashBlockHash: 0n, validUntilTimestamp: 1n,
+    }));
+    if (body.kind !== 2) throw new Error("contract body decoding failed");
+    return body;
+  }
+  throw new Error("expected a contract entry or attachment");
 }
 
 function creation(entry: Uint8Array) {
@@ -202,7 +198,7 @@ describe("private-value controls", () => {
 
   it("changes byte zero of the first output without touching the proof", () => {
     // type, chain id, shape, 16 words, proof, then five output-data items and the arena.
-    expect(template.length).toBe(6 + 16 * 32 + WIRE_PROOF_BYTES + 5 * OUTPUT_DATA_BYTES + PRIVATE_VALUE_PROFILES.S.arenaBytes);
+    expect(template.length).toBe(7 + 16 * 32 + WIRE_PROOF_BYTES + 5 * OUTPUT_DATA_BYTES + PRIVATE_VALUE_PROFILES.S.arenaBytes);
     const edited = controls.outputByteZeroProofMutationTransfer(template);
     expect(changedOffsets(template, edited)).toEqual([6 + 16 * 32 + WIRE_PROOF_BYTES]);
     const decoded = privateValue(edited);
@@ -287,7 +283,7 @@ describe("contract controls", () => {
     expect(empty.length).toBe(length - 2 * 65);
     expect(empty[functionCount]).toBe(0);
     expect(contract(empty).functions).toEqual([]);
-    expect(contract(empty).funding).toEqual(contract(template).funding);
+    expect(empty.slice(0, BODY_OFFSET)).toEqual(template.slice(0, BODY_OFFSET));
     const swappedBytes = controls.swappedSelectorsContract(template);
     expect(Math.min(...changedOffsets(template, swappedBytes))).toBe(functionCount + 1);
     expect(Math.max(...changedOffsets(template, swappedBytes))).toBeLessThan(functionCount + 1 + 2 * 65);
@@ -297,10 +293,10 @@ describe("contract controls", () => {
     expect(() => decodeTransaction(nkRootFlag)).toThrow(/publishesNkRoot must be 0 or 1/);
     expect(changedOffsets(template, controls.nonCanonicalFieldContract(template))).toEqual(
       Array.from({ length: 32 }, (_, index) => BODY_OFFSET + 1 + index).filter((offset) => template[offset] !== 0xff));
-    const fundingMode = controls.unknownFundingModeContract(template);
-    expect(changedOffsets(template, fundingMode)).toEqual([5]);
-    expect(fundingMode[5]).toBe(2);
-    expect(() => decodeTransaction(fundingMode)).toThrow(/unknown contract creation funding mode 2/);
+    const attachmentTag = controls.unknownAttachmentTagContract(template);
+    expect(changedOffsets(template, attachmentTag)).toEqual([BODY_OFFSET - 1]);
+    expect(attachmentTag[BODY_OFFSET - 1]).toBe(3);
+    expect(() => decodeTransaction(attachmentTag)).toThrow(/unknown account creation attachment tag 3/);
     const swapped = contract(swappedBytes);
     expect(swapped.functions.map((fn) => fn.selector)).toEqual([1, 0]);
     expect(swapped.functions[0]!.applicationVkHash).toEqual(word(0x1001n));
@@ -308,18 +304,20 @@ describe("contract controls", () => {
   });
 
   it("publishes the same body unfunded, with only a recent block and deadline", () => {
-    const sponsored = contract(contractTemplate());
+    const attached = contract(contractTemplate());
     const entry = controls.unfundedContractCreation({
       network: { ...DEFAULT_NETWORK_CONFIG, pcashChainId: BigInt(CHAIN_ID) },
-      body: sponsored.body,
+      body: attached.body,
       recentPcashBlockHash: 9n,
       validUntilTimestamp: 10n,
     });
-    expect(entry.length).toBe(6 + 32 + 8 + sponsored.body.length);
-    const unfunded = contract(entry);
+    expect(entry.length).toBe(5 + 32 + 8 + attached.body.length);
+    const unfunded = decodeTransaction(entry);
+    if (unfunded.kind !== 2) throw new Error("expected standalone creation");
     expect(unfunded.pcashChainId).toBe(CHAIN_ID);
-    expect(unfunded.body).toEqual(sponsored.body);
-    expect(unfunded.funding).toEqual({ mode: "unfunded", recentPcashBlockHash: word(9n), validUntilTimestamp: 10n });
+    expect(unfunded.body).toEqual(attached.body);
+    expect(unfunded.recentPcashBlockHash).toEqual(word(9n));
+    expect(unfunded.validUntilTimestamp).toBe(10n);
   });
 });
 

@@ -12,6 +12,18 @@ export function AccountActivationStatus() {
   const pending = phase === "activation-mining" || phase === "activation-pending"
     || phase === "activation-ambiguous" || phase === "activation-blocked";
   if (!pending) return null;
+  if (!blocker && activation?.publication === "open") {
+    const expired = wallet.status !== undefined && wallet.status.latestBlockTimestamp > BigInt(activation.validUntilTimestamp);
+    return <div data-testid="activation-status">
+      <p role="status" className={styles.status}>{expired
+        ? "Your setup authorization expired before a relayer published it. Retry to sign and prove a fresh setup."
+        : "Waiting for a relayer to publish your account setup. The relayer receives the mining reward."}</p>
+      <p><Link to={`/tx/${activation.contentHash}`}>View setup transaction</Link></p>
+      {expired && <button type="button" className="button" disabled={wallet.busy}
+        onClick={() => void wallet.retryAccountSetup(activation.contentHash, "open").catch(() => undefined)}>{wallet.busy ? "Retrying setup…" : "Retry setup without ETH"}</button>}
+      {wallet.error && <p role="alert">{wallet.error}</p>}
+    </div>;
+  }
   const hash = blocker ? blocker.transactionHash : activation?.l1TxHash ?? transaction?.hash;
   const expired = !blocker && activation !== undefined && wallet.status !== undefined
     && wallet.status.latestBlockTimestamp > BigInt(activation.validUntilTimestamp)
@@ -35,7 +47,7 @@ export function AccountActivationStatus() {
     {transaction?.state === "queued" && <p>This transaction uses nonce {transaction.nonce}, but Ethereum is waiting for nonce {transaction.nextNonce}. Check pending transactions and nonce settings in your Ethereum wallet.</p>}
     {expired && <>
       <p>Retry checks the earlier Ethereum submission first. Setup can restart only after that submission is resolved.</p>
-      <button type="button" className="button" disabled={wallet.busy} onClick={() => void wallet.retryAccountSetup(activation.contentHash).catch(() => undefined)}>{wallet.busy ? "Retrying setup…" : "Retry setup"}</button>
+      <button type="button" className="button" disabled={wallet.busy} onClick={() => void wallet.retryAccountSetup(activation.contentHash, "self").catch(() => undefined)}>{wallet.busy ? "Retrying setup…" : "Retry setup"}</button>
     </>}
     <p><Link to="#ethereum-submission">Review Ethereum transaction</Link></p>
     {wallet.error && <p role="alert">{wallet.error}</p>}

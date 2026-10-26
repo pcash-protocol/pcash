@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildExtendedCode } from "@pcash/sdk/delivery";
 import {
+  classifyUnregisteredAddress,
   DEFAULT_AUTHORIZATION_METHODS,
   describeRecipient,
   recipientFromScan,
@@ -14,6 +15,15 @@ import {
 const NO_RECORDS = { memo: "", includeSender: false };
 
 describe("Wallet route model", () => {
+  it("judges an address without PCASH from its Ethereum code and transaction count", () => {
+    expect(classifyUnregisteredAddress(undefined, 4)).toBe("regular");
+    expect(classifyUnregisteredAddress("0x", 0)).toBe("never-used");
+    expect(classifyUnregisteredAddress("0x6080604052", 9)).toBe("smart-contract");
+    // An EIP-7702 delegation keeps the account signing as itself; any other code is a contract.
+    expect(classifyUnregisteredAddress(`0xEF0100${"ab".repeat(20)}`, 1)).toBe("regular");
+    expect(classifyUnregisteredAddress(`0xef0100${"ab".repeat(21)}`, 1)).toBe("smart-contract");
+  });
+
   it("builds a funding-neutral payment intent", () => {
     expect(sendIntent({ to: " pcash:recipient ", amount: "12", fee: "3", speed: "slow", ...NO_RECORDS })).toEqual({
       to: "pcash:recipient",

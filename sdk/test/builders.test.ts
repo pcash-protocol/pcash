@@ -61,8 +61,8 @@ describe("buildNativeTransfer coherence (default ECDSA rules)", () => {
   });
   const build = buildNativeTransfer(fixture);
 
-  it("emits the 18 public inputs with chainId and the recent block hash", () => {
-    expect(build.publicInputs).toHaveLength(18);
+  it("emits the 19 public inputs with chainId and the recent block hash", () => {
+    expect(build.publicInputs).toHaveLength(19);
     expect(build.publicInputs[0]).toBe(chainId);
     expect(build.publicInputs[1]).not.toBe(0n);
     // nullifiers 0..3 (index 2..5): first real, rest dummy, all distinct.
@@ -83,7 +83,7 @@ describe("buildNativeTransfer coherence (default ECDSA rules)", () => {
     const bound = buildNativeTransfer({ ...fixture, carrierContextHash });
     const { offsets } = PRIVATE_VALUE_PROFILES.S;
     expect(bound.publicInputs[offsets.carrierContextHash]).toBe(carrierContextHash);
-    expect(bound.publicInputs.at(-1)).toBe(bound.eventOpening.eventsCommitment);
+    expect(bound.publicInputs[offsets.eventsCommitment]).toBe(bound.eventOpening.eventsCommitment);
     expect(bound.transaction.global.carrierContextHash).toBe(carrierContextHash);
     expect(bound.privateValueCommitment).toBe(privateValueCommitment(bound.transaction));
     expect(privateValueCommitment({ ...bound.transaction, global: { ...bound.transaction.global, carrierContextHash: 0n } }))
@@ -105,7 +105,7 @@ describe("buildNativeTransfer coherence (default ECDSA rules)", () => {
       "issuanceRecipient",
       "issuanceOwnerCommitment",
       "relayFeeAmount",
-      "relayFeeOwnerCommitment",
+      "relayFeeOwnerCommitment", "accountCreationCommitment",
       "transactionContext",
       "notBefore",
       "validUntil",

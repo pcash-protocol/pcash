@@ -5,8 +5,6 @@ import { BN254_SCALAR_MODULUS } from "../src/crypto/field.ts";
 import {
   CONTRACT_MAX_BODY_BYTES,
   CONTRACT_MAX_TX_BYTES,
-  FUNDING_MODE_OFFSET,
-  FUNDING_MODE_UNFUNDED,
   MAX_TX_BYTES,
   TX_KIND_CONTRACT_ACCOUNT_CREATION,
   contractAccountCreationSize,
@@ -35,22 +33,21 @@ const params = {
   recentPcashBlockHash: 0x66n,
   validUntilTimestamp: 0x0102030405060708n,
 };
-// type ‖ chain ID ‖ mode 0 ‖ recentPcashBlockHash ‖ validUntilTimestamp ‖ body.
-const FROZEN_TRANSACTION = "0x02504353480000000000000000000000000000000000000000000000000000000000000000660102030405060708000000000000000000000000000000000000000000000000000000000000000011000201000000000000000000000000000000000000000000000000000000000000002200000000000000000000000000000000000000000000000000000000000000330500000000000000000000000000000000000000000000000000000000000000440000000000000000000000000000000000000000000000000000000000000055";
-/** envelope(5) ‖ mode(1) ‖ recentPcashBlockHash(32) ‖ validUntilTimestamp(8). */
-const BODY_OFFSET = 46;
+// type ‖ chain ID ‖ recentPcashBlockHash ‖ validUntilTimestamp ‖ body.
+const FROZEN_TRANSACTION = "0x025043534800000000000000000000000000000000000000000000000000000000000000660102030405060708000000000000000000000000000000000000000000000000000000000000000011000201000000000000000000000000000000000000000000000000000000000000002200000000000000000000000000000000000000000000000000000000000000330500000000000000000000000000000000000000000000000000000000000000440000000000000000000000000000000000000000000000000000000000000055";
+/** envelope(5) ‖ recentPcashBlockHash(32) ‖ validUntilTimestamp(8). */
+const BODY_OFFSET = 45;
 
 describe("unfunded contract creation", () => {
   it("matches frozen wire bytes, content address, and revision-one account leaf", () => {
     const build = buildUnfundedContractCreation(params);
     expect(toHex(build.transactionBytes)).toBe(FROZEN_TRANSACTION);
-    expect(build.transactionBytes.length).toBe(211);
-    expect(build.transactionBytes[FUNDING_MODE_OFFSET]).toBe(FUNDING_MODE_UNFUNDED);
-    expect(build.transactionBytes.length).toBe(contractAccountCreationSize(build.body.length, "unfunded"));
+    expect(build.transactionBytes.length).toBe(210);
+    expect(build.transactionBytes.length).toBe(contractAccountCreationSize(build.body.length));
     expect(build.address).toBe(0x00b4c38cdda10658734731fdde9d0bc225043b4cn);
     expect(build.accountStateCommitment).toBe(0x0cb5521888121b9fc096a3bf387ad4aaa8af754be8251468d05f4847c9c86860n);
-    expect(contractAccountCreationSize(CONTRACT_MAX_BODY_BYTES, "unfunded")).toBe(6 + 40 + CONTRACT_MAX_BODY_BYTES);
-    expect(contractAccountCreationSize(CONTRACT_MAX_BODY_BYTES, "unfunded")).toBeLessThan(CONTRACT_MAX_TX_BYTES);
+    expect(contractAccountCreationSize(CONTRACT_MAX_BODY_BYTES)).toBe(5 + 40 + CONTRACT_MAX_BODY_BYTES);
+    expect(contractAccountCreationSize(CONTRACT_MAX_BODY_BYTES)).toBe(CONTRACT_MAX_TX_BYTES);
   });
 
   it("uses the same account for different inclusion bounds", () => {
@@ -73,14 +70,14 @@ describe("unfunded contract creation", () => {
       });
       const decoded = decodeTransaction(build.transactionBytes);
       expect(decoded.kind).toBe(TX_KIND_CONTRACT_ACCOUNT_CREATION);
-      if (decoded.kind !== TX_KIND_CONTRACT_ACCOUNT_CREATION || decoded.funding.mode !== "unfunded") throw new Error("type");
+      if (decoded.kind !== TX_KIND_CONTRACT_ACCOUNT_CREATION) throw new Error("type");
       expect(decoded.body).toEqual(build.body);
       expect(decoded.publishesNkRoot).toBe(nullifierKey.publishesNkRoot);
       expect(decoded.mlKemPublicKey).toEqual(mlKemPublicKey ?? null);
       expect(decoded.functions.map(({ selector }) => selector)).toEqual([1, 5]);
-      expect(toHex(decoded.funding.recentPcashBlockHash)).toBe(`0x${"00".repeat(31)}66`);
-      expect(decoded.funding.validUntilTimestamp).toBe(params.validUntilTimestamp);
-      expect(decoded.funding).not.toHaveProperty("section");
+      expect(toHex(decoded.recentPcashBlockHash)).toBe(`0x${"00".repeat(31)}66`);
+      expect(decoded.validUntilTimestamp).toBe(params.validUntilTimestamp);
+      expect(decoded).not.toHaveProperty("section");
     }
   });
 
@@ -111,9 +108,6 @@ describe("unfunded contract creation", () => {
 
   it("rejects selector bytes outside their sets and preserves semantic-invalid words for consensus", () => {
     const { transactionBytes: entry } = buildUnfundedContractCreation(params);
-    const fundingMode = entry.slice();
-    fundingMode[FUNDING_MODE_OFFSET] = 2;
-    expect(() => decodeTransaction(fundingMode)).toThrow(/unknown contract creation funding mode 2/);
     const nkRootFlag = entry.slice();
     nkRootFlag[BODY_OFFSET] = 9;
     expect(() => decodeTransaction(nkRootFlag)).toThrow(/publishesNkRoot must be 0 or 1/);
@@ -121,16 +115,16 @@ describe("unfunded contract creation", () => {
     receiveKeyMode[BODY_OFFSET + 33] = 8;
     expect(() => decodeTransaction(receiveKeyMode)).toThrow(/receive-key mode 8/);
     const raw = entry.slice();
-    raw.fill(255, 6, 38);
+    raw.fill(255, 5, 37);
     const decoded = decodeTransaction(raw);
-    if (decoded.kind !== TX_KIND_CONTRACT_ACCOUNT_CREATION || decoded.funding.mode !== "unfunded") throw new Error("type");
-    expect(decoded.funding.recentPcashBlockHash).toEqual(new Uint8Array(32).fill(255));
+    if (decoded.kind !== TX_KIND_CONTRACT_ACCOUNT_CREATION) throw new Error("type");
+    expect(decoded.recentPcashBlockHash).toEqual(new Uint8Array(32).fill(255));
   });
 
   it("rejects unencodable caller inputs and invalid contract bodies", () => {
     const { body } = buildUnfundedContractCreation(params);
     const unfunded = (recentPcashBlockHash: bigint, validUntilTimestamp: bigint) =>
-      ({ mode: "unfunded", recentPcashBlockHash, validUntilTimestamp }) as const;
+      ({ recentPcashBlockHash, validUntilTimestamp }) as const;
     expect(() => encodeContractAccountCreation(params.pcashChainId, body, unfunded(BN254_SCALAR_MODULUS, 0n))).toThrow(/recentPcashBlockHash/);
     expect(() => encodeContractAccountCreation(params.pcashChainId, body, unfunded(1n, 1n << 64n))).toThrow(/u64/);
     expect(() => encodeContractAccountCreation(1n << 32n, body, unfunded(1n, 0n))).toThrow(/pcashChainId/);

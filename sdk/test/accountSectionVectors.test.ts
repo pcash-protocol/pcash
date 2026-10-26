@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
-  contractCreationPublicInputs,
   decodeTransactionForChain,
+  privateValuePublicInputs,
   userAccountUpdatePublicInputs,
 } from "../src/protocol/codec.ts";
 import { fromHex, toHex } from "../src/utils/hex.ts";
@@ -34,25 +34,17 @@ describe("frozen cross-language account-section vectors", () => {
       expect(bytes).toHaveLength(vector.transactionBytes);
       const decoded = decodeTransactionForChain(bytes, vectors.chainId);
       expect(decoded.kind).toBe(vector.kind);
-      if (decoded.kind !== 2 && decoded.kind !== 3) throw new Error("account section required");
-      if (decoded.kind === 2 && decoded.funding.mode !== "sponsored") throw new Error("sponsored section required");
-      const section = decoded.kind === 3 ? decoded.section
-        : decoded.funding.mode === "sponsored" ? decoded.funding.section : undefined;
-      if (!section) throw new Error("missing section");
-      expect(section.serializedPublicInputs).toHaveLength(15);
+      if (decoded.kind !== 0 && decoded.kind !== 3) throw new Error("private-value section required");
+      const section = decoded.kind === 0 ? decoded : decoded.section;
+      expect(section.serializedPublicInputs).toHaveLength(vector.wireWords.length);
       expect(section.serializedPublicInputs.map(toHex)).toEqual(vector.wireWords);
-      expect(bytes.slice(vector.sectionOffset, vector.sectionOffset + 15 * 32)).toEqual(
+      expect(bytes.slice(vector.sectionOffset, vector.sectionOffset + vector.wireWords.length * 32)).toEqual(
         fromHex(vector.wireWords.map((word) => word.slice(2)).join("")),
       );
-      const statement = decoded.kind === 3
-        ? userAccountUpdatePublicInputs(decoded)
-        : contractCreationPublicInputs(decoded, BigInt(vector.statementWords[SECTION_WORDS]!));
+      const statement = decoded.kind === 0 ? privateValuePublicInputs(decoded) : userAccountUpdatePublicInputs(decoded);
       expect(statement).toEqual(vector.statementWords.map(BigInt));
-      expect(statement).toHaveLength(SECTION_WORDS + 1);
-      expect(statement.filter((word) => word === 0n)).toEqual([0n]);
-      expect(statement.slice(offsets.openFeeAmount, offsets.notBefore + 1)).toEqual([
-        BigInt(vector.wireWords[10]!), 0n, BigInt(vector.wireWords[11]!),
-      ]);
+      expect(statement).toHaveLength(SECTION_WORDS + Number(decoded.kind === 3));
+      expect(statement[offsets.issuanceOwner]).toBe(0n);
       expect(section.arena).toHaveLength(PRIVATE_VALUE_PROFILES.S.arenaBytes);
     });
   }

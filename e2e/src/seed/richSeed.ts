@@ -15,7 +15,7 @@ import {
   type StatusResult,
 } from "@pcash/sdk/clients";
 import { createSelectedRelayQuote, privateKeyPcashActionSigner, type SelectedRelayQuoteProvider } from "@pcash/sdk/eip712";
-import { buildSponsoredContractCreation } from "../scenarios/contractPublication.ts";
+import { buildAttachedContractCreation } from "../scenarios/contractPublication.ts";
 import { PRIVATE_VALUE_PROFILES } from "@pcash/sdk/constants";
 import { MAX_PCASH_BATCH_BYTES } from "@pcash/sdk/l1";
 import type { PrivateKeyRelaySubmitter } from "@pcash/sdk/node";
@@ -1224,8 +1224,12 @@ export async function runRichSeed(params: RichSeedParams): Promise<RichSeedResul
           gate.satisfy(0, label);
           return;
         }
-        actor.submitter.plan(0, label);
-        await actor.wallet.updateAccount();
+        const head = await node.status();
+        gate.add(0, label, await controls.signedAccountCreation({
+          identity: { label, privateKey: actor.privateKey, profile: actor.profile, address: actor.address },
+          network, recentPcashBlockHash: BigInt(head.latestBlockHash),
+          validUntilTimestamp: head.latestBlockTimestamp + 1_800n, receiveKey: true,
+        }));
       })));
 
     const accountEntries = [...(gate.waves.get(0) ?? [])].sort((left, right) =>
@@ -1302,11 +1306,10 @@ export async function runRichSeed(params: RichSeedParams): Promise<RichSeedResul
       receiveKey: false,
     }));
     const vault = controls.privateVaultContract("private-vault", [actors.S.profile, actors.R.profile, actors.M.profile]);
-    // The vault's sponsored creation pays a zero fee: it spends nothing and
-    // only authorizes the publication.
-    const vaultEntry = await buildSponsoredContractCreation({
+    // The vault body rides on an all-dummy action whose issuance pays the poster.
+    const vaultEntry = await buildAttachedContractCreation({
       node,
-      sponsor: {
+      sender: {
         wallet: actors.S.profile,
         signer: privateKeyPcashActionSigner(fromHex(actors.S.privateKey)),
       },
@@ -1336,8 +1339,13 @@ export async function runRichSeed(params: RichSeedParams): Promise<RichSeedResul
         receiveKey: true,
       }), expected);
     }
-    gate.add(0, "control-contract-address-exists", paidContract.entry, "contractAddressExists");
-    gate.add(0, "control-contract-funding-mode", controls.unknownFundingModeContract(paidContract.entry), "unknownFundingMode");
+    const paidAttachment = decodeTransaction(paidContract.entry);
+    if (paidAttachment.kind !== 0 || paidAttachment.accountCreation?.kind !== "contract") throw new Error("paid creation must carry its body");
+    gate.add(0, "control-contract-address-exists", controls.unfundedContractCreation({
+      network, body: paidAttachment.accountCreation.body, recentPcashBlockHash: BigInt(head0.latestBlockHash),
+      validUntilTimestamp: head0.latestBlockTimestamp + 1_800n,
+    }), "contractAddressExists");
+    gate.add(0, "control-contract-attachment-tag", controls.unknownAttachmentTagContract(paidContract.entry), "unknownAccountCreationTag");
     gate.add(0, "control-contract-nk-root-flag", controls.unknownNkRootFlagContract(paidContract.entry), "unknownPublishesNkRootFlag");
     gate.add(0, "control-contract-noncanonical-field", controls.nonCanonicalFieldContract(paidContract.entry), "nonCanonicalContractField");
     gate.add(0, "control-contract-empty-functions", controls.emptyFunctionsContract(paidContract.entry), "emptyContractFunctionSet");

@@ -73,7 +73,7 @@ const SEED_WAVES: readonly SeedWaveDescriptor[] = [
       entry("control-account-stale-window", "recentPcashBlockNotInWindow"),
       entry("control-account-expired", "expired"),
       entry("control-contract-address-exists", "contractAddressExists"),
-      entry("control-contract-funding-mode", "unknownFundingMode"),
+      entry("control-contract-attachment-tag", "unknownAccountCreationTag"),
       entry("control-contract-nk-root-flag", "unknownPublishesNkRootFlag"),
       entry("control-contract-noncanonical-field", "nonCanonicalContractField"),
       entry("control-contract-empty-functions", "emptyContractFunctionSet"),

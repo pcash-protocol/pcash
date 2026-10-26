@@ -19,7 +19,7 @@ describe("ordinary native-note consolidation planning", () => {
   it("plans L inventory reductions with and without an issuance note per merge", () => {
     const inventory = Array(5000).fill(100n);
     expect(planNativeConsolidation(inventory, 0n, undefined, { shape: 1 }))
-      .toMatchObject({ shape: 1, transactions: 162, canCover: true, batchBytesPerTransaction: 80269 });
+      .toMatchObject({ shape: 1, transactions: 162, canCover: true, batchBytesPerTransaction: 80270 });
     expect(planNativeConsolidation(inventory, 0n, undefined, { shape: 1, issuanceNote: true }))
       .toMatchObject({ transactions: 167, canCover: true });
   });

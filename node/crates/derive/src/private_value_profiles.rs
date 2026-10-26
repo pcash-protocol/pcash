@@ -18,13 +18,14 @@ pub struct PrivateValueProfile {
     pub not_before_offset: usize,
     pub valid_until_offset: usize,
     pub carrier_context_hash_offset: usize,
+    pub account_creation_commitment_offset: usize,
 }
 
 pub const S: PrivateValueProfile = PrivateValueProfile {
     shape_id: 0,
     inputs: 4,
     outputs: 5,
-    public_inputs: 18,
+    public_inputs: 19,
     wire_inputs: 16,
     arena_bytes: 2632,
     chain_id_offset: 0,
@@ -37,13 +38,14 @@ pub const S: PrivateValueProfile = PrivateValueProfile {
     not_before_offset: 14,
     valid_until_offset: 15,
     carrier_context_hash_offset: 16,
+    account_creation_commitment_offset: 18,
 };
 
 pub const L: PrivateValueProfile = PrivateValueProfile {
     shape_id: 1,
     inputs: 32,
     outputs: 32,
-    public_inputs: 73,
+    public_inputs: 74,
     wire_inputs: 71,
     arena_bytes: 16672,
     chain_id_offset: 0,
@@ -56,6 +58,7 @@ pub const L: PrivateValueProfile = PrivateValueProfile {
     not_before_offset: 69,
     valid_until_offset: 70,
     carrier_context_hash_offset: 71,
+    account_creation_commitment_offset: 73,
 };
 
 pub const fn private_value_profile(shape: u8) -> Option<PrivateValueProfile> {

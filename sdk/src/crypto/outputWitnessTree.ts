@@ -10,7 +10,7 @@
 
 import { MERKLE_DEPTH } from "../constants/params.ts";
 import { fieldToHex } from "./field.ts";
-import { emptyLadder } from "./merkle.ts";
+import { emptyLadder, rootFromIndex } from "./merkle.ts";
 import { poseidon2 } from "./poseidon2.ts";
 
 /** The append state of an output tree. */
@@ -102,6 +102,24 @@ export class OutputWitnessTree {
       const start = ((index >> BigInt(h)) + 1n) << BigInt(h);
       return this.countValue > start ? edgeNode(this.countValue, this.ommers, h) : ladder[h]!;
     });
+  }
+
+  /**
+   * Mark a leaf appended before it was marked, from its siblings in this tree
+   * or any later one. Siblings of subtrees not yet complete at this count are
+   * dropped and completed by later appends, as after `rewind`. False, leaving
+   * the tree unchanged, when the path does not open this tree's root.
+   */
+  markPath(index: bigint, leaf: bigint, siblings: readonly bigint[]): boolean {
+    if (index >= this.countValue || siblings.length !== MERKLE_DEPTH || this.marks.has(index)) return false;
+    this.marks.set(index, siblings.map((sibling, h) =>
+      bit(index, h) || ((((index >> BigInt(h)) ^ 1n) + 1n) << BigInt(h)) <= this.countValue ? sibling : undefined));
+    if (rootFromIndex(leaf, index, this.witness(index)) !== this.root()) {
+      this.marks.delete(index);
+      return false;
+    }
+    this.enqueue(index);
+    return true;
   }
 
   unmark(index: bigint): void {

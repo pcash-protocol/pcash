@@ -273,6 +273,7 @@ function mergeWalletState(base: WalletFileData, local: WalletFileData, fresh: Wa
     "nextOutputIndex",
     "historyStartOutputIndex",
     "historyRevision",
+    "accountActivationRevision",
     "syncedThrough",
     "finalizedThrough",
     "fullRescanRequired",

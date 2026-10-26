@@ -142,6 +142,13 @@ fn prepare_carrier<'a, V: Verifier>(
             if let AdmittedTransaction::UserAccountCreation(creation) = transaction {
                 creation.receive_key_hash();
             }
+            if let Some(section) = transaction.section() {
+                if let Some(crate::AccountCreationAttachment::User(creation)) =
+                    section.account_creation()
+                {
+                    creation.receive_key_hash();
+                }
+            }
             if let Some(statement) = ProofStatement::reachable(
                 rules,
                 transaction,
@@ -215,7 +222,7 @@ mod tests {
     }
 
     fn stub_rules() -> ProtocolRules {
-        ProtocolRules::new([vec![], vec![]], vec![], vec![])
+        ProtocolRules::new([vec![], vec![]], vec![])
     }
 
     fn test_source(inbox: Address) -> DerivationSource {

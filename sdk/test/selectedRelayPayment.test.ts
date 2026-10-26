@@ -59,7 +59,7 @@ async function fixture(amount = 77n, recipientKey = receive.publicKey, bodyOverr
   const arena = randomArena(PRIVATE_VALUE_PROFILES.S.shapeId);
   const publicInputs = [
     chainId, 123n, ...nullifiers, ...bodies,
-    deliveryCommitment(outputData, arena), 0n, BigInt(quote.issuanceOwnerCommitment), 0n, 1000n, 0n, 0n,
+    deliveryCommitment(outputData, arena), 0n, BigInt(quote.issuanceOwnerCommitment), 0n, 1000n, 0n, 0n, 0n,
   ];
   const entry = encodePrivateValueTransaction({
     shape: PRIVATE_VALUE_PROFILES.S.shapeId, publicInputs,
@@ -92,7 +92,7 @@ describe("selected relay private fee inspection", () => {
     const poster = posterPayoutOpening(recipient.address, recipient.nkRoot, 2n);
     const issuanceWord = `0x${BigInt(quote.issuanceOwnerCommitment).toString(16).padStart(64, "0")}`;
     const item = { contentHash, statementId: contentHash, stableId: contentHash, conflictKeys: [],
-      kind: "privateValue", fundingMode: null as "unfunded" | null, byteSize: BigInt(entry.length), openFeeAmount: 0n,
+      kind: "privateValue", byteSize: BigInt(entry.length), openFeeAmount: 0n,
       issuanceOwnerCommitment: issuanceWord, issuanceRoute: "designated",
       validUntil: null, status: "ready", conflictCount: 0n, receivedAtUnixMs: 1n,
       headCheckedBlock: 2n, headCheckedBlockHash: headHash, rawTransaction: null };
@@ -108,7 +108,7 @@ describe("selected relay private fee inspection", () => {
     const irrelevant = Array.from({ length: 3_200 }, (_, index) => ({ ...item,
       contentHash: `0x${(BigInt(index) + 1n).toString(16).padStart(64, "0")}`,
       kind: index % 2 === 0 ? "userAccountCreation" : "contractAccount",
-      fundingMode: index % 2 === 0 ? null : "unfunded" as const, issuanceOwnerCommitment: `0x${"00".repeat(32)}`,
+      issuanceOwnerCommitment: `0x${"00".repeat(32)}`,
       issuanceRoute: "none", receivedAtUnixMs: BigInt(index) + 2n,
     }));
     const pages = Array.from({ length: 32 }, (_, index) => irrelevant.slice(index * 100, (index + 1) * 100));
@@ -151,7 +151,7 @@ describe("selected relay private fee inspection", () => {
     expect((await bounded.relay({ noSubmit: true })).requested).toEqual([]);
   });
 
-  it("values a zero-open-fee sponsored contract creation's private relay payment and nothing in an unfunded one", async () => {
+  it("values a zero-open-fee attached contract creation's private relay payment and nothing in an unfunded one", async () => {
     const { entry } = await fixture();
     const decoded = decodeTransaction(entry);
     if (decoded.kind !== 0) throw new Error("type");
@@ -162,14 +162,12 @@ describe("selected relay private fee inspection", () => {
       functions: [{ selector: functionSelector(0), applicationVkHash: 2n, configurationCommitment: 3n }],
     });
     publicInputs[PRIVATE_VALUE_PROFILES.S.offsets.issuanceOwner] = 0n;
-    const sponsored = encodeContractAccountCreation(chainId, body, {
-      mode: "sponsored",
-      section: { publicInputs, proof: new Uint8Array(WIRE_PROOF_BYTES), outputData: decoded.outputData, arena: decoded.arena },
-    });
-    expect(inspectPrivateRelayValue({ transactionBytes: sponsored, status, recipient })).toEqual({
+    const attached = encodePrivateValueTransaction({ publicInputs, proof: new Uint8Array(WIRE_PROOF_BYTES), outputData: decoded.outputData, arena: decoded.arena,
+      accountCreation: { kind: "contract", body } });
+    expect(inspectPrivateRelayValue({ transactionBytes: attached, status, recipient })).toEqual({
       nativeAmount: 77n, nativeOutputSlots: [4], issuanceOwnerCommitment: null,
     });
-    const unfunded = encodeContractAccountCreation(chainId, body, { mode: "unfunded", recentPcashBlockHash: 123n, validUntilTimestamp: 1000n });
+    const unfunded = encodeContractAccountCreation(chainId, body, { recentPcashBlockHash: 123n, validUntilTimestamp: 1000n });
     expect(inspectPrivateRelayValue({ transactionBytes: unfunded, status, recipient })).toEqual({
       nativeAmount: 0n, nativeOutputSlots: [], issuanceOwnerCommitment: null,
     });

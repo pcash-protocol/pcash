@@ -7,10 +7,10 @@ import { type NetworkConfigLike, networkForChain } from "../protocol/network.ts"
 import { assetCreationEip712TypeFor, batchTransferEip712TypeFor } from "./semanticRuleTypes.ts";
 
 export const ASSET_PAYMENT_EIP712_TYPE =
-  "PcashAssetPayment(uint256 pcashChainId,uint256 assetId,address recipient,uint256 amount,uint256 openFeeAmount,address issuanceRecipient,uint256 issuanceOwnerCommitment,uint256 relayFeeAmount,uint256 relayFeeOwnerCommitment,uint256 transactionContext,uint64 notBefore,uint64 validUntil)";
+  "PcashAssetPayment(uint256 pcashChainId,uint256 assetId,address recipient,uint256 amount,uint256 openFeeAmount,address issuanceRecipient,uint256 issuanceOwnerCommitment,uint256 relayFeeAmount,uint256 relayFeeOwnerCommitment,uint256 accountCreationCommitment,uint256 transactionContext,uint64 notBefore,uint64 validUntil)";
 
 export const ASSET_BURN_EIP712_TYPE =
-  "PcashAssetBurn(uint256 pcashChainId,uint256 assetId,uint256 burnAmount,uint256 openFeeAmount,address issuanceRecipient,uint256 issuanceOwnerCommitment,uint256 relayFeeAmount,uint256 relayFeeOwnerCommitment,uint256 transactionContext,uint64 notBefore,uint64 validUntil)";
+  "PcashAssetBurn(uint256 pcashChainId,uint256 assetId,uint256 burnAmount,uint256 openFeeAmount,address issuanceRecipient,uint256 issuanceOwnerCommitment,uint256 relayFeeAmount,uint256 relayFeeOwnerCommitment,uint256 accountCreationCommitment,uint256 transactionContext,uint64 notBefore,uint64 validUntil)";
 
 export function batchTransferEip712Type(shape: PrivateValueShape = PRIVATE_VALUE_PROFILES.S.shapeId): string {
   return batchTransferEip712TypeFor(privateValueProfile(shape).outputs);
@@ -18,7 +18,7 @@ export function batchTransferEip712Type(shape: PrivateValueShape = PRIVATE_VALUE
 export const BATCH_TRANSFER_EIP712_TYPE = batchTransferEip712Type();
 
 export const CONTRACT_FEE_SPONSORSHIP_EIP712_TYPE =
-  "PcashContractInteraction(uint256 pcashChainId,address sponsoredContract,uint256 openFeeAmount,address issuanceRecipient,uint256 issuanceOwnerCommitment,uint256 relayFeeAmount,uint256 relayFeeOwnerCommitment,uint256 transactionContext,uint64 notBefore,uint64 validUntil)";
+  "PcashContractInteraction(uint256 pcashChainId,address sponsoredContract,uint256 openFeeAmount,address issuanceRecipient,uint256 issuanceOwnerCommitment,uint256 relayFeeAmount,uint256 relayFeeOwnerCommitment,uint256 accountCreationCommitment,uint256 transactionContext,uint64 notBefore,uint64 validUntil)";
 
 /**
  * One signed output declaration; a zero recipient means "not externally
@@ -37,6 +37,7 @@ export interface AssetPaymentMessage {
   issuanceOwnerCommitment: FieldNumberish;
   relayFeeAmount: FieldNumberish;
   relayFeeOwnerCommitment: FieldNumberish;
+  accountCreationCommitment: FieldNumberish;
   transactionContext: FieldNumberish;
   notBefore: FieldNumberish;
   validUntil: FieldNumberish;
@@ -51,6 +52,7 @@ export interface AssetBurnMessage {
   issuanceOwnerCommitment: FieldNumberish;
   relayFeeAmount: FieldNumberish;
   relayFeeOwnerCommitment: FieldNumberish;
+  accountCreationCommitment: FieldNumberish;
   transactionContext: FieldNumberish;
   notBefore: FieldNumberish;
   validUntil: FieldNumberish;
@@ -66,6 +68,7 @@ export interface BatchTransferMessage {
   issuanceOwnerCommitment: FieldNumberish;
   relayFeeAmount: FieldNumberish;
   relayFeeOwnerCommitment: FieldNumberish;
+  accountCreationCommitment: FieldNumberish;
   transactionContext: FieldNumberish;
   notBefore: FieldNumberish;
   validUntil: FieldNumberish;
@@ -80,6 +83,7 @@ export interface ContractFeeSponsorshipMessage {
   issuanceOwnerCommitment: FieldNumberish;
   relayFeeAmount: FieldNumberish;
   relayFeeOwnerCommitment: FieldNumberish;
+  accountCreationCommitment: FieldNumberish;
   transactionContext: FieldNumberish;
   notBefore: FieldNumberish;
   validUntil: FieldNumberish;
@@ -157,6 +161,7 @@ export interface AssetCreationMessage {
   issuanceOwnerCommitment: FieldNumberish;
   relayFeeAmount: FieldNumberish;
   relayFeeOwnerCommitment: FieldNumberish;
+  accountCreationCommitment: FieldNumberish;
   transactionContext: FieldNumberish;
   notBefore: FieldNumberish;
   validUntil: FieldNumberish;

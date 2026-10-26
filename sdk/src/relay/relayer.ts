@@ -516,7 +516,7 @@ export class Relayer {
     if (recipient.mlKemSecretKey === undefined) return inspection;
     const candidates = items.filter((item) => item.status === "ready"
       && item.openFeeAmount === 0n && item.kind !== "userAccountCreation"
-      && item.fundingMode !== "unfunded");
+      && item.kind !== "contractAccount");
     for (const candidate of candidates) {
       const full = candidate.rawTransaction === null
         ? await this.#nodeRpc("reading mempool content " + candidate.contentHash, () =>

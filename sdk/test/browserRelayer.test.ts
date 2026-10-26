@@ -47,7 +47,6 @@ function selectedMempoolItem(): MempoolItemResult {
     stableId: "1",
     conflictKeys: [],
     kind: "privateValue",
-    fundingMode: null,
     byteSize: BigInt(ENTRY.length),
     openFeeAmount: 7n,
     issuanceOwnerCommitment: `0x${"00".repeat(20)}`,
@@ -75,7 +74,7 @@ function acceptedReceipt(): ReceiptResult {
     settledOpenFeeAmount: 0n,
     settledIssuanceAmount: 0n,
     kind: "privateValue",
-    fundingMode: null,
+    accountCreation: 0 as const,
     inclusion: {
       l1BlockNumber: 9n,
       l1BlockHash: L1_BLOCK_HASH,

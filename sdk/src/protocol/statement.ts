@@ -88,7 +88,7 @@ export function sponsoredTransferActionCommitment(
   return actionCommitment(SPONSORED_TRANSFER_ACTION_DOMAIN, pcashChainId, privateValueCommitment, 0n);
 }
 
-/** A user account pays the native fee for one named contract: its asset action in a sponsored transfer, or its creation. */
+/** A user account pays the native fee for one named contract: its asset action in a sponsored transfer. */
 export function contractFeeSponsorshipActionCommitment(
   pcashChainId: FieldNumberish,
   privateValueCommitment: FieldNumberish,

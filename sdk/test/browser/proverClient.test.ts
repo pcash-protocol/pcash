@@ -181,7 +181,7 @@ test("asset transfers submit one private CHONK stack", async () => {
   });
 });
 
-for (const method of ["proveTransfer", "proveUserAccountUpdate", "proveSponsoredContractCreation"] as const) {
+for (const method of ["proveTransfer", "proveUserAccountUpdate"] as const) {
   test(`${method} selects the larger event's CRS and executes that event`, async () => {
     await withFakes(async () => {
       const eventUrl = "/prover/larger_event.json";

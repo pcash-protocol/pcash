@@ -95,10 +95,6 @@ export const ACCOUNT_UPDATE_PUBLIC_INPUT_NAMES = [
   "account_update_commitment",
 ] as const;
 
-export const CONTRACT_CREATION_PUBLIC_INPUT_NAMES = [
-  ...TYPE0_PUBLIC_INPUT_NAMES,
-  "contract_address",
-] as const;
 
 /** A browser proving operation was canceled before it produced a usable proof. */
 export class ProverAbortError extends Error {
@@ -261,7 +257,7 @@ function measureAssembly<T>(
 type CircuitName = keyof typeof CIRCUIT_URLS;
 type KernelProof = Prover["proveTransfer"];
 type KernelProofRequest = Parameters<KernelProof>[0];
-type KernelMethod = "proveTransfer" | "proveUserAccountUpdate" | "proveSponsoredContractCreation";
+type KernelMethod = "proveTransfer" | "proveUserAccountUpdate";
 type ChonkStep = Extract<WorkerOperationRequest, { kind: "chonk" }>["steps"][number];
 
 /** A transaction family's hiding kernel, which closes its protocol kernel into one CHONK proof. */
@@ -323,12 +319,7 @@ const KERNEL_PIPELINES: Record<Exclude<KernelMethod, "proveTransfer">, KernelPip
     hidingKernel: { circuit: "user_account_update_hiding_kernel", label: "user account update hiding kernel" },
     publicInputNames: ACCOUNT_UPDATE_PUBLIC_INPUT_NAMES,
   },
-  proveSponsoredContractCreation: {
-    authorization: { circuit: "account_rule_contract_fee_sponsorship_ecdsa", label: "installed sponsorship rule" },
-    kernel: { circuit: "contract_creation_kernel", label: "sponsored contract creation kernel" },
-    hidingKernel: { circuit: "contract_creation_hiding_kernel", label: "contract creation hiding kernel" },
-    publicInputNames: CONTRACT_CREATION_PUBLIC_INPUT_NAMES,
-  },
+
 };
 
 function kernelPipeline(method: KernelMethod, request: KernelProofRequest): KernelPipeline {
@@ -549,8 +540,6 @@ function proverForSession(session: WorkerSession): Prover & AssetProver & ChonkP
     proveKernelPipeline(session, kernelPipeline("proveTransfer", args), args, onStatus, signal),
   proveUserAccountUpdate: (args, onStatus, signal) =>
     proveKernelPipeline(session, kernelPipeline("proveUserAccountUpdate", args), args, onStatus, signal),
-  proveSponsoredContractCreation: (args, onStatus, signal) =>
-    proveKernelPipeline(session, kernelPipeline("proveSponsoredContractCreation", args), args, onStatus, signal),
 
   async proveAssetAction(args, onStatus, signal): Promise<ProofResult> {
       return proveAssetAction(session, args, onStatus, signal);
@@ -606,8 +595,6 @@ export function createBrowserProverSession(
       enqueue((_active, prover) => prover.proveTransfer(args, onStatus, signal)),
     proveUserAccountUpdate: (args, onStatus, signal) =>
       enqueue((_active, prover) => prover.proveUserAccountUpdate(args, onStatus, signal)),
-    proveSponsoredContractCreation: (args, onStatus, signal) =>
-      enqueue((_active, prover) => prover.proveSponsoredContractCreation(args, onStatus, signal)),
     proveAssetAction: (args, onStatus, signal) =>
       enqueue((_active, prover) => prover.proveAssetAction(args, onStatus, signal)),
     destroy: () => {
@@ -740,7 +727,6 @@ export function createBrowserProver(
   },
   proveTransfer: oneShotPipeline("proveTransfer"),
   proveUserAccountUpdate: oneShotPipeline("proveUserAccountUpdate"),
-  proveSponsoredContractCreation: oneShotPipeline("proveSponsoredContractCreation"),
   proveAssetAction: (args, onStatus, signal) =>
     withOneShotProver(
       oneShotSrsPoints(assetActionCircuitUrls(args), profiles),

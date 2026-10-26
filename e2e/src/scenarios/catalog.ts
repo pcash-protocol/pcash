@@ -64,6 +64,11 @@ export const SCENARIO_CATALOG: readonly ScenarioCatalogEntry[] = [
     nodeCount: 1,
   },
   {
+    name: "direct-send",
+    description: "a payment to an address with no account, its link rebuilt from the sender's seed, imported, set up, spent, and restored from setup's record",
+    nodeCount: 1,
+  },
+  {
     name: "seed-wallet",
     description: "production CLI onboarding with a scripted terminal, service registration, real website-profile payment, native-proof spending, restart and phrase-only recovery",
     local: true,

@@ -84,7 +84,7 @@ function accepted(): ReceiptResult {
     settledOpenFeeAmount: 0n,
     settledIssuanceAmount: 0n,
     kind: "privateValue",
-    fundingMode: null,
+    accountCreation: 0 as const,
     inclusion: {
       l1BlockNumber: 1n,
       l1BlockHash: word("cc"),

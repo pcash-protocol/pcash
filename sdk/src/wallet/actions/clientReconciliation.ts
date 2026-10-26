@@ -63,13 +63,13 @@ function removePendingAssetOutputs(data: WalletFileData, action: PendingAssetAct
   removePendingNotesForTransaction(data, action.contentHash);
 }
 
-type Resolution =
-  | { state: "pending" }
+export type ValueTransactionResolution =
+  | { state: "pending"; ours?: NullifierConsumption; first?: NullifierConsumption }
   | { state: "expired" }
   | { state: "settled"; ours: NullifierConsumption | undefined; first: NullifierConsumption };
 
 /**
- * Resolve one journaled nullifier tuple against the synced chain. Bookkeeping
+ * Resolve one watched nullifier tuple against the synced chain. Bookkeeping
  * follows finality: a consuming transaction settles the action once its block
  * is finalized, and a missed deadline releases it once finalized time has
  * passed it. Head is not proof either way, since a reorg can drop an
@@ -77,13 +77,13 @@ type Resolution =
  * deadline; until finality the inputs stay reserved and the bytes stay
  * retryable.
  */
-function resolveTuple(
+export function resolveValueTransaction(
   chain: WalletChainState | null,
   status: StatusResult,
   contentHash: string,
   nullifiers: readonly string[],
   validUntilTimestamp: string,
-): Resolution {
+): ValueTransactionResolution {
   const consumed = (chain?.consumption(nullifiers) ?? []).filter(
     (consumption): consumption is NullifierConsumption => consumption !== null,
   );
@@ -94,8 +94,10 @@ function resolveTuple(
       && status.finalizedBlockTimestamp > BigInt(validUntilTimestamp);
     return expired ? { state: "expired" } : { state: "pending" };
   }
-  if (consumed.some((consumption) => consumption.pcashNumber > status.finalizedBlock)) return { state: "pending" };
   const ours = consumed.find((consumption) => consumption.contentHash.toLowerCase() === contentHash.toLowerCase());
+  if (consumed.some((consumption) => consumption.pcashNumber > status.finalizedBlock)) {
+    return { state: "pending", first: consumed[0]!, ...(ours === undefined ? {} : { ours }) };
+  }
   return { state: "settled", ours, first: consumed[0]! };
 }
 
@@ -107,7 +109,7 @@ export function reconcilePendingNoteFundedTransfers(
 ): boolean {
   let changed = false;
   for (const transfer of [...(data.pendingNoteFundedTransfers ?? [])]) {
-    const resolution = resolveTuple(
+    const resolution = resolveValueTransaction(
       chain,
       status,
       transfer.contentHash,
@@ -142,7 +144,7 @@ function reconcilePendingAssetActions(
 ): boolean {
   let changed = false;
   for (const action of [...(data.pendingAssetActions ?? [])]) {
-    const resolution = resolveTuple(
+    const resolution = resolveValueTransaction(
       chain,
       status,
       action.contentHash,

@@ -7,11 +7,9 @@ const state = vi.hoisted(() => ({
   address: `0x${"12".repeat(20)}`,
   connectedAccount: undefined as string | undefined,
   signedIn: false,
-  cachedHistory: vi.fn(),
   account: vi.fn(), nativeActivity: vi.fn(), contract: vi.fn(),
 }));
-vi.mock("../../lib/WalletProvider.tsx", () => ({ useWallet: () => ({ accountRecord: "present", connectedAccount: state.connectedAccount, phase: "ready", profile: state.signedIn ? { address: BigInt(state.address) } : undefined, funds: { total: 123n * 10n ** 18n } }) }));
-vi.mock("../../lib/useCachedAccountHistory.ts", () => ({ useCachedAccountHistory: state.cachedHistory }));
+vi.mock("../../lib/WalletProvider.tsx", () => ({ useWallet: () => ({ accountRecord: "present", connectedAccount: state.connectedAccount, phase: "ready", profile: state.signedIn ? { address: BigInt(state.connectedAccount ?? state.address) } : undefined, funds: { total: 123n * 10n ** 18n } }) }));
 vi.mock("../../lib/useNativeActivity.ts", () => ({ useNativeActivity: state.nativeActivity }));
 vi.mock("../../names/useEthereumName.ts", () => ({ useEthereumNameResolver: () => undefined, useEthereumName: () => undefined, useEthereumIdentity: () => ({}), useNameAddress: () => ({ state: "unresolved" }) }));
 vi.mock("../explorer/ExplorerProvider.tsx", () => ({
@@ -52,7 +50,6 @@ beforeEach(() => {
   state.signedIn = false;
   state.account.mockReturnValue({ accountKind: 1, accountRevision: 1n, material: { status: "unavailable" } });
   state.nativeActivity.mockReturnValue({});
-  state.cachedHistory.mockReturnValue({ phase: "locked" });
 });
 
 describe("contract address routing", () => {
@@ -62,7 +59,6 @@ describe("contract address routing", () => {
     expect(state.contract).toHaveBeenCalledWith(expect.objectContaining({ address: state.address, activity: expect.anything() }));
     expect(html).toContain('data-testid="contract-view"');
     expect(state.nativeActivity).not.toHaveBeenCalled();
-    expect(state.cachedHistory).not.toHaveBeenCalled();
     expect(html).not.toContain('aria-label="PCASH balance"');
     expect(html).not.toContain('aria-label="Account sections"');
     expect(html).not.toContain("hasn&#x27;t set up PCASH yet");
@@ -106,12 +102,20 @@ describe("contract address routing", () => {
     expect(owner).not.toContain(">Send</button>");
   });
 
-  it("recognizes a returning owner from the saved sign-in without a connection", () => {
-    state.account.mockReturnValue({ accountKind: 0, accountRevision: 1n, receiveKeyHash: `0x${"11".repeat(32)}`, material: { status: "available", mlKem768PublicKey: "0x00" } });
-    state.cachedHistory.mockReturnValue({ phase: "ready", checking: false, failed: false, funds: { total: 7n * 10n ** 18n } });
+  it.each([
+    [undefined, false],
+    [`0x${"34".repeat(20)}`, false],
+    [`0x${"34".repeat(20)}`, true],
+  ] as const)("keeps a non-owner's balance and activity private: %s, signed in: %s", (connectedAccount, signedIn) => {
+    state.account.mockReturnValue({ accountKind: 0, accountRevision: 1n, receiveKeyHash: `0x${"11".repeat(32)}` });
+    state.connectedAccount = connectedAccount;
+    state.signedIn = signedIn;
     const html = render();
-    expect(html).toContain(">Receive</button>");
-    expect(html).not.toContain(">Send</button>");
+    expect(html).toContain(">Send</button>");
+    expect(html).not.toContain(">Receive</button>");
+    expect(html).toContain('aria-label="Private"');
+    expect(html).not.toContain("123 PCASH");
+    expect(html).not.toContain("Owner activity");
   });
 
   it("offers Send to a registered account while the index has not caught up with its receive key", () => {
@@ -126,7 +130,17 @@ describe("contract address routing", () => {
     state.connectedAccount = state.address;
     expect(render()).toContain(">Set up PCASH</button>");
     state.connectedAccount = undefined;
-    expect(render()).toContain("This address hasn&#x27;t set up PCASH yet.");
+    const visitor = render();
+    expect(visitor).toContain("This address hasn&#x27;t set up PCASH yet.");
+    // A visitor's payment to it is a direct send.
+    expect(visitor).toContain(">Send</button>");
+  });
+
+  it("offers no Send to a registered account that publishes no receive key", () => {
+    state.account.mockReturnValue({ accountKind: 0, accountRevision: 1n, receiveKeyHash: `0x${"00".repeat(32)}`, material: { status: "notPresent" } });
+    const html = render();
+    expect(html).toContain("This address hasn&#x27;t set up PCASH yet.");
+    expect(html).not.toContain(">Send</button>");
   });
 
   it("keeps address identity on account lookup failure without guessing a user account", () => {
@@ -170,12 +184,13 @@ describe("user account page", () => {
     expect(html).not.toContain("Sign in to see your activity.");
   });
 
-  it("keeps a cached balance without listing private payments to a visitor", () => {
-    state.cachedHistory.mockReturnValue({ phase: "ready", checking: false, failed: false, funds: { total: 7n * 10n ** 18n } });
+  it("shows the connected owner's balance with its private activity", () => {
+    state.connectedAccount = state.address;
+    state.signedIn = true;
     const html = render();
-    expect(state.cachedHistory).toHaveBeenCalledWith(state.address);
-    expect(html).toContain("7 PCASH");
-    expect(html).toContain("Account history");
-    expect(html).not.toContain("Owner activity");
+    expect(html).toContain("123 PCASH");
+    expect(html).toContain("Owner activity");
+    expect(html).toContain(">Receive</button>");
+    expect(html).not.toContain("Account history");
   });
 });

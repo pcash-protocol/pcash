@@ -1008,7 +1008,7 @@ mod payout_tests {
         let results = (0..count)
             .map(|index| TransactionResult {
                 tx_type: 1,
-                funding_mode: 0,
+                account_creation: 0,
                 l1_transaction_index: 0,
                 batch_item_index: index,
                 outcome: TransactionOutcome::Succeeded,
@@ -1310,7 +1310,7 @@ pub fn get_result_proof(
             };
             ResultLeafDto::Transaction {
                 tx_type: result.tx_type,
-                funding_mode: result.funding_mode,
+                account_creation: result.account_creation,
                 l1_transaction_index: result.l1_transaction_index,
                 batch_item_index: result.batch_item_index,
                 outcome: result.outcome.as_u16(),
@@ -1404,6 +1404,7 @@ mod result_proof_tests {
         bytes.extend_from_slice(&chain_id.to_be_bytes());
         bytes.push(shape as u8);
         bytes.extend(std::iter::repeat_n(0, layout.section_bytes()));
+        bytes.push(0);
         bytes
     }
 
@@ -1423,7 +1424,7 @@ mod result_proof_tests {
         );
         pcash_state::TransactionResult {
             tx_type: transaction.kind(),
-            funding_mode: 0,
+            account_creation: 0,
             l1_transaction_index,
             batch_item_index: 0,
             outcome: pcash_state::TransactionOutcome::Succeeded,
@@ -1456,7 +1457,7 @@ mod result_proof_tests {
             genesis_l1_block_hash: B256::repeat_byte(1),
         };
         let mut state = MemState::new(source);
-        let rules = pcash_derive::ProtocolRules::new([vec![1], vec![2]], vec![3], vec![4]);
+        let rules = pcash_derive::ProtocolRules::new([vec![1], vec![2]], vec![3]);
         let poster_source = pcash_state::PayoutSource::PosterPayout {
             l1_transaction_indices: vec![0],
         };
@@ -1491,7 +1492,7 @@ mod result_proof_tests {
         ];
         let result = pcash_state::TransactionResult {
             tx_type: 0,
-            funding_mode: 0,
+            account_creation: 0,
             l1_transaction_index: 0,
             batch_item_index: 0,
             outcome: pcash_state::TransactionOutcome::ProofRejected,
@@ -1633,7 +1634,7 @@ mod result_proof_tests {
             genesis_l1_block: 100,
             genesis_l1_block_hash: field_word(1),
         };
-        let rules = pcash_derive::ProtocolRules::new([vec![1], vec![2]], vec![3], vec![4]);
+        let rules = pcash_derive::ProtocolRules::new([vec![1], vec![2]], vec![3]);
         let address = Address::repeat_byte(0x44);
         let receive_key_hash = field_word(13);
         let mut state = MemState::new(source);
@@ -1684,7 +1685,7 @@ mod result_proof_tests {
         ];
         results.push(pcash_state::TransactionResult {
             tx_type: pcash_derive::KIND_USER_ACCOUNT_UPDATE,
-            funding_mode: 0,
+            account_creation: 0,
             l1_transaction_index: 3,
             batch_item_index: 0,
             outcome: pcash_state::TransactionOutcome::ProofRejected,

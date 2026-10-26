@@ -220,7 +220,7 @@ function mempoolItemResult(): Record<string, unknown> {
     stableId: `0x${"23".repeat(32)}`,
     conflictKeys: [],
     kind: "userAccountCreation",
-    fundingMode: null,
+    accountCreation: 0 as const,
     byteSize: "0x80",
     openFeeAmount: "0x0",
     issuanceOwnerCommitment: `0x${"00".repeat(32)}`,
@@ -265,7 +265,7 @@ function receiptResult(): Record<string, unknown> {
     settledOpenFeeAmount: "0x2",
     settledIssuanceAmount: "0x64",
     kind: "privateValue",
-    fundingMode: null,
+    accountCreation: 0 as const,
     outputLeafStart: "0x0",
     outputsAdded: "0x5",
     nullifiers: [0, 1, 2, 3].map((value) => `0x${value.toString(16).padStart(64, "0")}`),
@@ -288,7 +288,7 @@ function transactionSummaryResult(): Record<string, unknown> {
     declaredIssuanceOwnerCommitment: `0x${"00".repeat(32)}`,
     issuanceRoute: "open",
     kind: receipt.kind,
-    fundingMode: receipt.fundingMode,
+    accountCreation: receipt.accountCreation,
     block: { blockNumber: "0x7", blockHash: `0x${"07".repeat(32)}` },
     pcashTransactionIndex: "0x2",
     timestamp: "0x6553f100",
@@ -1537,7 +1537,7 @@ describe("PcashNodeClient reads", () => {
     const receipt: Record<string, unknown> = {
       ...receiptResult(),
       kind: "contractAccount",
-      fundingMode: "unfunded",
+      accountCreation: 1,
       issuanceOwnerCommitment: null,
       settledOpenFeeAmount: "0x0",
       settledIssuanceAmount: "0x0",
@@ -1546,27 +1546,24 @@ describe("PcashNodeClient reads", () => {
       nullifiers: null,
     };
     const parsed = await new PcashNodeClient("http://n", stub([receipt])).getReceipt(receipt.transactionId as string);
-    expect(parsed[0]).toMatchObject({ kind: "contractAccount", fundingMode: "unfunded", settledOpenFeeAmount: 0n, settledIssuanceAmount: 0n, outputsAdded: 0n, nullifiers: null });
-    const page = { ...mempoolPageResult(), items: [{ ...mempoolItemResult(), kind: "contractAccount", fundingMode: "unfunded", validUntil: "0x10" }] };
+    expect(parsed[0]).toMatchObject({ kind: "contractAccount", accountCreation: 1, settledOpenFeeAmount: 0n, settledIssuanceAmount: 0n, outputsAdded: 0n, nullifiers: null });
+    const page = { ...mempoolPageResult(), items: [{ ...mempoolItemResult(), kind: "contractAccount", accountCreation: 1, validUntil: "0x10" }] };
     const mempool = await new PcashNodeClient("http://n", stub(page)).getMempool();
-    expect(mempool.items[0]).toMatchObject({ kind: "contractAccount", fundingMode: "unfunded", openFeeAmount: 0n, issuanceRoute: "none", validUntil: 16n });
-    const summary = { ...transactionSummaryResult(), kind: "contractAccount", fundingMode: "unfunded", declaredOpenFeeAmount: null, declaredIssuanceOwnerCommitment: null, issuanceRoute: "none", outputsAdded: "0x0", nullifiers: null };
+    expect(mempool.items[0]).toMatchObject({ kind: "contractAccount", openFeeAmount: 0n, issuanceRoute: "none", validUntil: 16n });
+    const summary = { ...transactionSummaryResult(), kind: "contractAccount", accountCreation: 1, declaredOpenFeeAmount: null, declaredIssuanceOwnerCommitment: null, issuanceRoute: "none", outputsAdded: "0x0", nullifiers: null };
     const summaries = await new PcashNodeClient("http://n", stub({ items: [summary], nextCursor: null, head: explorerCursorResult().head })).getTransactions();
-    expect(summaries.items[0]).toMatchObject({ kind: "contractAccount", fundingMode: "unfunded", declaredOpenFeeAmount: null, declaredIssuanceOwnerCommitment: null, issuanceRoute: "none" });
+    expect(summaries.items[0]).toMatchObject({ kind: "contractAccount", accountCreation: 1, declaredOpenFeeAmount: null, declaredIssuanceOwnerCommitment: null, issuanceRoute: "none" });
   });
 
-  it("requires an explicit funding mode from the known set", async () => {
-    const sponsored: Record<string, unknown> = { ...receiptResult(), kind: "contractAccount", fundingMode: "sponsored" };
-    expect((await new PcashNodeClient("http://n", stub([sponsored])).getReceipt(sponsored.transactionId as string))[0]?.fundingMode).toBe("sponsored");
-    const unknown: Record<string, unknown> = { ...receiptResult(), kind: "contractAccount", fundingMode: "paid" };
-    await expect(new PcashNodeClient("http://n", stub([unknown])).getReceipt(unknown.transactionId as string)).rejects.toThrow(/fundingMode must be one of/);
+  it("requires a known account-creation outcome on receipts", async () => {
+    const inserted: Record<string, unknown> = { ...receiptResult(), kind: "contractAccount", accountCreation: 1 };
+    expect((await new PcashNodeClient("http://n", stub([inserted])).getReceipt(inserted.transactionId as string))[0]?.accountCreation).toBe(1);
+    const unknown: Record<string, unknown> = { ...receiptResult(), accountCreation: 3 };
+    await expect(new PcashNodeClient("http://n", stub([unknown])).getReceipt(unknown.transactionId as string)).rejects.toThrow(/accountCreation/);
     const missing = receiptResult();
-    delete missing.fundingMode;
-    await expect(new PcashNodeClient("http://n", stub([missing])).getReceipt(missing.transactionId as string)).rejects.toThrow(/fundingMode is required/);
-    const page = { ...mempoolPageResult(), items: [{ ...mempoolItemResult(), fundingMode: undefined }] };
-    await expect(new PcashNodeClient("http://n", stub(page)).getMempool()).rejects.toThrow(/fundingMode is required/);
+    delete missing.accountCreation;
+    await expect(new PcashNodeClient("http://n", stub([missing])).getReceipt(missing.transactionId as string)).rejects.toThrow(/accountCreation/);
   });
-
   it("getReceipt() decodes failure details and detail-free failures", async () => {
     const zeroInput = receiptResult();
     zeroInput.outcome = "zeroNullifier";

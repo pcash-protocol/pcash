@@ -119,18 +119,16 @@ test("a catalogued listing is live while its transactions finalize", () => {
   // Another transaction spent the funding's input, so the funding was forgotten: the listing is funded again.
   assert.deepEqual(marketplaceSellerState(offer({
     publish: {
-      phase: "l2-contract-submitted",
-      l2ContractContentHash: "contract-tx",
+      phase: "draft",
       catalogPublicationId: publicationIdentity(publication),
       catalogPublishedAt: 4,
       updatedAt: 5,
     },
   }), ADDRESS), {
     role: "seller",
-    phase: "contract-submitted",
-    status: "pending",
+    phase: "draft",
+    status: "action-required",
     updatedAt: 5,
-    contentHash: "contract-tx",
   });
 });
 

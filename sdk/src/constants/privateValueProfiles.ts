@@ -8,7 +8,7 @@ export const PRIVATE_VALUE_PROFILES = {
     "shapeId": 0,
     "inputs": 4,
     "outputs": 5,
-    "publicInputs": 18,
+    "publicInputs": 19,
     "wireInputs": 16,
     "arenaBytes": 2632,
     "offsets": {
@@ -22,7 +22,8 @@ export const PRIVATE_VALUE_PROFILES = {
       "notBefore": 14,
       "validUntil": 15,
       "carrierContextHash": 16,
-      "eventsCommitment": 17
+      "eventsCommitment": 17,
+      "accountCreationCommitment": 18
     }
   },
   "L": {
@@ -30,7 +31,7 @@ export const PRIVATE_VALUE_PROFILES = {
     "shapeId": 1,
     "inputs": 32,
     "outputs": 32,
-    "publicInputs": 73,
+    "publicInputs": 74,
     "wireInputs": 71,
     "arenaBytes": 16672,
     "offsets": {
@@ -44,7 +45,8 @@ export const PRIVATE_VALUE_PROFILES = {
       "notBefore": 69,
       "validUntil": 70,
       "carrierContextHash": 71,
-      "eventsCommitment": 72
+      "eventsCommitment": 72,
+      "accountCreationCommitment": 73
     }
   }
 } as const;

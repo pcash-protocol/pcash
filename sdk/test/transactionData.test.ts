@@ -133,8 +133,7 @@ it("rejects malformed, duplicate, and noncanonical wire identifiers", () => {
     "0x81234567", // missing length
     "0x8123456702ff", // truncated data
     "0x812345", // truncated application ID
-    "0x0600", // unassigned standard IDs
-    "0x0700",
+    "0x0700", // unassigned standard IDs
     "0x7f00",
     "0x0000", // zero is no identifier
     "0x01000100", // duplicate standard ID

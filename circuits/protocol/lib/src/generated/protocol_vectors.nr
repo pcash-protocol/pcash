@@ -145,10 +145,10 @@ fn test_authorization_commitment_matches_published_vector() {
 #[test]
 fn test_action_commitments_match_published_vectors() {
     let pcash_chain_id = 0x0000000000000000000000000000000000000000000000000000000000005a3c;
-    let commitment = 0x159fc89c0f9cc6f1d184d9c7bddb1ff03fad2b25e3f3694bb3b89aedfcf81296;
+    let commitment = 0x235dfc7161df6203d4eb3415cbed9db186bf2d4934dd6662901379fd34cca572;
     assert(
         transfer_action_commitment(pcash_chain_id, commitment)
-            == 0x10ed4743eb5eda9d41e718800d2dd005f86441b49787b274b9cac7549dfb43cb,
+            == 0x0489906230fc8a12cb8ad6dbd9153197c48756afa0c9d9d28b287ee815bb3437,
     );
     assert(
         asset_creation_action_commitment(
@@ -156,11 +156,11 @@ fn test_action_commitments_match_published_vectors() {
             commitment,
             0x06cd16c9f4a3513bfb4ede303a90ca777af2ad0e7e4797d7e1f16689a24b9b9e,
         )
-            == 0x1e55d148bcaab85bf085d3bb03212f7d028e87feb58a8be4d5f7eb25cf22316a,
+            == 0x0a40b090026bd835f08239cc78158a9870f5404f842945ff22b5ba62e0887d42,
     );
     assert(
         sponsored_transfer_action_commitment(pcash_chain_id, commitment)
-            == 0x2e008e5d2a5970e1fee79ff1741879f308d626107447eb4f2636fc4af6069a30,
+            == 0x03ed389b6150e8d9a44f7598afaca962df973618746e7971eb4256257c88a17c,
     );
     assert(
         contract_fee_sponsorship_action_commitment(
@@ -168,7 +168,7 @@ fn test_action_commitments_match_published_vectors() {
             commitment,
             0x000000000000000000000000ded3ce060c26fb3e748d124fb6883dcd6c44384d,
         )
-            == 0x12b487905018092e97ae9ca35123def996fccd72dd72df3f550c2fdc0c4124e2,
+            == 0x084f11825b5f0ce28da0fa55574b86b7ecc9c112eeaa99eb4d7b72ac24fdcc53,
     );
     assert(
         account_update_action_commitment(
@@ -176,7 +176,7 @@ fn test_action_commitments_match_published_vectors() {
             commitment,
             0x079067f98c02218860c047740d0e32be55d39c0223266624d5d32dccf05ee97e,
         )
-            == 0x018790892a353a862630b4542b578a7339225bd33d53c16f51462ac58594a336,
+            == 0x0304a750d2c578b0e33b944333b2595210e2473462f8d223ed3c2ae57621506c,
     );
 }
 
@@ -797,6 +797,7 @@ fn test_profile_0_private_value_commitment_matches_published_vector() {
         carrier_context_hash: 0x000000000000000000000000000000000000000000000000000000000000cc01,
         asset_burn_amount: 0x0000000000000000000000000000000000000000000000000000000000000000,
         delivery_commitment: 0x01c2567df77db2c1c9f66372db5c7731597b1f4eb6919fd2fd85acba3adf4561,
+        account_creation_commitment: 0x000000000000000000000000000000000000000000000000000000000000cca1,
         input_slot_classes: [1, 0, 0, 0],
         input_commitments: [
             0x0000000000000000000000000000000000000000000000000000000000005678,
@@ -821,7 +822,7 @@ fn test_profile_0_private_value_commitment_matches_published_vector() {
     };
     assert(
         private_value_commitment(tx)
-            == 0x02a7408b9bdbd72b1cf6c89881689214cc60b9dd5a48edb2fcb254eab2d8061b,
+            == 0x017de537ae6a3f6fd0dc304bb285a6f0cd833d3c140be6fa00f418bec65add51,
     );
 }
 
@@ -876,6 +877,7 @@ fn test_profile_1_private_value_commitment_matches_published_vector() {
         carrier_context_hash: 0x000000000000000000000000000000000000000000000000000000000000cc01,
         asset_burn_amount: 0x0000000000000000000000000000000000000000000000000000000000000000,
         delivery_commitment: 0x0473d84d559cebab312c288433e087ce89f293de10a9086fff308b8a579024ee,
+        account_creation_commitment: 0x000000000000000000000000000000000000000000000000000000000000cca1,
         input_slot_classes: [
             1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0,
@@ -989,6 +991,6 @@ fn test_profile_1_private_value_commitment_matches_published_vector() {
     };
     assert(
         private_value_commitment(tx)
-            == 0x1867b29b9254cc7d194d6c232e567ffa3f71e161ab4ad31d7938c69f192131b3,
+            == 0x176cd78362a0076c236e4f3dc32bc9a396505fd59c2313e890547420225e9f98,
     );
 }

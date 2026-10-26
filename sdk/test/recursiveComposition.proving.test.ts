@@ -20,7 +20,6 @@ import {
   assetCreationStack,
   transferTransactionStack,
   sponsoredTransferStack,
-  sponsoredContractCreationStack,
   userAccountUpdateStack,
   type ChonkCircuitResolver,
   type ChonkStack,
@@ -29,7 +28,7 @@ import { circuitCatalog } from "../../scripts/circuits/catalog.mjs";
 import { privateValueProfileFixture } from "./privateValueProfileFixtures.ts";
 import { assetProfileFixture } from "./assetProfileFixtures.ts";
 import { sharedAssetClaimFixture } from "./sharedAssetClaimFixtures.ts";
-import { sponsoredContractCreationFixture, userAccountUpdateFixture } from "./accountActionFixtures.ts";
+import { userAccountUpdateFixture } from "./accountActionFixtures.ts";
 import { proverAssetsDir } from "./circuitBundle.ts";
 import { expectRecursiveProofRejection } from "./proofRejection.ts";
 import { verifyGeneratedProof } from "./proofVerification.ts";
@@ -70,11 +69,7 @@ const STACKS: Record<string, (resolve: ChonkCircuitResolver) => Promise<StackPai
       userAccountUpdateStack({ ...userAccountUpdateFixture(deadline), resolve });
     return { control: await stack(), other: await stack({ validUntilTimestamp: 999_999n }) };
   },
-  async contractCreation(resolve) {
-    const stack = (deadline?: { validUntilTimestamp: bigint }) =>
-      sponsoredContractCreationStack({ ...sponsoredContractCreationFixture(deadline), resolve });
-    return { control: await stack(), other: await stack({ validUntilTimestamp: 999_999n }) };
-  },
+
 };
 
 // The stack whose control exercises each folding circuit.
@@ -85,8 +80,6 @@ const STACK_OF: Readonly<Record<string, keyof typeof STACKS>> = {
   private_value_sponsored_transfer_kernel: "sponsoredTransfer",
   user_account_update_kernel: "accountUpdate",
   user_account_update_hiding_kernel: "accountUpdate",
-  contract_creation_kernel: "contractCreation",
-  contract_creation_hiding_kernel: "contractCreation",
 };
 
 const catalog = circuitCatalog();

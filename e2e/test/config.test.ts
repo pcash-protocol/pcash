@@ -70,7 +70,7 @@ describe("E2E runner options", () => {
     const local = selectCatalogScenarios([], "local").map((scenario) => scenario.name);
     const live = selectCatalogScenarios([], "live").map((scenario) => scenario.name);
     expect(local).toEqual(expect.arrayContaining(["core", "reorg", "p2p", "persistence", "source-verification", "seed-wallet", "issuance-boundary"]));
-    expect(live).toEqual(["core", "assets", "marketplace", "selected-relay", "private-value-profiles", "registration-mining"]);
+    expect(live).toEqual(["core", "assets", "marketplace", "selected-relay", "private-value-profiles", "registration-mining", "direct-send"]);
     for (const selected of [local, live]) {
       expect(selected).not.toContain("traffic");
       expect(selected).not.toContain("seed");

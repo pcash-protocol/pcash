@@ -43,7 +43,7 @@ pub use types::{
 /// size can never be a valid transaction, so relaying them buys nothing. It
 /// mirrors `pcash_derive::MAX_VALID_TX_BYTES` (asserted equal in the node
 /// mempool tests) without taking a dependency on the derive crate.
-pub const MAX_RELAYED_TX_BYTES: usize = 80_198;
+pub const MAX_RELAYED_TX_BYTES: usize = 97_993;
 /// Hard ceiling for one inventory page, regardless of local configuration.
 pub const MAX_INVENTORY_PAGE_IDS: usize = 256;
 /// Hard ceiling for one transaction fetch and response.

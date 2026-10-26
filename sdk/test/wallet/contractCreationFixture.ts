@@ -1,18 +1,7 @@
-import { OUTPUT_DATA_BYTES, PRIVATE_VALUE_PROFILES } from "@pcash/sdk/constants";
-import { WIRE_PROOF_BYTES, deliveryCommitment, encodeContractAccountCreation } from "@pcash/sdk/protocol";
+import { encodeContractAccountCreation } from "@pcash/sdk/protocol";
 
-export function contractCreationFixture(chainId: number, fee = 0n): Uint8Array {
-  const empty = new Uint8Array(OUTPUT_DATA_BYTES);
-  empty[0] = 1;
-  const outputData = [empty, empty, empty, empty, empty];
-  const arena = new Uint8Array(PRIVATE_VALUE_PROFILES.S.arenaBytes);
+export function contractCreationFixture(chainId: number): Uint8Array {
   return encodeContractAccountCreation(chainId, new Uint8Array(35), {
-    mode: "sponsored",
-    section: {
-      publicInputs: [BigInt(chainId), ...Array(10).fill(0n), deliveryCommitment(outputData, arena), fee, 0n, 0n, 100n, 0n, 0n],
-      proof: new Uint8Array(WIRE_PROOF_BYTES),
-      outputData,
-      arena,
-    },
+    recentPcashBlockHash: 1n, validUntilTimestamp: 100n,
   });
 }

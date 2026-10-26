@@ -1,7 +1,7 @@
 // The signed message of the reference value rules: the PCASH chain ID, the
 // rule's own fields, each declared output as (recipient, amount, asset_id), and
-// eight fields every value message ends with: the open fee, the issuance route,
-// the relay terms, the transaction context and the validity window.
+// nine fields every value message ends with: the open fee, the issuance route,
+// the relay terms, the account creation, the transaction context and the validity window.
 //
 // The chain ID is the same witness the rule hashes into its action commitment,
 // so a signature approves an action on one chain only.
@@ -72,8 +72,8 @@ fn value_message<let P: u32, let D: u32, let N_IN: u32, let N_OUT: u32, let SHAP
     relay_fee_amount: Field,
     relay_fee_owner_commitment: Field,
     context: Field,
-) -> [Field; 1 + P + 3 * D + 8] {
-    let mut message = [0; 1 + P + 3 * D + 8];
+) -> [Field; 1 + P + 3 * D + 9] {
+    let mut message = [0; 1 + P + 3 * D + 9];
     message[0] = pcash_chain_id;
     for i in 0..P {
         message[1 + i] = fields[i];
@@ -89,11 +89,12 @@ fn value_message<let P: u32, let D: u32, let N_IN: u32, let N_OUT: u32, let SHAP
         private_value.issuance_owner_commitment,
         relay_fee_amount,
         relay_fee_owner_commitment,
+        private_value.account_creation_commitment,
         context,
         private_value.not_before_timestamp,
         private_value.valid_until_timestamp,
     ];
-    for i in 0..8 {
+    for i in 0..9 {
         message[1 + P + 3 * D + i] = terms[i];
     }
     message

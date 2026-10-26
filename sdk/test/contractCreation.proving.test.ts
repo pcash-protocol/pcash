@@ -4,18 +4,18 @@ import { describe, expect, it } from "vitest";
 
 import {
   WIRE_PROOF_BYTES,
-  TX_KIND_CONTRACT_ACCOUNT_CREATION,
-  contractCreationPublicInputs,
+  privateValuePublicInputs,
   decodeTransaction,
 } from "../src/protocol/codec.ts";
-import { proveSponsoredContractCreationChonk } from "../src/prover/index.ts";
+import { proveTransferTransactionChonk } from "../src/prover/index.ts";
 import {
   createChonkCircuitResolver,
   isProverAvailable,
   nativeChonkBackend,
 } from "../src/node/index.ts";
-import { assertAccountActionStages } from "./accountActionStages.ts";
-import { sponsoredContractCreationFixture } from "./accountActionFixtures.ts";
+import { privateValueProfileFixture } from "./privateValueProfileFixtures.ts";
+import { buildNativeTransfer } from "../src/builders/nativeTransfer.ts";
+import { buildContractBody, functionSelector } from "../src/protocol/contract.ts";
 
 const proverAvailable = isProverAvailable();
 if (process.env.PCASH_REQUIRE_PROVER === "1" && !proverAvailable) {
@@ -29,28 +29,21 @@ const resolver = createChonkCircuitResolver({
   ...(bundle === undefined ? {} : { verificationKeyDirectory: join(bundle, "vks") }),
 });
 
-suite("sponsored contract creation CHONK proving", () => {
-  it("folds the sponsor's installed sponsorship application and encodes type 0x02 with its fee section", async () => {
-    const { build, contract, authorizationWitnessMap } = sponsoredContractCreationFixture();
-    await assertAccountActionStages({
-      resolve: resolver,
-      authorizationPackage: "account_rule_contract_fee_sponsorship_ecdsa",
-      kernelPackage: "contract_creation_kernel",
-      prefix: "contract_creation",
-      extraDataName: "contract_address",
-      build,
-    });
-    const result = await proveSponsoredContractCreationChonk({
-      build,
-      authorizationPackage: "account_rule_contract_fee_sponsorship_ecdsa",
-      authorizationWitnessMap,
-      resolve: resolver,
-      backend: nativeChonkBackend(),
+suite("attached contract creation CHONK proving", () => {
+  it("funds an attached contract with one transfer proof", async () => {
+    const { params } = privateValueProfileFixture({ shape: 0, scenario: "minimal" });
+    const contract = buildContractBody({ nullifierKey: { publishesNkRoot: true, nkRoot: 0x5151n },
+      functions: [{ selector: functionSelector(0), applicationVkHash: 0x1234n, configurationCommitment: 0x5678n }] });
+    const build = buildNativeTransfer({ ...params, recipientAddress: contract.address,
+      accountCreation: { kind: "contract", body: contract.body } });
+    const result = await proveTransferTransactionChonk({
+      build, authorizationPackage: build.authorizationCircuit!, authorizationWitnessMap: build.accountRuleWitnessMap!,
+      resolve: resolver, backend: nativeChonkBackend(),
     });
     expect(result.proof).toHaveLength(WIRE_PROOF_BYTES);
     const decoded = decodeTransaction(build.encodeTransaction(result.proof));
-    expect(decoded.kind).toBe(TX_KIND_CONTRACT_ACCOUNT_CREATION);
-    if (decoded.kind !== TX_KIND_CONTRACT_ACCOUNT_CREATION) throw new Error("unreachable");
-    expect(contractCreationPublicInputs(decoded, contract.address)).toEqual(build.publicInputs);
+    if (decoded.kind !== 0) throw new Error("expected private value");
+    expect(decoded.accountCreation).toEqual({ kind: "contract", body: contract.body });
+    expect(privateValuePublicInputs(decoded)).toEqual(build.publicInputs);
   }, 600_000);
 });

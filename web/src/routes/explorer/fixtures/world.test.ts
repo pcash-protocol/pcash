@@ -86,7 +86,7 @@ describe("recorded fixture completeness", () => {
     expect(allExcluded?.exclusionReason).toBeNull();
     expect(allExcluded?.items.every((item) => item.exclusionReason !== null)).toBe(true);
     const reasons = new Set(fixtureWorld.batches.flatMap((batch) => batch.items.map((item) => item.exclusionReason)).filter((reason) => reason !== null));
-    expect(reasons).toEqual(new Set(["itemTooLarge", "empty", "truncated", "trailingBytes", "unknownKind", "wrongChainId", "unknownYParity", "unknownFundingMode", "unknownReceiveKeyMode", "unknownPublishesNkRootFlag"]));
+    expect(reasons).toEqual(new Set(["itemTooLarge", "empty", "truncated", "trailingBytes", "unknownKind", "wrongChainId", "unknownYParity", "unknownAccountCreationTag", "unknownReceiveKeyMode", "unknownPublishesNkRootFlag"]));
     const blob = await only(fixtureIds.batches.blob);
     expect(blob?.carrierType).toBe("blob");
     expect(blob?.blobVersionedHashes).toHaveLength(2);
@@ -193,7 +193,7 @@ describe("fixture reader pagination", () => {
     expect(page.items.length).toBeGreaterThan(1);
     expect(page.items.every((item) => item.kind === "contractAccount")).toBe(true);
     const succeeded = page.items.filter((item) => item.outcome === "succeeded");
-    expect(new Set(succeeded.map((item) => item.fundingMode))).toEqual(new Set(["sponsored", "unfunded"]));
+    expect(succeeded.every(item => item.accountCreation === 1)).toBe(true);
     const block = fixtureWorld.blocksByHash.get(fixtureIds.blocks.withTransactions)!;
     const inBlock = await reader.transactions({ limit: 50, blockNumber: block.number });
     expect(inBlock.items.length).toBe(Number(block.transactionResultCount));

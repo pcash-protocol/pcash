@@ -256,6 +256,7 @@ mod tests {
             carrier_context_hash: 0,
             asset_burn_amount: 0,
             delivery_commitment: 0x61,
+            account_creation_commitment: 0,
             input_slot_classes: [
                 SLOT_CLASS_NATIVE,
                 SLOT_CLASS_DUMMY,
@@ -302,6 +303,7 @@ mod tests {
             carrier_context_hash: 0,
             asset_burn_amount: 10,
             delivery_commitment: 0x61,
+            account_creation_commitment: 0,
             input_slot_classes: [
                 SLOT_CLASS_ASSET,
                 SLOT_CLASS_DUMMY,
@@ -801,16 +803,17 @@ mod tests {
     // TEST_SIGNING_KEY's signature over the batch `run_signed_batch` proves on
     // TEST_PCASH_CHAIN_ID.
     global SIGNED_BATCH_SIGNATURE: [u8; 64] = [
-        0xb5, 0x6d, 0xa9, 0x15, 0x55, 0x6b, 0xc4, 0x9c, 0xaf, 0xc1, 0xc3, 0x73, 0x46, 0x4b, 0x58,
-        0x86, 0x73, 0x4d, 0x93, 0x4d, 0xc5, 0xdb, 0xb4, 0xad, 0x60, 0xd1, 0x1e, 0xac, 0x5d, 0x8b,
-        0x78, 0x0d, 0x49, 0x8b, 0x97, 0x85, 0x4b, 0x47, 0x0d, 0x13, 0x02, 0x69, 0x1d, 0x5d, 0x32,
-        0x7b, 0xc3, 0xb7, 0x56, 0xd8, 0xb1, 0x2e, 0x73, 0xb7, 0x25, 0xc6, 0xce, 0xd8, 0x87, 0xf9,
-        0x9f, 0x4d, 0x10, 0xe0,
+        0x45, 0x92, 0x15, 0xc0, 0xef, 0xe1, 0x0b, 0xf2, 0x2c, 0x01, 0x1e, 0xf5, 0x49, 0x47, 0x8f,
+        0xce, 0xd4, 0x2b, 0xc5, 0x09, 0x24, 0xfe, 0xbb, 0xca, 0xd8, 0xdc, 0x19, 0xa0, 0x4e, 0xe6,
+        0x94, 0x9b, 0x56, 0x01, 0x2b, 0xe3, 0xa1, 0xd4, 0x18, 0xec, 0x4b, 0xdc, 0x02, 0xe2, 0x8b,
+        0x70, 0xe9, 0x71, 0xbf, 0x4f, 0x9a, 0xed, 0x07, 0x3b, 0x15, 0x8b, 0x1f, 0xda, 0xf6, 0x2e,
+        0x11, 0xb1, 0x58, 0x90,
     ];
 
     fn run_signed_batch(
         pcash_chain_id: Field,
         event_entry: Field,
+        account_creation_commitment: Field,
     ) -> [Field; RULE_STATEMENT_LENGTH] {
         let (mut outputs, mut tx, mut secrets, _, opening) = native_batch();
         outputs[1] = zero_declaration();
@@ -822,6 +825,7 @@ mod tests {
             SLOT_CLASS_DUMMY,
             SLOT_CLASS_DUMMY,
         ];
+        tx.account_creation_commitment = account_creation_commitment;
         authorize::<4, 5, 0>(
             S_BATCH_TRANSFER_TYPE_HASH,
             pcash_chain_id,
@@ -846,13 +850,18 @@ mod tests {
 
     #[test]
     fn test_batch_transfer_accepts_the_owner_signature() {
-        let _ = run_signed_batch(TEST_PCASH_CHAIN_ID, 0);
+        let _ = run_signed_batch(TEST_PCASH_CHAIN_ID, 0, 0);
     }
 
     // The message signs the chain ID the action commitment binds, so a batch
     // signed for one chain cannot be proved on another.
     #[test(should_fail_with = "signature must be valid")]
     fn test_batch_transfer_rejects_a_signature_for_another_chain() {
-        let _ = run_signed_batch(TEST_PCASH_CHAIN_ID + 1, 0);
+        let _ = run_signed_batch(TEST_PCASH_CHAIN_ID + 1, 0, 0);
     }
+    #[test(should_fail_with = "signature must be valid")]
+    fn test_batch_rejects_an_unsigned_attachment() {
+        let _ = run_signed_batch(TEST_PCASH_CHAIN_ID, 0, 1);
+    }
+
 }

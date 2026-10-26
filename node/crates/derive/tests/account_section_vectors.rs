@@ -45,15 +45,16 @@ fn frozen_cross_language_account_section_vectors() {
             vector["kind"].as_u64().unwrap()
         );
         let section = match &transaction {
-            Transaction::ContractAccountCreation(creation) => {
-                creation.section().expect("sponsored section")
-            }
+            Transaction::PrivateValue(section) => section,
             Transaction::UserAccountUpdate(update) => &update.section,
             _ => panic!("account section required"),
         };
         let expected = words(&vector["statementWords"]);
-        assert_eq!(expected.len(), S.public_inputs + 1);
-        let rules = ProtocolRules::new([vec![], vec![]], vec![], vec![]);
+        assert_eq!(
+            expected.len(),
+            S.public_inputs + usize::from(transaction.kind() == 3)
+        );
+        let rules = ProtocolRules::new([vec![], vec![]], vec![]);
         let admitted = AdmittedTransaction::decode(&bytes, chain_id).unwrap();
         let statement = ProofStatement::of(&rules, &admitted).expect("a canonical statement");
         assert_eq!(
@@ -67,27 +68,30 @@ fn frozen_cross_language_account_section_vectors() {
         assert_eq!(public_inputs, expected[..S.public_inputs]);
         assert_eq!(
             public_inputs.iter().filter(|word| word.is_zero()).count(),
-            1
+            1 + usize::from(transaction.kind() == 3)
         );
         assert_eq!(public_inputs[S.issuance_owner_offset], CircuitWord::ZERO);
 
-        // The wire omits the chain ID, the delivery commitment, and the
-        // issuance word.
         let wire_words = words(&vector["wireWords"]);
-        let wire_count = SectionLayout::UserAccountUpdate.wire_inputs();
-        assert_eq!(
-            wire_count,
-            SectionLayout::ContractAccountCreation.wire_inputs()
-        );
+        let layout = if transaction.kind() == 3 {
+            SectionLayout::UserAccountUpdate
+        } else {
+            SectionLayout::PrivateValue(pcash_derive::private_value_profiles::PrivateValueShape::S)
+        };
+        let wire_count = layout.wire_inputs();
         assert_eq!(wire_words.len(), wire_count);
-        let dc = S.delivery_commitment_offset;
-        let issuance = S.issuance_owner_offset;
-        assert_eq!(public_inputs[1..dc], wire_words[..dc - 1]);
-        assert_eq!(
-            public_inputs[dc + 1..issuance],
-            wire_words[dc - 1..issuance - 2]
-        );
-        assert_eq!(public_inputs[issuance + 1..], wire_words[issuance - 2..]);
+        let posted: Vec<_> = public_inputs
+            .iter()
+            .enumerate()
+            .filter_map(|(index, word)| {
+                (index != 0
+                    && index != S.delivery_commitment_offset
+                    && index != S.public_inputs - 1
+                    && !(layout.omits_issuance_owner() && index == S.issuance_owner_offset))
+                    .then_some(*word)
+            })
+            .collect();
+        assert_eq!(posted, wire_words);
         let offset = usize::try_from(vector["sectionOffset"].as_u64().unwrap()).unwrap();
         let frozen_wire = wire_words
             .iter()

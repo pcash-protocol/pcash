@@ -1,6 +1,5 @@
 import { recoverSellerOffers } from "./sellerRecovery.ts";
 import { recoverPaymentPublication, savedPaymentIdentity, scanPayerPayments, scannedPaymentIdentity } from "./paymentRecovery.ts";
-import { runSponsoredContractCreationFlow } from "./contractCreation.ts";
 import { loadSelfReceiveKey, loadSelfReceiveKeyAtSnapshot } from "@pcash/sdk/wallet/actions";
 import { createMarketplaceTransactionSubmitter } from "./submitBuiltTransaction.ts";
 import {
@@ -94,6 +93,7 @@ import {
   type BuyRecord,
   type MarketplaceStore,
   type PublishRecord,
+  resetPublishCheckpoint,
   type PublishTxFinality,
   type ReclaimRecord,
   type ReclaimTxFinality,
@@ -155,7 +155,7 @@ export type MarketplaceProgressAction = "refresh" | "verify" | "buy" | "publish"
 
 export interface MarketplaceProgress extends ProveStatus {
   action: MarketplaceProgressAction;
-  publication?: { step: "contract" | "funding" | "catalog"; contentHash?: string; offerAddress?: string };
+  publication?: { step: "funding" | "catalog"; contentHash?: string; offerAddress?: string };
 }
 
 export interface MarketplaceRefreshResult {
@@ -193,8 +193,6 @@ export interface MarketplaceCreateOfferInput {
   ethPriceWei: bigint;
   /** How long the listing stays open for new purchases; T follows by the claim window plus the purchase margin. */
   purchaseMinutes: bigint;
-  /** Open PCASH fee for the relayer that includes the listing's contract creation. */
-  creationOpenFeeAmount: bigint;
   /** Open PCASH fee for the relayer that includes the listing's escrow funding. */
   fundingOpenFeeAmount: bigint;
 }
@@ -415,12 +413,12 @@ function offerState(publication: OfferPublication, current: StoredOffer | null):
 
 function publishPhase(publish: Pick<
   PublishRecord,
-  "l2ContractContentHash" | "fundingContentHash" | "fundingAcceptedBlock" | "l2ContractFinalizedAt" | "fundingFinalizedAt"
+  "fundingContentHash" | "fundingAcceptedBlock" | "fundingFinalizedAt"
 >): PublishRecord["phase"] {
-  if (publish.l2ContractFinalizedAt !== undefined && publish.fundingFinalizedAt !== undefined) return "funded";
+  if (publish.fundingFinalizedAt !== undefined) return "funded";
   if (publish.fundingAcceptedBlock !== undefined) return "finalizing";
   if (publish.fundingContentHash !== undefined) return "funding-submitted";
-  return "l2-contract-submitted";
+  return "draft";
 }
 
 export function applyPublishCheckpoint(
@@ -434,13 +432,6 @@ export function applyPublishCheckpoint(
     ...checkpoint,
     updatedAt: now,
   };
-  if (prior.l2ContractFinalizedAt !== undefined) {
-    publish.l2ContractContentHash = prior.l2ContractContentHash;
-    publish.l2ContractAcceptedBlock = prior.l2ContractAcceptedBlock;
-    publish.l2ContractAcceptedBlockHash = prior.l2ContractAcceptedBlockHash;
-    publish.l2ContractFinalizedAt = prior.l2ContractFinalizedAt;
-    delete publish.l2ContractTransactionHex;
-  }
   if (prior.fundingFinalizedAt !== undefined) {
     publish.fundingContentHash = prior.fundingContentHash;
     publish.fundingAcceptedBlock = prior.fundingAcceptedBlock;
@@ -576,13 +567,10 @@ export class MarketplaceController {
     const publish = offer.publish;
     const reclaim = offer.reclaim;
     const buyers = Object.entries(offer.buys ?? {});
-    const [contract, funding, reclaimResult, ...claimResults] = await Promise.all([
-      publish?.l2ContractContentHash === undefined || publish.l2ContractFinalizedAt !== undefined
-        ? Promise.resolve(undefined)
-        : readOfferPublicationFinality(node, publish.l2ContractContentHash, "contractAccount"),
+    const [funding, reclaimResult, ...claimResults] = await Promise.all([
       publish?.fundingContentHash === undefined || publish.fundingFinalizedAt !== undefined
         ? Promise.resolve(undefined)
-        : readOfferPublicationFinality(node, publish.fundingContentHash, "privateValue"),
+        : readOfferPublicationFinality(node, publish.fundingContentHash),
       reclaim?.contentHash === undefined || reclaim.finalizedAt !== undefined
         ? Promise.resolve(undefined)
         : readMarketplaceReclaimFinality(node, reclaim.contentHash),
@@ -597,13 +585,10 @@ export class MarketplaceController {
       const now = this.now();
       let nextPublish = latest.publish;
       if (nextPublish !== undefined) {
-        const matchingContract = publish?.l2ContractContentHash !== undefined
-          && nextPublish.l2ContractContentHash === publish.l2ContractContentHash;
         const matchingFunding = publish?.fundingContentHash !== undefined
           && nextPublish.fundingContentHash === publish.fundingContentHash;
-        if ((matchingContract && contract !== undefined) || (matchingFunding && funding !== undefined)) {
+        if (matchingFunding && funding !== undefined) {
           nextPublish = checkpointPublishFinality(nextPublish, {
-            ...(matchingContract && contract !== undefined ? { l2Contract: publicationFinality(contract) } : {}),
             ...(matchingFunding && funding !== undefined ? { funding: publicationFinality(funding) } : {}),
           }, now);
         }
@@ -645,23 +630,23 @@ export class MarketplaceController {
     const recovered = await recoverSellerOffers(wallet, wallet.profile, networkConfigFromStatus(wallet.status));
     const recoveredKeys = new Set(recovered.offers.map(({ publication }) => offerKey(publication)));
     for (const stored of await this.store.list()) {
-      if (stored.missingContract !== undefined && !recoveredKeys.has(stored.key)) {
+      if (stored.recovered === true && !recoveredKeys.has(stored.key)) {
         await this.store.update(stored.key, current => current === null ? null : { ...current, recoveryUnavailable: true });
       }
     }
-    for (const { publication, missingContract } of recovered.offers) {
+    for (const { publication } of recovered.offers) {
       const key = offerKey(publication);
       // A recovered escrow may already be reclaimed. A reclaim this wallet already made is journaled at its
       // inclusion, and reconciliation finalizes it.
       let reclaimHash: string | null = null;
-      if (!missingContract && (await this.store.get(key))?.reclaim === undefined) {
+      if ((await this.store.get(key))?.reclaim === undefined) {
         try { reclaimHash = await readEscrowReclaim(wallet.node, publication); }
         catch (cause) { recovered.errors.push(`Seller recovery ${key}: ${cause instanceof Error ? cause.message : String(cause)}`); }
       }
       const reclaim: ReclaimRecord | undefined = reclaimHash === null
         ? undefined : { phase: "accepted", publication, contentHash: reclaimHash, updatedAt: this.now() };
       await this.store.update(key, current => ({ ...current, key, pub: publication, source: "created",
-        savedAt: current?.savedAt ?? this.now(), missingContract, recoveryUnavailable: false,
+        savedAt: current?.savedAt ?? this.now(), recovered: true, recoveryUnavailable: false,
         ...(reclaim === undefined || current?.reclaim !== undefined ? {} : { reclaim }) }));
     }
     const router = this.configuredRouter;
@@ -1209,24 +1194,24 @@ export class MarketplaceController {
     offer: Offer,
     publication: OfferPublication,
     draft: StoredOffer,
-    openFees: Pick<PublishOfferParams, "creationOpenFeeAmount" | "fundingOpenFeeAmount">,
+    openFees: Pick<PublishOfferParams, "fundingOpenFeeAmount">,
     resume?: PublishOfferResume,
     options: MarketplacePublicationOptions = {},
   ): Promise<MarketplacePublishResult> {
     const identity = this.requireIdentity();
     const key = offerKey(publication);
     const checkpoint = await this.store.get(key);
-    const fundingCanonical = checkpoint?.missingContract === false || hasCanonicalFunding(checkpoint?.publish);
+    const fundingCanonical = (checkpoint?.recovered === true && !checkpoint.recoveryUnavailable) || hasCanonicalFunding(checkpoint?.publish);
     const definition = publicationAssetDefinition(publication);
     if (definition !== null) await identity.wallet.importAssetDefinition(definition);
     const startedAt = this.now();
     let publicationProgress: NonNullable<MarketplaceProgress["publication"]> = {
-      step: "contract", ...(resume?.l2ContractContentHash === undefined ? {} : { contentHash: resume.l2ContractContentHash }),
+      step: "funding", ...(resume?.fundingContentHash === undefined ? {} : { contentHash: resume.fundingContentHash }),
     };
     const reportPublication = (phase: ProvePhase, message: string) => this.onProgress?.({
       action: "publish", phase, message, elapsedMs: this.now() - startedAt, publication: { ...publicationProgress, offerAddress: publicationContractAddress(publication) },
     });
-    reportPublication("preparing", "Checking the saved offer and preparing registration.");
+    reportPublication("preparing", "Checking the saved offer and preparing escrow funding.");
     const escrow = publication.escrow !== undefined && fundingCanonical ? publication.escrow : await publishOffer({
       wallet: identity.wallet,
       offer,
@@ -1237,14 +1222,14 @@ export class MarketplaceController {
       ...(resume === undefined ? {} : { resume }),
       ...options,
       onProgress: reportPublication,
+      onFundingRebuild: async contentHash => {
+        await this.store.update(key, current => resetPublishCheckpoint(current, contentHash, this.now()));
+        publicationProgress = { step: "funding" };
+      },
       onCheckpoint: async (checkpoint) => {
         await this.store.update(key, (current) => applyPublishCheckpoint(current ?? draft, checkpoint, this.now()));
-        publicationProgress = checkpoint.l2ContractAcceptedBlock === undefined
-          ? { step: "contract", contentHash: checkpoint.l2ContractContentHash }
-          : { step: "funding", ...(checkpoint.fundingContentHash === undefined ? {} : { contentHash: checkpoint.fundingContentHash }) };
-        reportPublication("preparing", checkpoint.l2ContractAcceptedBlock === undefined
-          ? "Your listing creation transaction is ready."
-          : checkpoint.fundingContentHash === undefined ? "Listing created. Preparing your escrow funding." : "Your escrow funding transaction is ready.");
+        publicationProgress = { step: "funding", contentHash: checkpoint.fundingContentHash };
+        reportPublication("preparing", "Your escrow funding transaction is ready.");
       },
     });
     publicationProgress = { step: "catalog" };
@@ -1264,7 +1249,7 @@ export class MarketplaceController {
   }
 
   async createAndPublish(input: MarketplaceCreateOfferInput, options: MarketplacePublicationOptions = {}): Promise<MarketplacePublishResult> {
-    this.onProgress?.({ action: "publish", phase: "preparing", message: "Checking your wallet and preparing the offer.", elapsedMs: 0, publication: { step: "contract" } });
+    this.onProgress?.({ action: "publish", phase: "preparing", message: "Checking your wallet and preparing the offer.", elapsedMs: 0, publication: { step: "funding" } });
     if (input.ethPriceWei <= 0n) {
       throw new Error("Marketplace offer ETH price must be greater than zero");
     }
@@ -1305,7 +1290,7 @@ export class MarketplaceController {
       }
       const noOpenFees = submission?.mode === "l1" || selected;
       const openFees = {
-        creationOpenFeeAmount: noOpenFees ? 0n : input.creationOpenFeeAmount,
+
         fundingOpenFeeAmount: noOpenFees ? 0n : input.fundingOpenFeeAmount,
       };
       const draft: StoredOffer = {
@@ -1316,7 +1301,7 @@ export class MarketplaceController {
         publish: {
           phase: "draft",
           submissionMode: submission?.mode === "l1" ? "fast" : selected ? "selected" : "slow",
-          creationOpenFeeBaseUnits: openFees.creationOpenFeeAmount.toString(),
+
           fundingOpenFeeBaseUnits: openFees.fundingOpenFeeAmount.toString(),
           ...(selected ? { privateRelayFeeBaseUnits: (options.privateRelayFeeAmount ?? 0n).toString() } : {}),
           updatedAt: this.now(),
@@ -1352,7 +1337,7 @@ export class MarketplaceController {
     return this.operationLock.run(operationKey, () => this.resumePublicationLocked(publication, options));
   }
 
-  /** Forget a listing whose escrow funding never started. A created contract holds nothing. */
+  /** Forget a listing whose escrow transaction never started. */
   async discardUnfundedPublication(publication: OfferPublication): Promise<void> {
     const identity = this.requireIdentity();
     const key = offerKey(publication);
@@ -1379,9 +1364,9 @@ export class MarketplaceController {
     if (stored === null || stored.source !== "created") {
       throw new Error("No local seller publication is available to resume");
     }
-    if (stored.recoveryUnavailable || stored.missingContract) throw new Error("Recover the funded escrow before resuming publication");
+    if (stored.recoveryUnavailable) throw new Error("Recover the funded escrow before resuming publication");
     const publish = stored.publish;
-    if (publish === undefined || publish.creationOpenFeeBaseUnits === undefined || publish.fundingOpenFeeBaseUnits === undefined) {
+    if (publish === undefined || publish.fundingOpenFeeBaseUnits === undefined) {
       throw new Error("The durable seller publication has no relayer fees");
     }
     if (publish.submissionMode === "selected" && options.privateRelayFeeAmount !== undefined
@@ -1397,44 +1382,19 @@ export class MarketplaceController {
         networkConfigFromStatus(wallet.status),
       );
     }));
-    const resume: PublishOfferResume | undefined = publish.l2ContractContentHash === undefined
-      ? undefined
-      : {
-          l2ContractContentHash: publish.l2ContractContentHash,
-          ...(publish.l2ContractTransactionHex === undefined ? {} : { l2ContractTransactionHex: publish.l2ContractTransactionHex as Hex }),
-          ...(publish.fundingContentHash === undefined ? {} : { fundingContentHash: publish.fundingContentHash }),
-          ...(publish.fundingTransactionHex === undefined ? {} : { fundingTransactionHex: publish.fundingTransactionHex as Hex }),
-        };
+    const resume: PublishOfferResume | undefined = publish.fundingContentHash === undefined ? undefined : {
+      fundingContentHash: publish.fundingContentHash,
+      ...(publish.fundingTransactionHex === undefined ? {} : { fundingTransactionHex: publish.fundingTransactionHex as Hex }),
+    };
     const openFees = {
-      creationOpenFeeAmount: BigInt(publish.creationOpenFeeBaseUnits),
+
       fundingOpenFeeAmount: BigInt(publish.fundingOpenFeeBaseUnits),
     };
-    return this.publishPreparedOffer(offer, durablePublication, stored, openFees, resume, {
+    const publicationOptions = {
       ...options,
       ...(publish.submissionMode === "selected" ? { privateRelayFeeAmount: BigInt(publish.privateRelayFeeBaseUnits ?? "0") } : {}),
-    });
-  }
-
-  /** Repair a funding-only inclusion; funding is never submitted by this action. */
-  async restoreContract(publication: OfferPublication, creationOpenFee: bigint, options: MarketplaceActionOptions = {}): Promise<Hex> {
-    const identity = this.requireIdentity();
-    return this.operationLock.run(marketplaceSellerPublicationOperationKey(identity.wallet.network.chainId, offerKey(publication), BigInt(identity.wallet.address)), async () => {
-      const prepared = await identity.wallet.execute(walletAction("marketplace:restore-contract", async wallet => {
-        requireSpendableWallet(wallet);
-        const offer = reconstructOfferFromPublication(publication, wallet.profile, networkConfigFromStatus(wallet.status));
-        const contract = await wallet.node.getContract(publicationContractAddress(publication));
-        if (contract.status !== "notFound") throw new Error("Refresh the listing's contract status before recovery");
-        return { offer, node: wallet.node, selfPublished: (options.submission ?? wallet.submission)?.mode === "l1" };
-      }));
-      options.assertActive?.();
-      const result = await runSponsoredContractCreationFlow({ wallet: identity.wallet, node: prepared.node,
-        contract: { body: prepared.offer.l2ContractBody, address: prepared.offer.l2ContractAddress },
-        openFeeAmount: prepared.selfPublished || options.selectedRelaySession !== undefined ? 0n : creationOpenFee,
-        ...(options.submission === undefined ? {} : { submission: options.submission }),
-        ...(options.selectedRelaySession === undefined ? {} : { selectedRelayQuote: options.selectedRelaySession, privateRelayFeeAmount: options.privateRelayFeeAmount ?? 0n }),
-      });
-      return result.contentHash as Hex;
-    });
+    };
+    return this.publishPreparedOffer(offer, durablePublication, stored, openFees, resume, publicationOptions);
   }
 
   async reclaim(publication: OfferPublication, requestedOpenFee: bigint, options: MarketplaceActionOptions = {}): Promise<Hex> {

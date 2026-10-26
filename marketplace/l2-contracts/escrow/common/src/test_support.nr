@@ -61,6 +61,7 @@ pub fn release_transaction(
         carrier_context_hash: 0,
         asset_burn_amount: 0,
         delivery_commitment: delivery_commitment(release_output_data_hashes(), RELEASE_ARENA_HASH),
+        account_creation_commitment: 0,
         input_slot_classes,
         input_commitments,
         nullifiers,

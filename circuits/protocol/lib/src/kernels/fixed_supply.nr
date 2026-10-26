@@ -168,6 +168,7 @@ mod tests {
                 carrier_context_hash: 0,
                 asset_burn_amount: 0,
                 delivery_commitment: 0,
+                account_creation_commitment: 0,
                 input_slot_classes,
                 output_slot_classes,
             },

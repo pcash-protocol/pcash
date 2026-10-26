@@ -103,6 +103,29 @@ Every node requires `--beacon-api` or `PCASH_BEACON_API`. The node maps executio
 
 When a required blob is absent or mismatched during canonical derivation, the node leaves that L1 block pending and retries it from the same cursor. Each retry refreshes canonical execution-layer state first, so an unavailable orphan cannot hide a reorganization. Cold replay and force resynchronization require the Beacon endpoint to serve every referenced historical slot in the replay range. Consensus clients keep blobs for about 18 days by default, so a node that starts or replays later needs an endpoint that keeps them, such as an archiving consensus node. Catching up or rebuilding the integrated projection reads only the node's stored canonical records; it fetches nothing from the execution or Beacon endpoint.
 
+## Browser proving assets
+
+The website proves in the browser, so it can use a node only if the node advertises where to download the proving assets of the website's release: prover artifacts, verification keys and CRS files. `--prover-assets-base-url` / `PCASH_PROVER_ASSETS_BASE_URL` and `--prover-assets-manifest` / `PCASH_PROVER_ASSETS_MANIFEST` make `pcash_status` advertise them. A node without them advertises none, and the website will not prove with it. The node does not serve the files itself.
+
+Export the asset set into an empty directory:
+
+```sh
+node scripts/circuits/browser_assets.mjs export \
+  --bundle "$(just circuit-bundle)" \
+  --tool-root .pcash-tools \
+  --release assets/browser-prover-release.json \
+  --output /srv/pcash-public
+```
+
+The export fails unless the set matches the checked-in release. It writes the files under `proving/<asset set ID>/` and the manifest as `browser-prover-manifest.json`. Serve the `proving/` directory over HTTPS (plain HTTP only on localhost), with CORS headers that let the website's origin read the files, including Range requests; [`compose/gateway.Caddyfile`](../../compose/gateway.Caddyfile) is a working configuration. Then start the node with both settings:
+
+```sh
+pcash-node --prover-assets-base-url https://assets.example/proving/ \
+  --prover-assets-manifest /srv/pcash-public/browser-prover-manifest.json
+```
+
+The node appends the asset set ID to the base URL. A base URL that is only a path, such as `/proving/`, resolves against the node's RPC URL, for serving the assets from the same origin as the RPC. The container image already sets the manifest path. A website release accepts only its own asset set, so export again when you upgrade.
+
 ## Peer management
 
 Pass `--admin-addr` / `PCASH_ADMIN_ADDR` (for example `127.0.0.1:8647`) to bind an operator-only JSON-RPC listener serving the `admin_*` namespace. When the flag is omitted the node binds no admin port: static peers can then only be configured at startup with `--p2p-bootnode`, automatic discovery still runs, and no operator source publication is possible.

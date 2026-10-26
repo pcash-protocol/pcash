@@ -1,4 +1,6 @@
 import { sameTransactionData, storeTransactionData, restoreTransactionData, resolveTransactionData, transactionDataHash, type TransactionData, type StoredTransactionData } from "@pcash/sdk/delivery";
+import type { AccountCreationAttachment, RawPrivateValueTransaction } from "@pcash/sdk/protocol";
+import { sameAccountCreation } from "./accountCreation.ts";
 import type { SelectedRelayQuoteProvider } from "@pcash/sdk/eip712";
 import { randomFieldEntropy } from "@pcash/sdk/utils";
 import { type DesignatedIssuanceOpening } from "@pcash/sdk/protocol";
@@ -50,10 +52,11 @@ import {
   type WalletNote,
 } from "../noteStore.ts";
 import { reconcilePendingWalletActions, removePendingChangeNote } from "./clientReconciliation.ts";
+import { directSendsToRecord } from "../directSends.ts";
 import { WalletConflictError, type WalletStateStore } from "../store.ts";
 import { parseExtendedCode, resolveRecipientAddress, resolveRecipientDelivery } from "@pcash/sdk/delivery";
-import { TX_KIND_PRIVATE_VALUE } from "@pcash/sdk/protocol";
-import { PRIVATE_VALUE_PROFILES, privateValueProfile, type PrivateValueShape, STATE_KEY_OUTPUT_ROOT, STATE_KEY_ACCOUNT_STATE_ROOT, BLOCK_HEADER_KEY_STATE_ROOT, MERKLE_DEPTH } from "@pcash/sdk/constants";
+import { TX_KIND_PRIVATE_VALUE, RECENT_PCASH_BLOCK_WINDOW_SECONDS } from "@pcash/sdk/protocol";
+import { ACCOUNT_KIND_CONTRACT, PRIVATE_VALUE_PROFILES, privateValueProfile, type PrivateValueShape, STATE_KEY_OUTPUT_ROOT, STATE_KEY_ACCOUNT_STATE_ROOT, BLOCK_HEADER_KEY_STATE_ROOT, MERKLE_DEPTH } from "@pcash/sdk/constants";
 import type { PcashActionSigner } from "@pcash/sdk/eip712";
 import { receiveKeyHash } from "@pcash/sdk/protocol";
 import {
@@ -74,6 +77,7 @@ import {
   pendingIssuanceBeneficiary,
   publicationOf,
   publicationValidUntil,
+  paddedPrivateValueByteSize,
   type IssuanceBeneficiary,
   type PublicationMode,
 } from "./publication.ts";
@@ -88,11 +92,20 @@ export const DEFAULT_NOTE_FUNDED_VALIDITY_WINDOW = 1_800n;
 export type NoteFundedValidityMode = "exact" | "ceiling";
 
 export interface NoteFundedTransferIntent {
+  /** Finality polling attempts after submission; applications may observe settlement separately. */
+  settlePollMaxAttempts?: number;
+  accountCreation?: AccountCreationAttachment;
   kind?: "payment" | "mine";
   /** Omit to select the smallest profile that funds the payment. */
   shape?: PrivateValueShape;
   to: string;
   amount: bigint;
+  /**
+   * Pay an address that publishes no receive key by a direct send: a note under
+   * a secret derived from this wallet's keys, with no envelope, whose opening
+   * the sender delivers by link. Without it such an address is refused.
+   */
+  directSend?: boolean;
   /** Transaction-scoped recipient and self records. */
   data?: TransactionData;
   /** The approved explicit fee. The wallet runtime resolves an absent one before funding. */
@@ -193,8 +206,7 @@ function pendingNoteFundedTransferMatchesIntent(
   // the retry identity.
   const lowerBoundMatches =
     BigInt(pending.notBeforeTimestamp) === (intent.notBeforeTimestamp ?? 0n);
-  return pending.kind === (intent.kind ?? "payment")
-    && (intent.shape === undefined || (decodeTransaction(fromHex(pending.transactionHex)) as { shape?: PrivateValueShape }).shape === intent.shape)
+  const sameTerms = pending.kind === (intent.kind ?? "payment")
     && lowerBoundMatches
     && BigInt(pending.transferAmount) === intent.amount
     && (intent.openFeeAmount === undefined || BigInt(pending.openFeeAmount) === intent.openFeeAmount)
@@ -207,6 +219,10 @@ function pendingNoteFundedTransferMatchesIntent(
     && sameRecipient(pending.recipient, intent.to)
     && sameTransactionData(pending.data, intent.data)
     && deadlineMatches;
+  if (!sameTerms) return false;
+  const transaction = decodeTransaction(fromHex(pending.transactionHex)) as RawPrivateValueTransaction;
+  return (intent.shape === undefined || transaction.shape === intent.shape)
+    && sameAccountCreation(transaction.accountCreation, intent.accountCreation);
 }
 
 interface CollectedNoteTransferOpenings {
@@ -306,6 +322,7 @@ interface NoteFundedDeterministicTransactionInput {
 
 interface NoteFundedClientParams<Prepared = unknown, Output = unknown>
   extends NoteFundedTransferIntent, DurableSubmissionCallbacks, SettlePollOptions {
+  createAccount?: (context: { recentPcashBlockHash: bigint; validUntilTimestamp: bigint }) => Promise<AccountCreationAttachment>;
   node: PcashNodeClient;
   store: WalletStateStore;
   wallet: PcashProfile;
@@ -790,6 +807,7 @@ function prepareNoteFundedTransferAction(params: {
   privateRelayRecipient?: bigint;
   notBeforeTimestamp: bigint;
   validUntilTimestamp: bigint;
+  directSend: boolean;
 }): PreparedNoteFundedTransfer {
   const { contentHash, transactionHex } = transactionIdentity(params.transactionBytes);
   const openFeeAmount = params.intent.openFeeAmount ?? 0n;
@@ -831,6 +849,7 @@ function prepareNoteFundedTransferAction(params: {
           noteSecret: bytes32Hex(params.build.outputNoteSecrets[1]!),
         }
       : null,
+    ...(params.directSend ? { directSendNoteSecret: bytes32Hex(params.build.outputNoteSecrets[0]!) } : {}),
   };
   return {
     transactionBytes: params.transactionBytes,
@@ -946,7 +965,7 @@ export async function prepareNoteFundedTransfer<Prepared, Output>(
   params: NoteFundedClientParams<Prepared, Output>,
   liveInputNotes: WalletNote[],
   shape: PrivateValueShape,
-): Promise<{ preparedAction: PreparedNoteFundedTransfer; status: StatusResult; anchor: { blockHash: bigint; timestamp: bigint } }> {
+): Promise<{ preparedAction: PreparedNoteFundedTransfer; status: StatusResult; anchor: { number: bigint; blockHash: bigint; timestamp: bigint } }> {
   const storedData = storeTransactionData(params.data);
   return prepareNoteFundedTransferSnapshot({
     ...params, ...(storedData === undefined ? {} : { data: restoreTransactionData(storedData)! }),
@@ -958,7 +977,7 @@ async function prepareNoteFundedTransferSnapshot<Prepared, Output>(
   liveInputNotes: WalletNote[],
   shape: PrivateValueShape,
   storedData: StoredTransactionData | undefined,
-): Promise<{ preparedAction: PreparedNoteFundedTransfer; status: StatusResult; anchor: { blockHash: bigint; timestamp: bigint } }> {
+): Promise<{ preparedAction: PreparedNoteFundedTransfer; status: StatusResult; anchor: { number: bigint; blockHash: bigint; timestamp: bigint } }> {
   const openings = await abortableWalletAction(collectCurrentNoteTransferOpenings(
     params.node,
     params.store,
@@ -970,16 +989,23 @@ async function prepareNoteFundedTransferSnapshot<Prepared, Output>(
   assertWalletStoreMatches(params.store, params.wallet, params.chainId, openings.status);
   const account = noteTransferAccountWitness(params.wallet, openings, params.kind === "mine");
   assertTransactionTypeAccepted(openings.status, TX_KIND_PRIVATE_VALUE);
-  const notBefore = assertSubmittableLowerBound(
-    params.notBeforeTimestamp,
-    openings.status,
-    params.nowUnixSeconds === undefined
-      ? noteFundedTransferValidUntil(openings.status, params)
-      : noteFundedTransferValidUntil(openings.status, params, params.nowUnixSeconds),
-  );
-  const validUntil = params.nowUnixSeconds === undefined
+  let validUntil = params.nowUnixSeconds === undefined
     ? noteFundedTransferValidUntil(openings.status, params)
     : noteFundedTransferValidUntil(openings.status, params, params.nowUnixSeconds);
+  if (params.createAccount !== undefined) {
+    const windowEnd = openings.boundary.header.timestamp + RECENT_PCASH_BLOCK_WINDOW_SECONDS;
+    if (openings.status.latestBlockTimestamp >= windowEnd) throw new Error("account activation snapshot has expired; synchronize the wallet before preparing setup");
+    if (validUntil > windowEnd) {
+      if (params.validUntilTimestamp !== undefined && params.validUntilMode !== "ceiling") {
+        throw new Error("account activation deadline is beyond its recent PCASH block's window");
+      }
+      validUntil = windowEnd;
+    }
+  }
+  const notBefore = assertSubmittableLowerBound(params.notBeforeTimestamp, openings.status, validUntil);
+  if (params.createAccount !== undefined) {
+    params = { ...params, accountCreation: await params.createAccount({ recentPcashBlockHash: openings.boundary.blockHash, validUntilTimestamp: validUntil }) };
+  }
   params.onProgress?.("preparing", "resolving the recipient…");
   const data = await params.store.load();
   let resolvedSelfReceiveKey: Uint8Array | undefined;
@@ -993,15 +1019,20 @@ async function prepareNoteFundedTransferSnapshot<Prepared, Output>(
     ? resolveRecipientAddress(params.to, params.chainId)
     : await abortableWalletAction(
         resolveRecipientDelivery(params.to, params.chainId, (address) => BigInt(address) === params.wallet.address
-          ? selfReceiveKey() : receiveKeyOf(address)),
+          ? selfReceiveKey() : receiveKeyOf(address), { directSend: params.directSend === true }),
         params.signal,
       );
   if (recipientAddress === params.wallet.address && delivery.recipientExtendedCode !== undefined) {
     assertReceiveKeyOwned(data, parseExtendedCode(delivery.recipientExtendedCode).mlKemPublicKey);
   }
+  // A contract account's notes answer to its rules, never to a link's holder.
+  if (delivery.recipientDirectSend === true && (await localAccount(params.store, addressHex(recipientAddress)))?.accountKind === Number(ACCOUNT_KIND_CONTRACT)) {
+    throw new Error(`recipient ${addressHex(recipientAddress)} is a contract account, which a direct send cannot pay`);
+  }
   const openFeeAmount = params.openFeeAmount ?? 0n;
   const dummyInputEntropy = params.deterministicTransactionInput?.dummyInputEntropy ?? randomFieldEntropy();
   const { issuanceOwnerCommitment, designatedIssuanceOpening, privateRelayPayment, selectedQuote } = await fixPublication({
+    maxTransactionBytes: paddedPrivateValueByteSize(shape, params.accountCreation),
     selectedRelayQuote: params.selectedRelayQuote,
     publication: publicationOf(params.submission, params.privateRelayFeeAmount),
     owner: params.wallet,
@@ -1020,6 +1051,7 @@ async function prepareNoteFundedTransferSnapshot<Prepared, Output>(
   const outputDataOverrides = params.deterministicTransactionInput?.outputData;
   const needsSelfReceiveKey = params.kind !== "mine" && changeAmount > 0n && outputDataOverrides?.[1] === undefined;
   const build = await abortableWalletAction(authorizeNativeTransferBuild((params.kind === "mine" ? buildMineAction : buildNativeTransfer)({
+    ...(params.accountCreation === undefined ? {} : { accountCreation: params.accountCreation }),
     shape,
     chainId: params.chainId,
     network: networkConfigFromStatus(openings.status),
@@ -1027,8 +1059,9 @@ async function prepareNoteFundedTransferSnapshot<Prepared, Output>(
     ...(needsSelfReceiveKey ? { selfReceiveKey: selfReceiveKey() } : {}),
     sender: {
       outgoingKey: params.wallet.outgoingKey,
+      directSendOpenings: directSendsToRecord(data, params.wallet.address, params.kind === "mine" ? undefined : liveInputNotes),
     },
-    data: await resolveTransactionData(params.data, params.chainId, receiveKeyOf),
+    data: await resolveTransactionData(params.data, params.chainId, receiveKeyOf, { directSend: delivery.recipientDirectSend === true }),
     recipientAddress,
     paymentAmount: params.amount,
     inputs: liveInputNotes.map((note, index) => ({
@@ -1082,8 +1115,9 @@ async function prepareNoteFundedTransferSnapshot<Prepared, Output>(
     ...(privateRelayPayment === undefined ? {} : { privateRelayRecipient: privateRelayPayment.recipientAddress }),
     notBeforeTimestamp: notBefore,
     validUntilTimestamp: validUntil,
+    directSend: delivery.recipientDirectSend === true,
   });
-  return { preparedAction, status: openings.status, anchor: { blockHash: openings.boundary.blockHash, timestamp: openings.boundary.header.timestamp } };
+  return { preparedAction, status: openings.status, anchor: { number: openings.boundary.header.number, blockHash: openings.boundary.blockHash, timestamp: openings.boundary.header.timestamp } };
 }
 
 function noteTransferAccountWitness(wallet: PcashProfile, openings: CollectedNoteTransferOpenings, mine = false) {

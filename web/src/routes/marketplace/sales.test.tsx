@@ -57,7 +57,7 @@ it("checks only the owner's funded, unreclaimed listings", () => {
     offer("live"),
     offer("other", { pub: { reclaimAuthority: "0x34", terms: { id: "other" }, escrow: {} } } as Partial<StoredOffer>),
     offer("reclaimed", { reclaim: { contentHash: "0x1" } } as Partial<StoredOffer>),
-    offer("unfunded", { publish: { phase: "l2-contract-submitted" } } as Partial<StoredOffer>),
+    offer("unfunded", { publish: { phase: "funding-submitted" } } as Partial<StoredOffer>),
   ];
   expect(saleCandidates(OWNER, offers).map((pub) => pub.terms.id)).toEqual(["live"]);
 });

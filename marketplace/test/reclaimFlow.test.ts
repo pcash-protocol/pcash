@@ -288,6 +288,7 @@ function transactionFromWitness(witnessed: Record<string, any>): PrivateValue {
       carrierContextHash: BigInt(witnessed.carrier_context_hash),
       assetBurnAmount: BigInt(witnessed.asset_burn_amount),
       deliveryCommitment: BigInt(witnessed.delivery_commitment),
+      accountCreationCommitment: 0n,
     },
     inputs: witnessed.input_slot_classes.map((slotClass: string, index: number) => ({
       slotClass: Number(BigInt(slotClass)),
@@ -464,7 +465,6 @@ test(`${mockProof ? "rotated payout reclaim with mock proof" : "browser reclaim 
     ...(selectedRelay === undefined ? {} : { selectedRelay }),
     prover: {
       proveUserAccountUpdate: async () => { throw new Error("account-update prover must not run"); },
-      proveSponsoredContractCreation: async () => { throw new Error("sponsored creation prover must not run"); },
       proveAssetAction: async () => { throw new Error("native reclaim does not prove an asset action"); },
       proveTransfer: async (args) => {
         events.push("prove reclaim circuit");

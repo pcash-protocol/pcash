@@ -7,6 +7,9 @@ import { bytesToHex, keccak256, type Hex } from "viem";
 import { openNodeWallet } from "@pcash/wallet";
 import {
   bytes32Hex,
+  WIRE_PROOF_BYTES,
+  fromHex,
+  buildExtendedCode,
   noteNk,
   nullifier,
   privateKeyPcashActionSigner,
@@ -27,8 +30,8 @@ import {
   runNoteFundedTransferFlow,
   type NoteFundedTransferFlowRuntime,
 } from "../src/client/noteFundedTransfer.ts";
-import { runSponsoredContractCreationFlow } from "../src/client/contractCreation.ts";
-import { ChainSim, noteTo, profileAccount } from "./walletChain.ts";
+import { anchoredPrivateValueTransaction } from "./anchoredTransaction.ts";
+import { ChainSim, noteTo, profileAccount, simNode } from "./walletChain.ts";
 
 const CHAIN_ID = 1346589512n;
 const GENESIS_HASH = `0x${"11".repeat(32)}`;
@@ -167,7 +170,8 @@ test("marketplace funding executes through the same unified Wallet path as note 
       assert.equal(intent.openFeeAmount, 1n);
       assert.equal(intent.validUntilMode, "ceiling");
       assert.equal((intent.submission as { mode: string }).mode, "mempool");
-      await (intent.beforeJournal as () => Promise<void>)();
+      assert.equal(intent.settlePollMaxAttempts, 1);
+      await (intent.beforeJournal as (contentHash: string, transactionHex: string) => Promise<void>)(`0x${"12".repeat(32)}`, `0x${"34".repeat(4)}`);
       await (intent.onPrepared as (contentHash: string, transactionHex: string) => Promise<void>)(
         `0x${"12".repeat(32)}`,
         `0x${"34".repeat(4)}`,
@@ -216,13 +220,11 @@ test("marketplace names its open compensation destination under the wallet's com
   const wallet = {
     preflightSend: async (intent: Record<string, unknown>) => { intents.push(intent); return { inputCount: 1, inputTotal: 10n }; },
     send: async (intent: Record<string, unknown>) => { intents.push(intent); return result; },
-    sponsorContractCreation: async (intent: Record<string, unknown>) => { intents.push(intent); return result; },
   } as unknown as Wallet;
   const node = {} as PcashNodeClient;
   await preflightNoteFundedTransfer({ wallet, amount: 50n, openFeeAmount: 1n, issuanceOwnerCommitment: 0n, to: RECIPIENT });
   await runNoteFundedTransferFlow({ wallet, node, to: RECIPIENT, amount: 50n, openFeeAmount: 1n, issuanceOwnerCommitment: 0n });
-  await runSponsoredContractCreationFlow({ wallet, node, contract: { body: new Uint8Array(), address: 1n }, openFeeAmount: 1n, issuanceOwnerCommitment: 0n });
-  assert.equal(intents.length, 3);
+  assert.equal(intents.length, 2);
   for (const intent of intents) {
     assert.equal(intent.issuanceOwnerCommitment, 0n);
     assert.equal("feeOwnerCommitment" in intent, false);
@@ -237,11 +239,9 @@ test("an Ethereum broadcast awaiting derivation is not staged as a mempool trans
   };
   const wallet = {
     send: async () => result,
-    sponsorContractCreation: async () => result,
   } as unknown as Wallet;
   const node = {} as PcashNodeClient;
   assert.equal((await runNoteFundedTransferFlow({ wallet, node, to: RECIPIENT, amount: 50n, openFeeAmount: 0n })).queued, false);
-  assert.equal((await runSponsoredContractCreationFlow({ wallet, node, contract: { body: new Uint8Array(), address: 1n }, openFeeAmount: 0n })).queued, false);
 });
 
 test("address delivery reads the recipient's key from the local directory without naming it to the node", async () => {
@@ -260,7 +260,7 @@ test("address delivery reads the recipient's key from the local directory withou
 test("an unresolved note-funded transfer retries its exact journaled bytes without proving again", async () => {
   const privateKey = Uint8Array.from({ length: 32 }, (_, index) => index + 1);
   const wallet = testWallet(privateKey);
-  const entry = Uint8Array.of(0, 7, 8, 9);
+  const entry = anchoredPrivateValueTransaction(7n);
   const transactionHex = bytesToHex(entry);
   const contentHash = keccak256(transactionHex);
   const node = registeredChain(wallet).client();
@@ -341,7 +341,7 @@ test("an unresolved note-funded transfer retries its exact journaled bytes witho
 test("an ambiguous admission keeps the journal and a restart retries the same bytes", async () => {
   const privateKey = Uint8Array.from({ length: 32 }, (_, index) => index + 4);
   const wallet = testWallet(privateKey);
-  const entry = Uint8Array.of(0, 14, 15, 16);
+  const entry = anchoredPrivateValueTransaction(14n);
   const transactionHex = bytesToHex(entry);
   const contentHash = keccak256(transactionHex);
   const node = registeredChain(wallet).client();
@@ -417,7 +417,7 @@ test("an ambiguous admission keeps the journal and a restart retries the same by
 
 test("preflight accepts a matching unresolved exact-byte transfer without selecting replacement notes", async () => {
   const wallet = testWallet(Uint8Array.from({ length: 32 }, (_, index) => index + 2));
-  const transactionHex = bytesToHex(Uint8Array.of(0, 10, 11));
+  const transactionHex = bytesToHex(anchoredPrivateValueTransaction(10n));
   const contentHash = keccak256(transactionHex);
   const node = registeredChain(wallet).client();
   await saveStore(node, wallet, {
@@ -611,4 +611,47 @@ test("zero-fee funding preserves the wallet's configured direct L1 transport", a
   } as unknown as Wallet;
   await runNoteFundedTransferFlow({ wallet: client, node: {} as PcashNodeClient, to: RECIPIENT, amount: 1n, openFeeAmount: 0n });
   assert.equal(submitted, true);
+});
+
+for (const persisted of [false, true]) test(`funding checkpoints before the wallet journal (persisted: ${persisted})`, async () => {
+  const key = new Uint8Array(32).fill(persisted ? 27 : 26);
+  const profile = testWallet(key);
+  const chain = registeredChain(profile);
+  chain.addBlock({ transactions: [{ outputs: [noteTo(profile, 100n), null, null, null, null] }] });
+  const node = simNode(chain, { getBlockByHash: async (hash: string) => BigInt(hash) === chain.head.hash
+    ? { hash, timestamp: chain.head.envelope.header.timestamp } : null });
+  let checkpoint: { contentHash: string; transactionHex: string } | undefined;
+  let proofs = 0;
+  const entries: Uint8Array[] = [];
+  const submission = { mode: "l1" as const, preflight: async () => null,
+    submit: async ({ transactionBytes }: { transactionBytes: Uint8Array }) => {
+      entries.push(transactionBytes); return { accepted: false, queued: false, output: null };
+    } };
+  await useTestWallet({ storageName: `checkpoint-${persisted}`, node, profile, signer: privateKeyPcashActionSigner(key),
+    provers: { privateValue: { proveAndEncode: async build => { proofs++; return build.encodeTransaction(new Uint8Array(WIRE_PROOF_BYTES)); } } },
+  }, async client => {
+    await client.sync();
+    await assert.rejects(runNoteFundedTransferFlow({ wallet: client, node, submission,
+      to: buildExtendedCode({ address: profile.address, chainId: CHAIN_ID, mlKemPublicKey: profile.mlKemPublicKey }),
+      amount: 50n, openFeeAmount: 0n,
+      beforeSubmit: (contentHash, transactionHex) => {
+        if (persisted) checkpoint = { contentHash, transactionHex };
+        throw new Error(persisted ? "stopped after application checkpoint" : "checkpoint storage failed");
+      },
+    }), /checkpoint/);
+    const stored = await client.execute(walletAction("test:checkpoint-order", ({ store }) => store.load()));
+    assert.equal(stored?.pendingNoteFundedTransfers?.length ?? 0, 0);
+    assert.equal(stored?.pendingAssetActions?.length ?? 0, 0);
+    assert.equal(stored?.mempoolOutbox?.length ?? 0, 0);
+  });
+  assert.equal(entries.length, 0);
+  assert.equal(proofs, 1);
+  if (checkpoint === undefined) return;
+  await useTestWallet({ storageName: `checkpoint-${persisted}`, node, profile, signer: privateKeyPcashActionSigner(key) }, async client => {
+    const resumed = await client.resumeValueTransaction({ transactionHex: checkpoint!.transactionHex, submission });
+    assert.equal(resumed.state, "pending");
+    assert.equal(resumed.contentHash, checkpoint!.contentHash);
+  });
+  assert.equal(proofs, 1);
+  assert.deepEqual(entries, [fromHex(checkpoint.transactionHex)]);
 });

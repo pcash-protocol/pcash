@@ -6,8 +6,6 @@ import { beBytes, bytesEqual, concatBytes } from "../src/utils/bytes.ts";
 import {
   privateValueTransactionSize,
   contractAccountCreationSize,
-  contractFundingBytes,
-  privateValueSectionBytes,
   userAccountUpdateSize,
   WIRE_PROOF_BYTES,
   MAX_BATCH_ENTRIES,
@@ -24,8 +22,6 @@ import {
   encodeBatch as encodeBatchWithPoster,
   encodeBatchForVersion as encodeBatchWithPosterForVersion,
   type PrivateValueOutputData,
-  type PrivateValueSectionInput,
-  contractCreationPublicInputs,
   encodeContractAccountCreation,
   encodeUserAccountUpdate,
   transactionOpenFee,
@@ -84,6 +80,7 @@ function privateValueInputs(outputData: readonly Uint8Array[], arena = ARENA): b
   const inputs = [...transferPubs];
   inputs[S.offsets.chainId] = CHAIN_ID;
   inputs[S.offsets.deliveryCommitment] = deliveryCommitment(outputData, arena);
+  inputs[S.offsets.accountCreationCommitment] = 0n;
   return inputs;
 }
 
@@ -98,12 +95,8 @@ function contractFee(proofByte = 4) {
   };
 }
 
-function sponsored(section: PrivateValueSectionInput = contractFee()) {
-  return { mode: "sponsored", section } as const;
-}
-
-/** envelope(5) ‖ fundingMode(1) ‖ the sponsor's section, then the body. */
-const SPONSORED_BODY_OFFSET = 6 + privateValueSectionBytes(WIRE_PROOF_BYTES, { kind: "contractAccountCreation" });
+const CONTRACT_BODY_OFFSET = 45;
+const creationContext = { recentPcashBlockHash: 1n, validUntilTimestamp: 2n };
 
 const KEEP: UserAccountReceiveKeyUpdate = { operation: "keep" };
 
@@ -144,11 +137,11 @@ describe("txBytes entry round-trips", () => {
     expect(d.outputData).toEqual([data0, data1, data2, data3, data4]);
     expect(d.arena).toEqual(ARENA);
     // envelope(5) ‖ shape(1) ‖ 16 words ‖ proof ‖ 5 output-data items ‖ arena, with no length prefixes.
-    expect(entry).toHaveLength(6 + 16 * 32 + 22_432 + 5 * OUTPUT_DATA_BYTES + S.arenaBytes);
+    expect(entry).toHaveLength(7 + 16 * 32 + 22_432 + 5 * OUTPUT_DATA_BYTES + S.arenaBytes);
     expect(bytesEqual(entry.subarray(6 + 16 * 32, 6 + 16 * 32 + WIRE_PROOF_BYTES), proof)).toBe(true);
-    const arenaStart = entry.length - S.arenaBytes;
+    const arenaStart = entry.length - S.arenaBytes - 1;
     expect(bytesEqual(entry.subarray(arenaStart - OUTPUT_DATA_BYTES, arenaStart), data4)).toBe(true);
-    expect(bytesEqual(entry.subarray(arenaStart), ARENA)).toBe(true);
+    expect(bytesEqual(entry.subarray(arenaStart, entry.length - 1), ARENA)).toBe(true);
   });
 
   it("carries a nonzero carrierContextHash in the word after validUntilTimestamp in every section layout", () => {
@@ -180,6 +173,7 @@ describe("txBytes entry round-trips", () => {
     const large = Array.from({ length: L.publicInputs }, (_, i) => BigInt(i + 1));
     large[L.offsets.chainId] = CHAIN_ID;
     large[L.offsets.deliveryCommitment] = deliveryCommitment(largeOutputData, largeArena);
+    large[L.offsets.accountCreationCommitment] = 0n;
     const largeInputs = bound(large, L);
     const largeEntry = decodeTransaction(encodePrivateValueTransaction({ shape: L.shapeId, publicInputs: largeInputs, proof: bytes(WIRE_PROOF_BYTES, 3), outputData: largeOutputData, arena: largeArena }));
     if (largeEntry.kind !== 0) throw new Error("type");
@@ -197,10 +191,7 @@ describe("txBytes entry round-trips", () => {
     expectTail(update.section);
     expect(userAccountUpdatePublicInputs(update)).toEqual([...fee.publicInputs, 1n]);
 
-    const creation = decodeTransaction(encodeContractAccountCreation(CHAIN_ID, contractBody(), sponsored(fee)));
-    if (creation.kind !== 2 || creation.funding.mode !== "sponsored") throw new Error("type");
-    expectTail(creation.funding.section);
-    expect(contractCreationPublicInputs(creation, 0x99n)).toEqual([...fee.publicInputs, 0x99n]);
+
   });
 
   it("reconstructs the delivery commitment from every output-data item and the arena", () => {
@@ -213,7 +204,7 @@ describe("txBytes entry round-trips", () => {
     };
     const base = statement(entry);
     expect(base[S.offsets.deliveryCommitment]).toBe(deliveryCommitment(outputData, ARENA));
-    for (const offset of [entry.length - S.arenaBytes - 1, entry.length - S.arenaBytes, entry.length - 1]) {
+    for (const offset of [entry.length - S.arenaBytes - 2, entry.length - S.arenaBytes - 1, entry.length - 2]) {
       const edited = Uint8Array.from(entry);
       edited[offset]! ^= 1;
       const changed = statement(edited);
@@ -278,81 +269,13 @@ describe("txBytes entry round-trips", () => {
     }
   });
 
-  it("sponsored contract entry carries the funding mode at byte 5, then the section, then the raw body", () => {
-    const body = contractBody();
-    const fee = contractFee();
-    const entry = encodeContractAccountCreation(CHAIN_ID, body, sponsored(fee));
-    expect(entry[0]).toBe(2);
-    expect(entry[5]).toBe(1);
-    expect(entry).toHaveLength(SPONSORED_BODY_OFFSET + body.length);
-    expect(bytesEqual(entry.subarray(SPONSORED_BODY_OFFSET), body)).toBe(true);
-    expect(bytesEqual(entry.subarray(6 + 15 * 32, 6 + 15 * 32 + WIRE_PROOF_BYTES), fee.proof)).toBe(true);
-    const d = decodeTransaction(entry);
-    expect(d.kind).toBe(2);
-    if (d.kind !== 2 || d.funding.mode !== "sponsored") throw new Error("type");
-    expect(bytesEqual(d.body, body)).toBe(true);
-    expect(d.funding.section.serializedPublicInputs).toHaveLength(15);
-    expect(bytesEqual(d.funding.section.proof, fee.proof)).toBe(true);
-    const publicInputs = contractCreationPublicInputs(d, 0x1234n);
-    expect(publicInputs).toHaveLength(S.publicInputs + 1);
-    expect(publicInputs[S.publicInputs]).toBe(0x1234n);
-    expect(publicInputs).toEqual([...fee.publicInputs, 0x1234n]);
-    expect(() => decodeTransaction(concatBytes(entry, new Uint8Array(1)))).toThrow(/trailing bytes/);
-    expect(() => encodeContractAccountCreation(CHAIN_ID, body, sponsored({
-      ...fee,
-      publicInputs: [CHAIN_ID + 1n, ...fee.publicInputs.slice(1)],
-    }))).toThrow(/chain id does not match/);
-  });
 
-  it("encodes both funding modes over the same body at fixed body offsets", () => {
-    const body = contractBody(bytes(1184));
-    const unfunded = encodeContractAccountCreation(CHAIN_ID, body, { mode: "unfunded", recentPcashBlockHash: 0x66n, validUntilTimestamp: 0x0102030405060708n });
-    const funded = encodeContractAccountCreation(CHAIN_ID, body, sponsored());
-    expect(unfunded[5]).toBe(0);
-    expect(bytesEqual(unfunded.subarray(6, 38), beBytes(0x66n, 32))).toBe(true);
-    expect(bytesEqual(unfunded.subarray(38, 46), beBytes(0x0102030405060708n, 8))).toBe(true);
-    expect(bytesEqual(unfunded.subarray(46), body)).toBe(true);
-    expect(bytesEqual(funded.subarray(SPONSORED_BODY_OFFSET), body)).toBe(true);
-    const [a, b] = [decodeTransaction(unfunded), decodeTransaction(funded)];
-    if (a.kind !== 2 || b.kind !== 2) throw new Error("type");
-    expect(a.body).toEqual(b.body);
-    expect(a.functions).toEqual(b.functions);
-    expect(a.mlKemPublicKey).toEqual(b.mlKemPublicKey);
-    expect(() => contractCreationPublicInputs(a, 0x1234n)).toThrow(/unfunded/);
-  });
 
-  it("rejects funding modes outside {unfunded, sponsored} structurally", () => {
-    for (const funding of [{ mode: "unfunded", recentPcashBlockHash: 1n, validUntilTimestamp: 2n } as const, sponsored()]) {
-      const entry = encodeContractAccountCreation(CHAIN_ID, contractBody(), funding);
-      for (const mode of [2, 9, 255]) {
-        const edited = Uint8Array.from(entry);
-        edited[5] = mode;
-        expect(() => decodeTransaction(edited)).toThrow(new RegExp(`unknown contract creation funding mode ${mode}`));
-      }
-    }
-    expect(() => decodeTransaction(Uint8Array.of(2, 0x50, 0x43, 0x53, 0x48))).toThrow(/unexpected end/);
-  });
 
-  it("carries a zero-fee creation with fixed-size dummy output data", () => {
-    const outputData = [data(), data(), data(), data(), data()] as const;
-    const publicInputs = privateValueInputs(outputData);
-    publicInputs[S.offsets.openFeeAmount] = 0n;
-    publicInputs[S.offsets.issuanceOwner] = 0n;
-    const entry = encodeContractAccountCreation(CHAIN_ID, contractBody(), sponsored({
-      publicInputs,
-      proof: bytes(WIRE_PROOF_BYTES, 5),
-      outputData,
-      arena: ARENA,
-    }));
-    const d = decodeTransaction(entry);
-    if (d.kind !== 2 || d.funding.mode !== "sponsored") throw new Error("type");
-    expect(contractCreationPublicInputs(d, 0x99n)[S.offsets.openFeeAmount]).toBe(0n);
-    expect(d.funding.section.outputData).toEqual(outputData);
-  });
 
-  it("rejects a sponsored contract creation cut short in its body or section", () => {
-    const entry = encodeContractAccountCreation(CHAIN_ID, contractBody(), sponsored());
-    for (const cut of [1, 40, 300]) {
+  it("rejects a contract creation cut short in its body or context", () => {
+    const entry = encodeContractAccountCreation(CHAIN_ID, contractBody(), creationContext);
+    for (const cut of [1, 40, 60]) {
       expect(() => decodeTransaction(entry.subarray(0, entry.length - cut))).toThrow(/unexpected end/);
     }
   });
@@ -370,12 +293,12 @@ describe("txBytes entry round-trips", () => {
       expect(() => decodeTransaction(encodeUserAccountCreation(CHAIN_ID, edited))).toThrow(/yParity/);
     }
 
-    const contract = encodeContractAccountCreation(CHAIN_ID, contractBody(), sponsored());
+    const contract = encodeContractAccountCreation(CHAIN_ID, contractBody(), creationContext);
     const nkRootFlag = Uint8Array.from(contract);
-    nkRootFlag[SPONSORED_BODY_OFFSET] = 2;
+    nkRootFlag[CONTRACT_BODY_OFFSET] = 2;
     expect(() => decodeTransaction(nkRootFlag)).toThrow(/publishesNkRoot/);
     const contractKeyMode = Uint8Array.from(contract);
-    contractKeyMode[SPONSORED_BODY_OFFSET + 1 + 32] = 2;
+    contractKeyMode[CONTRACT_BODY_OFFSET + 1 + 32] = 2;
     expect(() => decodeTransaction(contractKeyMode)).toThrow(/receive-key mode/);
 
     const update = Uint8Array.from(updateEntry());
@@ -423,10 +346,6 @@ describe("txBytes entry round-trips", () => {
       expect(() => encodePrivateValueTransaction({ publicInputs, proof: bytes(size), outputData, arena: ARENA }))
         .toThrow(new RegExp(`proof must be ${WIRE_PROOF_BYTES} bytes`));
     }
-    expect(() => encodeContractAccountCreation(CHAIN_ID, contractBody(), sponsored({ ...contractFee(), arena: bytes(S.arenaBytes - 1) })))
-      .toThrow(/arena must have exactly/);
-    expect(() => encodeContractAccountCreation(CHAIN_ID, contractBody(), sponsored({ ...contractFee(), proof: bytes(WIRE_PROOF_BYTES - 1) })))
-      .toThrow(new RegExp(`proof must be ${WIRE_PROOF_BYTES} bytes`));
     expect(() => encodeUserAccountUpdate({
       pcashChainId: CHAIN_ID,
       proposedAccountFields: { address: 1n, newRuleSetCommitment: 1n, receiveKey: KEEP },
@@ -446,12 +365,10 @@ describe("txBytes entry round-trips", () => {
       { name: "private value S", entry: encodePrivateValueTransaction({ ...contractFee(), proof: bytes(WIRE_PROOF_BYTES, 2) }), proofBytes: 22_432, outputs: 5, arenaBytes: S.arenaBytes },
       { name: "private value L", entry: largePrivateValueEntry(), proofBytes: 22_432, outputs: 32, arenaBytes: L.arenaBytes },
       { name: "account update", entry: updateEntry(), proofBytes: 22_432, outputs: 5, arenaBytes: S.arenaBytes },
-      { name: "contract creation", entry: encodeContractAccountCreation(CHAIN_ID, contractBody(), sponsored()), proofBytes: 22_432, outputs: 5, arenaBytes: S.arenaBytes },
     ];
     for (const { name, entry, proofBytes, outputs, arenaBytes } of layouts) {
       const decoded = decodeTransaction(entry);
       const section = decoded.kind === 0 ? decoded
-        : decoded.kind === 2 && decoded.funding.mode === "sponsored" ? decoded.funding.section
           : decoded.kind === 3 ? decoded.section : null;
       if (section === null) throw new Error(name);
       expect(section.proof, name).toHaveLength(proofBytes);
@@ -505,13 +422,13 @@ describe("batch calldata round-trips", () => {
   const privateValueOutputData = [data(8), data(), data(), data(), data()] as const;
   const e0 = encodePrivateValueTransaction({ publicInputs: privateValueInputs(privateValueOutputData), proof: bytes(WIRE_PROOF_BYTES, 1), outputData: privateValueOutputData, arena: ARENA });
   const e1 = encodeUserAccountCreation(CHAIN_ID, userCreationBody());
-  const e2 = encodeContractAccountCreation(CHAIN_ID, contractBody(), sponsored());
+  const e2 = encodeContractAccountCreation(CHAIN_ID, contractBody(), creationContext);
 
-  it("uses 16 serialized words while reconstructing the complete 18-field statement", () => {
+  it("uses 16 serialized words while reconstructing the complete 19-field statement", () => {
     expect(PRIVATE_VALUE_WIRE_PUBLIC_INPUTS).toBe(16);
-    expect(PRIVATE_VALUE_PUBLIC_INPUTS).toBe(18);
+    expect(PRIVATE_VALUE_PUBLIC_INPUTS).toBe(19);
     const privateValue = decodeTransaction(e0);
-    expect(privateValue.kind === 0 && privateValuePublicInputs(privateValue)).toHaveLength(18);
+    expect(privateValue.kind === 0 && privateValuePublicInputs(privateValue)).toHaveLength(19);
   });
 
   it("VERSION/count framing and exact entry recovery", () => {
@@ -540,7 +457,7 @@ describe("batch calldata round-trips", () => {
   });
 
   it("mixes transaction types in batch version 1", () => {
-    const contractEntry = encodeContractAccountCreation(CHAIN_ID, contractBody(), { mode: "unfunded", recentPcashBlockHash: 1n, validUntilTimestamp: 2n });
+    const contractEntry = encodeContractAccountCreation(CHAIN_ID, contractBody(), { recentPcashBlockHash: 1n, validUntilTimestamp: 2n });
     const calldata = encodeBatchForVersion([contractEntry, e1, e2], VERSION, 1n, 0n);
     expect(calldata[0]).toBe(VERSION);
 
@@ -606,7 +523,7 @@ it.each([0n, 7n])("reads the actual %s fee for every proof-bearing transaction k
   section.publicInputs[S.offsets.openFeeAmount] = fee;
   const entries = [
     encodePrivateValueTransaction({ ...section, proof: bytes(WIRE_PROOF_BYTES) }),
-    encodeContractAccountCreation(CHAIN_ID, contractBody(), sponsored(section)),
+
     encodeUserAccountUpdate({
       pcashChainId: CHAIN_ID,
       proposedAccountFields: { address: 1n, newRuleSetCommitment: 1n, receiveKey: KEEP },
@@ -616,7 +533,7 @@ it.each([0n, 7n])("reads the actual %s fee for every proof-bearing transaction k
   ];
   for (const entry of entries) expect(transactionOpenFee(entry)).toBe(fee);
   expect(transactionOpenFee(encodeUserAccountCreation(CHAIN_ID, userCreationBody()))).toBe(0n);
-  expect(transactionOpenFee(encodeContractAccountCreation(CHAIN_ID, contractBody(), { mode: "unfunded", recentPcashBlockHash: 1n, validUntilTimestamp: 2n }))).toBe(0n);
+  expect(transactionOpenFee(encodeContractAccountCreation(CHAIN_ID, contractBody(), { recentPcashBlockHash: 1n, validUntilTimestamp: 2n }))).toBe(0n);
 });
 
 describe("planned entry sizes", () => {
@@ -630,18 +547,11 @@ describe("planned entry sizes", () => {
     expect(privateValueTransactionSize(PRIVATE_VALUE_PROFILES.L.shapeId)).toBe(largePrivateValueEntry().length);
   });
 
-  it.each([0, 1184])("matches contract body length with %i receive-key bytes in both funding modes", (keyLength) => {
+  it.each([0, 1184])("matches contract body length with %i receive-key bytes", (keyLength) => {
     const body = contractBody(bytes(keyLength));
-    const funded = encodeContractAccountCreation(CHAIN_ID, body, sponsored({
-      publicInputs, outputData, proof: bytes(WIRE_PROOF_BYTES), arena: ARENA,
-    }));
-    expect(contractAccountCreationSize(body.length, "sponsored")).toBe(funded.length);
-    const unfunded = encodeContractAccountCreation(CHAIN_ID, body, { mode: "unfunded", recentPcashBlockHash: 1n, validUntilTimestamp: 2n });
-    expect(contractAccountCreationSize(body.length, "unfunded")).toBe(unfunded.length);
-    expect(contractFundingBytes("unfunded")).toBe(40);
-    expect(contractFundingBytes("sponsored")).toBe(15 * 32 + 22_432 + 5 * OUTPUT_DATA_BYTES + S.arenaBytes);
+    const entry = encodeContractAccountCreation(CHAIN_ID, body, creationContext);
+    expect(contractAccountCreationSize(body.length)).toBe(entry.length);
   });
-
   it.each<UserAccountReceiveKeyUpdate>([
     { operation: "keep" },
     { operation: "clear" },

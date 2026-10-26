@@ -57,7 +57,7 @@ function node(admitted: string[] = [], receiptContentHash: string = contentHash)
     getReceipt: async () => [{
       contentHash: receiptContentHash, transactionId: `0x${"7e".repeat(32)}`, outcome: "succeeded", failureDetail: null,
       l1Sender: `0x${"00".repeat(20)}`, issuanceOwnerCommitment: null,
-      settledOpenFeeAmount: 5n, settledIssuanceAmount: 0n, kind: "contractAccount",
+      settledOpenFeeAmount: 5n, settledIssuanceAmount: 0n, kind: "privateValue", accountCreation: 1,
       inclusion: { l1BlockNumber: 1n, l1BlockHash: `0x${"cc".repeat(32)}`, l1TransactionIndex: 0n, l1TransactionHash: `0x${"7c".repeat(32)}`, batchItemIndex: 0n },
       outputLeafStart: 0n, outputsAdded: 0n, nullifiers: [], account: null,
     }],

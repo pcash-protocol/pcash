@@ -12,8 +12,8 @@ use common::*;
 use pcash_derive::params::private_value_tx_bytes;
 use pcash_derive::private_value_profiles::{PrivateValueShape, S};
 use pcash_derive::{
-    AccountCreationAuthorization, Batch, BatchExclusionReason, BatchVersion, ContractFunding,
-    ParseError, ReceiveKeyUpdate, SectionLayout, Transaction, UserAccountCreation,
+    AccountCreationAttachment, AccountCreationAuthorization, Batch, BatchExclusionReason,
+    BatchVersion, ParseError, ReceiveKeyUpdate, SectionLayout, Transaction, UserAccountCreation,
     ACCOUNT_MAX_TX_BYTES, BATCH_VERSION_V1, CONTRACT_FUNCTION_BYTES, CONTRACT_MAX_BODY_BYTES,
     CONTRACT_MAX_TX_BYTES, KIND_PRIVATE_VALUE, KIND_USER_ACCOUNT_CREATION, MAX_TX_BYTES,
     MAX_VALID_TX_BYTES, ML_KEM768_PUBLIC_KEY_LEN, OUTPUT_DATA_BYTES, PRIVATE_VALUE_MAX_TX_BYTES,
@@ -198,6 +198,7 @@ fn sample_transfer_pis() -> Vec<CircuitWord> {
         .map(|i| word(1000 + i as u64))
         .collect();
     pis[0] = word(u64::from(PCASH_CHAIN_ID));
+    *pis.last_mut().unwrap() = CircuitWord::ZERO;
     pis
 }
 
@@ -302,6 +303,7 @@ fn the_delivery_commitment_is_reconstructed_from_exact_wire_bytes() {
             + WIRE_PROOF_BYTES
             + 5 * OUTPUT_DATA_BYTES
             + S.arena_bytes
+            + 1
     );
     let parsed = match decode(&original).expect("parse original") {
         Transaction::PrivateValue(parsed) => parsed,
@@ -346,6 +348,7 @@ fn timestamp_activation_retires_a_transaction_type() {
     let rules = stub_rules().with_fork(fork_at(10));
     let mut pis = vec![CircuitWord::ZERO; PRIVATE_VALUE_PUBLIC_INPUTS];
     pis[0] = word(u64::from(PCASH_CHAIN_ID));
+    *pis.last_mut().unwrap() = CircuitWord::ZERO;
     let transfer = transfer_txbytes(
         &pis,
         &stub_proof(TRANSFER, &[]),
@@ -617,22 +620,27 @@ fn contract_selectors_outside_their_sets_are_not_decodable() {
     ] {
         let body = functionless_body(publishes_nk_root, receive_key_mode);
         for tx in [
-            sponsored_contract_txbytes(&body, &contract_stub_section()),
+            attached_contract_txbytes(&body, &contract_stub_section()),
             unfunded_contract_txbytes(&body, word(0xbb), 125),
         ] {
             let decoded = decode(&tx);
             match &expected {
                 None => assert!(matches!(
                     decoded,
-                    Ok(Transaction::ContractAccountCreation(_))
+                    Ok(Transaction::ContractAccountCreation(_) | Transaction::PrivateValue(_))
                 )),
                 Some(error) => assert_eq!(decoded.err().as_ref(), Some(error)),
             }
         }
     }
-    let mut unknown = unfunded_contract_txbytes(&functionless_body(0, 0), word(0xbb), 125);
-    unknown[5] = 2;
-    assert_eq!(decode(&unknown), Err(ParseError::UnknownFundingMode(2)));
+    let body = functionless_body(0, 0);
+    let mut unknown = attached_contract_txbytes(&body, &contract_stub_section());
+    let tag = unknown.len() - body.len() - 1;
+    unknown[tag] = 3;
+    assert_eq!(
+        decode(&unknown),
+        Err(ParseError::UnknownAccountCreationTag(3))
+    );
 }
 
 #[test]
@@ -643,12 +651,12 @@ fn contract_trailing_bytes_rejected() {
     body.extend_from_slice(word(1).as_slice());
     body.extend_from_slice(word(2).as_slice());
     for mut tx in [
-        sponsored_contract_txbytes(&body, &contract_stub_section()),
+        attached_contract_txbytes(&body, &contract_stub_section()),
         unfunded_contract_txbytes(&body, word(0xbb), 125),
     ] {
         assert!(matches!(
             decode(&tx),
-            Ok(Transaction::ContractAccountCreation(_))
+            Ok(Transaction::ContractAccountCreation(_) | Transaction::PrivateValue(_))
         ));
         tx.push(0xff);
         assert_eq!(decode(&tx).err(), Some(ParseError::Trailing));
@@ -661,9 +669,13 @@ const KIND_PRIVATE_VALUE_LOCAL: u8 = 0;
 fn contract_stub_section() -> Vec<u8> {
     let mut pis: Vec<CircuitWord> = (0..PRIVATE_VALUE_PUBLIC_INPUTS as u64).map(word).collect();
     pis[0] = word(u64::from(PCASH_CHAIN_ID));
+    *pis.last_mut().unwrap() = CircuitWord::ZERO;
     private_value_section(
         &pis,
-        &stub_proof(SectionLayout::ContractAccountCreation, &[0xab; 8]),
+        &stub_proof(
+            SectionLayout::PrivateValue(PrivateValueShape::S),
+            &[0xab; 8],
+        ),
         &[DUMMY_OUTPUT_DATA.as_slice(); 5],
     )
 }
@@ -675,17 +687,16 @@ fn contract_stub_section() -> Vec<u8> {
 #[test]
 fn max_tx_bytes_is_the_fixed_parsing_bound() {
     assert_eq!(MAX_TX_BYTES, 131_072);
-    assert_eq!(PRIVATE_VALUE_MAX_TX_BYTES, 80_198);
+    assert_eq!(PRIVATE_VALUE_MAX_TX_BYTES, 97_993);
     assert_eq!(ACCOUNT_MAX_TX_BYTES, 1_360);
     assert_eq!(CONTRACT_FUNCTION_BYTES, 65);
     assert_eq!(CONTRACT_MAX_BODY_BYTES, 17_794);
-    // The largest contract creation is sponsored: the funding mode and the
-    // sponsor's private-value section precede the body.
-    assert_eq!(CONTRACT_MAX_TX_BYTES, 49_409);
+    // Standalone creation carries an anchor, deadline, and body.
+    assert_eq!(CONTRACT_MAX_TX_BYTES, 17_839);
     assert_eq!(USER_ACCOUNT_UPDATE_MAX_TX_BYTES, 32_883);
     assert_eq!(
-        SectionLayout::ContractAccountCreation.section_bytes(),
-        31_609
+        SectionLayout::PrivateValue(PrivateValueShape::S).section_bytes(),
+        31_641
     );
     // L is the widest compiled shape.
     assert_eq!(MAX_VALID_TX_BYTES, PRIVATE_VALUE_MAX_TX_BYTES);
@@ -712,12 +723,14 @@ fn private_value_serialization_equals_its_pinned_size_and_parses() {
         + PRIVATE_VALUE_WIRE_INPUTS * 32
         + WIRE_PROOF_BYTES
         + 5 * OUTPUT_DATA_BYTES
-        + S.arena_bytes;
+        + S.arena_bytes
+        + 1;
     assert_eq!(size, private_value_tx_bytes(PrivateValueShape::S));
-    assert_eq!(size, 31_647);
+    assert_eq!(size, 31_648);
 
     let mut pis: Vec<CircuitWord> = (0..PRIVATE_VALUE_PUBLIC_INPUTS as u64).map(word).collect();
     pis[0] = word(u64::from(PCASH_CHAIN_ID));
+    *pis.last_mut().unwrap() = CircuitWord::ZERO;
     let proof = vec![0xab; WIRE_PROOF_BYTES];
     let output_data = vec![0xcd; OUTPUT_DATA_BYTES];
     let tx = transfer_txbytes(&pis, &proof, &[output_data.as_slice(); 5]);
@@ -738,11 +751,11 @@ fn private_value_serialization_equals_its_pinned_size_and_parses() {
     }
 }
 
-/// A sponsored contract account carrying both optional fields and all 255
-/// function slots reaches the per-kind contract maximum exactly, stays under
+/// A contract attachment carrying both optional fields and all 255
+/// function slots reaches its profile maximum, stays under
 /// the fixed `MAX_TX_BYTES` bound, and remains parseable.
 #[test]
-fn max_contract_account_serialization_equals_kind_max_and_parses() {
+fn max_contract_attachment_serialization_equals_profile_max_and_parses() {
     let mut body = vec![1]; // publishesNkRoot
     body.extend_from_slice(word(0xdd).as_slice()); // nkRoot
     body.push(1); // receiveKeyMode
@@ -758,22 +771,26 @@ fn max_contract_account_serialization_equals_kind_max_and_parses() {
     let output_data = vec![0xcd; OUTPUT_DATA_BYTES];
     let mut pis: Vec<CircuitWord> = (0..PRIVATE_VALUE_PUBLIC_INPUTS as u64).map(word).collect();
     pis[0] = word(u64::from(PCASH_CHAIN_ID));
+    *pis.last_mut().unwrap() = CircuitWord::ZERO;
     let section = private_value_section(
         &pis,
         &vec![0xab; WIRE_PROOF_BYTES],
         &[output_data.as_slice(); 5],
     );
-    let tx = sponsored_contract_txbytes(&body, &section);
-    assert_eq!(tx.len(), CONTRACT_MAX_TX_BYTES);
+    let tx = attached_contract_txbytes(&body, &section);
+    assert_eq!(
+        tx.len(),
+        private_value_tx_bytes(PrivateValueShape::S) + CONTRACT_MAX_BODY_BYTES
+    );
     assert!(tx.len() <= MAX_TX_BYTES);
     match decode(&tx).expect("maximum contract creation decodes") {
-        Transaction::ContractAccountCreation(creation) => {
-            assert!(creation.body.receive_key.is_some());
-            assert!(creation.body.publishes_nk_root);
-            assert_eq!(creation.body.functions.len(), usize::from(u8::MAX));
-            let ContractFunding::Sponsored(section) = &creation.funding else {
-                panic!("sponsored funding")
+        Transaction::PrivateValue(section) => {
+            let Some(AccountCreationAttachment::Contract(body)) = section.account_creation() else {
+                panic!("contract attachment")
             };
+            assert!(body.receive_key.is_some());
+            assert!(body.publishes_nk_root);
+            assert_eq!(body.functions.len(), usize::from(u8::MAX));
             assert_eq!(section.public_inputs().len(), PRIVATE_VALUE_PUBLIC_INPUTS);
             assert_eq!(section.proof.len(), WIRE_PROOF_BYTES);
         }
@@ -848,6 +865,7 @@ fn private_value_shape_is_explicit_and_l_keeps_every_late_slot() {
     let profile = shape.profile();
     let mut pis: Vec<CircuitWord> = (0..profile.public_inputs as u64).map(word).collect();
     pis[0] = word(u64::from(PCASH_CHAIN_ID));
+    *pis.last_mut().unwrap() = CircuitWord::ZERO;
     let data: Vec<Vec<u8>> = (0..profile.outputs)
         .map(|i| vec![i as u8; OUTPUT_DATA_BYTES])
         .collect();
@@ -855,7 +873,7 @@ fn private_value_shape_is_explicit_and_l_keeps_every_late_slot() {
         delivery_commitment_word(&slices(&data), &dummy_arena(shape));
     let proof = vec![0xab; pcash_derive::params::WIRE_PROOF_BYTES];
     let raw = profile_txbytes(shape, &pis, &proof, &slices(&data));
-    assert_eq!(raw.len(), PRIVATE_VALUE_MAX_TX_BYTES);
+    assert_eq!(raw.len(), private_value_tx_bytes(shape));
     let Transaction::PrivateValue(section) = decode(&raw).unwrap() else {
         panic!("private value");
     };

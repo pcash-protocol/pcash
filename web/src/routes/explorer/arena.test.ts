@@ -1,5 +1,5 @@
 import { encodePost, type BoardNetwork } from "@pcash/board/codec";
-import { applicationSchemaId, encodeRecords } from "@pcash/sdk/protocol";
+import { applicationSchemaId, encodeRecords, decodeTransaction, accountCreationAttachmentSize } from "@pcash/sdk/protocol";
 import { fromHex, toHex, utf8 } from "@pcash/sdk/utils";
 import { describe, expect, it } from "vitest";
 import { fixtureStatus, fixtureWorld } from "./fixtures/world.ts";
@@ -20,12 +20,15 @@ function publicArena(records: Parameters<typeof encodeRecords>[0]): Uint8Array {
 }
 
 describe("transaction arena", () => {
-  it("is the tail of a private-value transaction's bytes", () => {
+  it("precedes the trailing creation attachment", () => {
     const transaction = fixtureWorld.transactions.find(({ summary }) => summary.kind === "privateValue")!;
     const raw = fromHex(transaction.rawTransaction);
     const arena = transactionArena(transaction.rawTransaction)!;
     expect([2_632, 16_672]).toContain(arena.length);
-    expect(toHex(arena)).toBe(toHex(raw.subarray(raw.length - arena.length)));
+    const decoded = decodeTransaction(raw);
+    if (decoded.kind !== 0) throw new Error("expected private value");
+    const end = raw.length - accountCreationAttachmentSize(decoded.accountCreation);
+    expect(toHex(arena)).toBe(toHex(raw.subarray(end - arena.length, end)));
   });
 
   it("is absent from a user account creation and present in an account update's section", () => {

@@ -1,6 +1,6 @@
 import { sellerRecord } from "./sellerRecovery.ts";
-// Seller publication keeps exact creation and funding bytes durable. Fast posts
-// them together; Slow waits for relayers. Canonical receipts gate publication.
+// Seller publication retains one transaction that creates and funds its escrow.
+// Its canonical receipt gates catalog publication.
 
 import {
   fieldToHex,
@@ -12,7 +12,8 @@ import {
 import {
   deterministicMlKemKeysFromApplicationSeed,
   walletAction,
-  deferSubmission,
+  DurablePreBroadcastError,
+  createMempoolSubmissionAdapter,
   type DurableSubmissionAdapter,
   type PcashProfile,
   type Wallet,
@@ -28,14 +29,10 @@ import {
   recoverTokenEscrow,
   runTokenEscrowFundingFlow,
 } from "./tokenEscrowFunding.ts";
-import { submitBuiltTransaction, createMarketplaceTransactionSubmitter } from "./submitBuiltTransaction.ts";
-import { runSponsoredContractCreationFlow } from "./contractCreation.ts";
 import type { ProvePhase } from "@pcash/sdk/browser-prover";
 import { MIN_CLAIM_WINDOW_SECONDS } from "../commitments.mts";
-import { restoreMarketplaceTransactionToMempool } from "./mempoolSubmission.ts";
 import { buildExtendedCode } from "@pcash/sdk/delivery";
-import { batchEntryCarrying } from "@pcash/sdk/relay";
-import { fromHex } from "@pcash/sdk/utils";
+import { transactionIdentity } from "@pcash/sdk/protocol";
 import type { SelectedRelayQuoteProvider } from "@pcash/sdk/eip712";
 
 /** Browser flow input; the marketplace Offer is structurally assignable to this. */
@@ -63,35 +60,27 @@ export interface EscrowOpening {
 }
 
 export interface PublishOfferResume {
-  l2ContractContentHash?: string;
-  l2ContractTransactionHex?: Hex;
   fundingContentHash?: string;
   fundingTransactionHex?: Hex;
 }
 
 export interface PublishOfferCheckpoint {
-  l2ContractContentHash: string;
-  l2ContractTransactionHex?: Hex;
-  l2ContractAcceptedBlock?: string;
-  l2ContractAcceptedBlockHash?: string;
-  fundingContentHash?: string;
+  fundingContentHash: string;
   fundingTransactionHex?: Hex;
   fundingAcceptedBlock?: string;
   fundingAcceptedBlockHash?: string;
 }
 
 export type OfferPublicationFinality =
-  | { phase: "missing" | "skipped" | "conflicted" }
+  | { phase: "missing" | "skipped" }
   | { phase: "accepted" | "finalized"; receipt: ReceiptResult };
 
 export interface PublishOfferParams {
-  /** Direct publication prepares creation and funding for one Ethereum batch. */
+  /** Publication adapter for the one escrow transaction. */
   submission?: DurableSubmissionAdapter;
   assertActive?: () => void;
   wallet: Wallet;
   offer: PublishableOffer;
-  /** Open PCASH fee paid to whichever relayer includes the contract creation. */
-  creationOpenFeeAmount: bigint;
   /** Open PCASH fee paid to whichever relayer includes the escrow funding. */
   fundingOpenFeeAmount: bigint;
   privateRelayFeeAmount?: bigint;
@@ -101,8 +90,10 @@ export interface PublishOfferParams {
   resume?: PublishOfferResume;
   /** Persist this before allowing the flow to advance to its next network wait. */
   onCheckpoint?: (checkpoint: PublishOfferCheckpoint) => void | Promise<void>;
+  /** Clear only the same saved attempt after the wallet permits rebuilding it. */
+  onFundingRebuild?: (contentHash: string) => void | Promise<void>;
   onProgress?: (phase: ProvePhase, message: string) => void;
-  /** Relay each dependent transaction before waiting for its canonical receipt. */
+  /** Relay the prepared transaction before waiting for its canonical receipt. */
   relay?: (contentHash: string) => Promise<void>;
   pollIntervalMs?: number;
   pollMaxAttempts?: number;
@@ -110,11 +101,10 @@ export interface PublishOfferParams {
 
 /** Injectable only so the orchestration can be tested without a node or Wallet transfer. */
 export interface PublishOfferRuntime {
-  submitBuiltTransaction: typeof submitBuiltTransaction;
+  resumeValueTransaction: (wallet: Wallet, intent: Parameters<Wallet["resumeValueTransaction"]>[0]) => ReturnType<Wallet["resumeValueTransaction"]>;
   awaitAcceptedReceipt: typeof awaitAcceptedReceipt;
   preflightNoteFundedTransfer: typeof preflightNoteFundedTransfer;
   runNoteFundedTransferFlow: typeof runNoteFundedTransferFlow;
-  runSponsoredContractCreationFlow: typeof runSponsoredContractCreationFlow;
   preflightTokenEscrowFunding: typeof preflightTokenEscrowFunding;
   runTokenEscrowFundingFlow: typeof runTokenEscrowFundingFlow;
   scanWallet: typeof scanWallet;
@@ -122,11 +112,10 @@ export interface PublishOfferRuntime {
 }
 
 const DEFAULT_RUNTIME: PublishOfferRuntime = {
-  submitBuiltTransaction,
+  resumeValueTransaction: (wallet, intent) => wallet.resumeValueTransaction(intent),
   awaitAcceptedReceipt,
   preflightNoteFundedTransfer,
   runNoteFundedTransferFlow,
-  runSponsoredContractCreationFlow,
   preflightTokenEscrowFunding,
   runTokenEscrowFundingFlow,
   scanWallet,
@@ -176,31 +165,16 @@ function requireReceiptKind(receipt: ReceiptResult, expected: string, contentHas
 export async function readOfferPublicationFinality(
   node: PcashNodeClient,
   contentHash: string,
-  expectedKind: "contractAccount" | "privateValue",
 ): Promise<OfferPublicationFinality> {
   const receipt = await pollReceipt(node, contentHash);
   if (receipt === null) return { phase: "missing" };
-  if (receipt.outcome !== "succeeded") return { phase: await inputSpentAtFinality(node, receipt) ? "conflicted" : "skipped" };
-  requireReceiptKind(receipt, expectedKind, contentHash);
+  if (receipt.outcome !== "succeeded") return { phase: "skipped" };
+  requireReceiptKind(receipt, "privateValue", contentHash);
   const status = await node.status();
   return {
     phase: isFinalized(receipt.inclusion.l1BlockNumber, status) ? "finalized" : "accepted",
     receipt,
   };
-}
-
-/**
- * Whether another transaction's spend of a skipped transaction's input is
- * finalized, so these exact bytes can never be accepted.
- */
-async function inputSpentAtFinality(node: PcashNodeClient, skipped: ReceiptResult): Promise<boolean> {
-  if (skipped.failureDetail?.type !== "nullifierAlreadySpent") return false;
-  // Status first: a spend at or below a finalized height already observed cannot be reorged out.
-  const status = await node.status();
-  const spender = await node.getReceipt(skipped.failureDetail.spendingTransactionId);
-  return spender.some((receipt) => receipt.outcome === "succeeded"
-    && receipt.contentHash.toLowerCase() !== skipped.contentHash.toLowerCase()
-    && isFinalized(receipt.inclusion.l1BlockNumber, status));
 }
 
 export function assertOfferPublicationWindow(
@@ -243,191 +217,99 @@ async function publishOfferWithWallet(
   wallet: WalletExecutionContext,
 ): Promise<EscrowOpening> {
   if (params.submission !== undefined) wallet = { ...wallet, submission: params.submission };
-  if (!wallet.spendable()) {
-    throw new Error("offer publication requires a spendable wallet");
-  }
+  if (!wallet.spendable()) throw new Error("offer publication requires a spendable wallet");
   const node = wallet.node;
-  const sellerProfile = wallet.profile;
   const { offer } = params;
-  if (wallet.network.chainId !== offer.chainId) {
-    throw new Error(`offer chain ${offer.chainId} does not match wallet chain ${wallet.network.chainId}`);
-  }
+  if (wallet.network.chainId !== offer.chainId) throw new Error(`offer chain ${offer.chainId} does not match wallet chain ${wallet.network.chainId}`);
   if (offer.terms.amount <= 0n) throw new Error("offer amount must be positive");
-  // The caller supplies these fees on top of the escrow amount, from seller funds.
-  if (params.creationOpenFeeAmount < 0n || params.fundingOpenFeeAmount < 0n) {
-    throw new Error("marketplace relayer fee must be nonnegative");
-  }
-  const selectedRelayQuote = params.selectedRelayQuote;
-  if (wallet.submission?.mode !== "l1" && params.privateRelayFeeAmount !== undefined && selectedRelayQuote === undefined
-    && (params.resume?.l2ContractContentHash === undefined || params.resume?.fundingContentHash === undefined)) {
-    throw new Error("selected listing requires its authenticated relayer session");
-  }
-  const fundingValidUntil = offerFundingValidUntil(offer.terms.deadlineT);
-
-  const priorL2ContractContentHash = params.resume?.l2ContractContentHash;
-  const priorFundingContentHash = params.resume?.fundingContentHash;
-  requireContentHash(priorL2ContractContentHash, "resume.l2ContractContentHash");
-  requireContentHash(priorFundingContentHash, "resume.fundingContentHash");
-  if (priorFundingContentHash !== undefined && priorL2ContractContentHash === undefined) {
-    throw new Error("resuming a funding transaction requires its smart contract content hash");
-  }
-
-  // Do this before either submission: a wrong seller key can never recover the
-  // escrow opening and must not create an orphan smart contract account or funded note.
-  const l2ContractWallet = reconstructL2ContractWallet(offer, sellerProfile);
-  const target: EscrowTarget = {
-    contractWallet: l2ContractWallet,
-    ...(offer.terms.assetId === 0n ? {} : {
-      tokenNoteSecret: deriveTokenEscrowNoteSecret({
-        seller: sellerProfile,
-        chainId: offer.chainId,
-        offerId: offer.terms.id,
-        contractAddress: offer.l2ContractAddress,
-      }),
-    }),
-  };
-
-  if (params.submission?.mode === "l1") {
-    return publishFastOffer(params, runtime, node, target);
-  }
-
-  if (priorFundingContentHash === undefined) await requirePublicationWindow(params, node);
-  // Budget both fees before creating anything. On resume, the registration may
-  // still reserve the seller's only note: relay it first, then sync its change
-  // before the funding flow selects inputs.
-  if (priorL2ContractContentHash === undefined) {
-    await preflightFunding(params, runtime, {
-      openFeeAmount: params.creationOpenFeeAmount + params.fundingOpenFeeAmount,
-      ...(params.privateRelayFeeAmount === undefined ? {} : { privateRelayFeeAmount: 2n * params.privateRelayFeeAmount }),
-      to: addressHex(offer.l2ContractAddress),
-      validUntilTimestamp: fundingValidUntil,
-    });
-  }
-
-  let l2ContractContentHash = priorL2ContractContentHash;
-  let l2ContractTransactionHex = params.resume?.l2ContractTransactionHex;
-  let contractQueued = priorL2ContractContentHash !== undefined;
-  if (l2ContractContentHash === undefined) {
+  if (params.fundingOpenFeeAmount < 0n) throw new Error("marketplace relayer fee must be nonnegative");
+  const transport = wallet.submission ?? createMempoolSubmissionAdapter(node);
+  const beforeSubmit = async () => {
     params.assertActive?.();
-    // Every creation carries a fee section, so the seller sponsors it from its
-    // own notes. A creation takes the wallet's configured publication path; on
-    // the mempool path a zero fee is refused, since no publisher is paid.
-    params.onProgress?.("preparing", "Preparing your listing. Approve the signature when your wallet asks.");
-    const sponsored = await runtime.runSponsoredContractCreationFlow({
-      wallet: params.wallet,
-      node,
-      contract: { body: offer.l2ContractBody, address: offer.l2ContractAddress },
-      openFeeAmount: params.creationOpenFeeAmount,
-      ...(params.privateRelayFeeAmount === undefined ? {} : { privateRelayFeeAmount: params.privateRelayFeeAmount }),
-      ...(selectedRelayQuote === undefined ? {} : { selectedRelayQuote }),
-      ...(params.submission === undefined ? {} : { submission: params.submission }),
-      validUntilTimestamp: fundingValidUntil,
-      ...(selectedRelayQuote === undefined ? {} : { validUntilMode: "ceiling" as const }),
-      onPreparedContentHash: (contentHash, transactionHex) => params.onCheckpoint?.({ l2ContractContentHash: contentHash, l2ContractTransactionHex: transactionHex }),
-      ...(params.onProgress !== undefined ? { onProgress: params.onProgress } : {}),
-    });
-    l2ContractContentHash = sponsored.contentHash;
-    l2ContractTransactionHex = sponsored.transactionHex;
-    contractQueued = sponsored.queued;
-  } else if (l2ContractTransactionHex !== undefined) {
-    const submit = createMarketplaceTransactionSubmitter(wallet, runtime.submitBuiltTransaction);
-    const restored = await restoreMarketplaceTransactionToMempool({
-      node,
-      contentHash: l2ContractContentHash,
-      transactionHex: l2ContractTransactionHex,
-      beforeSubmit: () => requirePublicationWindow(params, node),
-      onProgress: params.onProgress,
-      submit,
-    });
-    contractQueued = restored !== "receipt" && submit.publication !== "l1";
-  }
-
-  if (contractQueued) await params.relay?.(l2ContractContentHash);
-  params.onProgress?.("confirming", "Waiting for your listing creation to be confirmed.");
-  const l2ContractReceipt = await runtime.awaitAcceptedReceipt(node, l2ContractContentHash, {
-    onWait: () => params.onProgress?.("confirming", "Waiting for your listing creation to be confirmed. Escrow funding starts automatically next."),
-    ...(params.pollIntervalMs !== undefined ? { pollIntervalMs: params.pollIntervalMs } : {}),
-    ...(params.pollMaxAttempts !== undefined ? { pollMaxAttempts: params.pollMaxAttempts } : {}),
-  });
-  requireReceiptKind(l2ContractReceipt, "contractAccount", l2ContractContentHash);
-  await params.onCheckpoint?.({
-    l2ContractContentHash,
-    ...(l2ContractTransactionHex !== undefined ? { l2ContractTransactionHex } : {}),
-    l2ContractAcceptedBlock: l2ContractReceipt.inclusion.l1BlockNumber.toString(),
-    l2ContractAcceptedBlockHash: l2ContractReceipt.inclusion.l1BlockHash,
-  });
-
-  let fundingContentHash = priorFundingContentHash;
-  let fundingTransactionHex = params.resume?.fundingTransactionHex;
-  let fundingQueued = priorFundingContentHash !== undefined;
-  if (fundingContentHash === undefined) {
-    params.assertActive?.();
-    // The creation fee can consume the seller's only note. Scan its accepted
-    // change before selecting the notes that will fund this listing.
-    params.onProgress?.("preparing", "Updating your wallet balance before funding escrow…");
-    await params.wallet.sync();
     await requirePublicationWindow(params, node);
     params.assertActive?.();
-    const prepared: { transactionHex?: Hex } = {};
-    params.onProgress?.("preparing", "Preparing the transfer to escrow. Approve the signature when your wallet asks.");
+  };
+  const submission: DurableSubmissionAdapter = {
+    ...transport,
+    submit: async (context: Parameters<DurableSubmissionAdapter["submit"]>[0]) => {
+      try { await beforeSubmit(); } catch (cause) { throw new DurablePreBroadcastError(cause); }
+      return transport.submit(context);
+    },
+  };
+  const direct = submission.mode === "l1";
+  if (!direct && params.privateRelayFeeAmount !== undefined && params.selectedRelayQuote === undefined
+    && params.resume?.fundingContentHash === undefined) throw new Error("selected listing requires its authenticated relayer session");
+  let fundingContentHash = params.resume?.fundingContentHash;
+  let fundingTransactionHex = params.resume?.fundingTransactionHex;
+  requireContentHash(fundingContentHash, "resume.fundingContentHash");
+  const contractWallet = reconstructL2ContractWallet(offer, wallet.profile);
+  const target: EscrowTarget = { contractWallet, ...(offer.terms.assetId === 0n ? {} : {
+    tokenNoteSecret: deriveTokenEscrowNoteSecret({ seller: wallet.profile, chainId: offer.chainId,
+      offerId: offer.terms.id, contractAddress: offer.l2ContractAddress }),
+  }) };
+  let queued = false;
+  if (fundingContentHash !== undefined && fundingTransactionHex !== undefined) {
+    const resumed = await runtime.resumeValueTransaction(params.wallet, {
+      transactionHex: fundingTransactionHex,
+      submission,
+      ...(params.onProgress === undefined ? {} : { onProgress: params.onProgress }),
+    });
+    if (resumed.state === "blocked") throw new Error(resumed.message);
+    if (resumed.state === "rebuildable") {
+      if (params.onFundingRebuild === undefined) throw new Error("The saved listing transaction can be rebuilt. Resume it through the listing's saved checkpoint.");
+      await params.onFundingRebuild(fundingContentHash);
+      fundingContentHash = undefined;
+      fundingTransactionHex = undefined;
+    } else {
+      fundingContentHash = resumed.contentHash;
+      queued = resumed.queued === true;
+    }
+  }
+  if (fundingContentHash === undefined) {
+    await beforeSubmit();
+    const validUntilTimestamp = offerFundingValidUntil(offer.terms.deadlineT);
+    const to = contractExtendedCode(offer, contractWallet);
+    await preflightFunding(params, runtime, { to, openFeeAmount: params.fundingOpenFeeAmount, validUntilTimestamp,
+      ...(params.privateRelayFeeAmount === undefined ? {} : { privateRelayFeeAmount: params.privateRelayFeeAmount }) });
+    params.assertActive?.();
+    params.onProgress?.("preparing", "Preparing your listing. Approve the payment when your wallet asks.");
+    const checkpointFunding = async (contentHash: string, transactionHex: Hex) => {
+      if (fundingContentHash !== undefined) return;
+      fundingContentHash = contentHash; fundingTransactionHex = transactionHex;
+      await params.onCheckpoint?.({ fundingContentHash: contentHash, fundingTransactionHex: transactionHex });
+    };
     const funding = await fundEscrow(params, runtime, target, {
-      node,
-      to: offer.terms.assetId === 0n ? addressHex(offer.l2ContractAddress) : contractExtendedCode(offer, l2ContractWallet),
-      openFeeAmount: params.fundingOpenFeeAmount,
+      node, to, openFeeAmount: params.fundingOpenFeeAmount, validUntilTimestamp,
       ...(params.privateRelayFeeAmount === undefined ? {} : { privateRelayFeeAmount: params.privateRelayFeeAmount }),
-      ...(selectedRelayQuote === undefined ? {} : { selectedRelayQuote }),
-      ...(params.submission === undefined ? {} : { submission: params.submission }),
-      validUntilTimestamp: fundingValidUntil,
-      beforeSubmit: () => requirePublicationWindow(params, node),
-      onPreparedContentHash: async (contentHash, transactionHex) => {
-        prepared.transactionHex = transactionHex;
-        await params.onCheckpoint?.({
-          l2ContractContentHash,
-          ...(l2ContractTransactionHex !== undefined ? { l2ContractTransactionHex } : {}),
-          l2ContractAcceptedBlock: l2ContractReceipt.inclusion.l1BlockNumber.toString(),
-          l2ContractAcceptedBlockHash: l2ContractReceipt.inclusion.l1BlockHash,
-          fundingContentHash: contentHash,
-          fundingTransactionHex: transactionHex,
-        });
+      ...(params.selectedRelayQuote === undefined ? {} : { selectedRelayQuote: params.selectedRelayQuote }),
+      submission: {
+        ...submission,
+        preflight: async context => {
+          await beforeSubmit();
+          const identity = transactionIdentity(context.transactionBytes);
+          await checkpointFunding(identity.contentHash, identity.transactionHex as Hex);
+          return submission.preflight(context);
+        },
       },
-      ...(params.onProgress !== undefined ? { onProgress: params.onProgress } : {}),
+      beforeSubmit,
+      // A wallet may recognize an existing journal without running preflight.
+      onPreparedContentHash: checkpointFunding,
     });
     fundingContentHash = funding.contentHash;
-    fundingTransactionHex = prepared.transactionHex;
-    fundingQueued = funding.queued;
-  } else if (fundingTransactionHex !== undefined) {
-    const submit = createMarketplaceTransactionSubmitter(wallet, runtime.submitBuiltTransaction);
-    const restored = await restoreMarketplaceTransactionToMempool({
-      node,
-      contentHash: fundingContentHash,
-      transactionHex: fundingTransactionHex,
-      beforeSubmit: () => requirePublicationWindow(params, node),
-      onProgress: params.onProgress,
-      submit,
-    });
-    fundingQueued = restored !== "receipt" && submit.publication !== "l1";
+    queued = funding.queued;
   }
-
-  if (fundingQueued) await params.relay?.(fundingContentHash);
-  params.onProgress?.("confirming", "Waiting for your escrow funding to be confirmed.");
-  const fundingReceipt = await runtime.awaitAcceptedReceipt(node, fundingContentHash, {
-    onWait: () => params.onProgress?.("confirming", "Waiting for your escrow funding to be confirmed. Your listing will publish automatically next."),
-    ...(params.pollIntervalMs !== undefined ? { pollIntervalMs: params.pollIntervalMs } : {}),
-    ...(params.pollMaxAttempts !== undefined ? { pollMaxAttempts: params.pollMaxAttempts } : {}),
+  if (!direct && queued) await params.relay?.(fundingContentHash);
+  params.onProgress?.("confirming", "Waiting for your listing to be confirmed…");
+  const receipt = await runtime.awaitAcceptedReceipt(node, fundingContentHash, {
+    onWait: () => params.onProgress?.("confirming", "Waiting for escrow funding. Your listing will publish automatically next."),
+    ...(params.pollIntervalMs === undefined ? {} : { pollIntervalMs: params.pollIntervalMs }),
+    ...(params.pollMaxAttempts === undefined ? {} : { pollMaxAttempts: params.pollMaxAttempts }),
   });
-  requireReceiptKind(fundingReceipt, "privateValue", fundingContentHash);
-  await params.onCheckpoint?.({
-    l2ContractContentHash,
-    ...(l2ContractTransactionHex !== undefined ? { l2ContractTransactionHex } : {}),
-    l2ContractAcceptedBlock: l2ContractReceipt.inclusion.l1BlockNumber.toString(),
-    l2ContractAcceptedBlockHash: l2ContractReceipt.inclusion.l1BlockHash,
-    fundingContentHash,
-    ...(fundingTransactionHex !== undefined ? { fundingTransactionHex } : {}),
-    fundingAcceptedBlock: fundingReceipt.inclusion.l1BlockNumber.toString(),
-    fundingAcceptedBlockHash: fundingReceipt.inclusion.l1BlockHash,
-  });
-
-  return recoverEscrow(params, runtime, node, target, fundingReceipt);
+  requireReceiptKind(receipt, "privateValue", fundingContentHash);
+  await params.onCheckpoint?.({ fundingContentHash,
+    ...(fundingTransactionHex === undefined ? {} : { fundingTransactionHex }),
+    fundingAcceptedBlock: receipt.inclusion.l1BlockNumber.toString(), fundingAcceptedBlockHash: receipt.inclusion.l1BlockHash });
+  return recoverEscrow(params, runtime, node, target, receipt);
 }
 
 /** The escrow contract's receive identity and, for a token offer, the escrow note's derived secret. */
@@ -502,6 +384,7 @@ async function preflightFunding(
   if (offer.terms.assetId !== 0n) {
     await runtime.preflightTokenEscrowFunding({
       wallet: params.wallet,
+      accountCreation: { kind: "contract", body: offer.l2ContractBody },
       assetId: offer.terms.assetId,
       amount: offer.terms.amount,
       ...request,
@@ -511,10 +394,10 @@ async function preflightFunding(
   }
   await runtime.preflightNoteFundedTransfer({
     wallet: params.wallet,
+    accountCreation: { kind: "contract", body: offer.l2ContractBody },
     amount: offer.terms.amount,
     ...request,
     ...(selectedRelayQuote === undefined ? {} : { selectedRelayQuote }),
-    issuanceOwnerCommitment: 0n,
   });
 }
 
@@ -527,7 +410,7 @@ async function fundEscrow(
     node: PcashNodeClient;
     selectedRelayQuote?: SelectedRelayQuoteProvider;
     submission?: DurableSubmissionAdapter;
-    beforeSubmit: () => Promise<void>;
+    beforeSubmit: (contentHash: string, transactionHex: Hex) => Promise<void>;
     onPreparedContentHash: (contentHash: string, transactionHex: Hex) => Promise<void>;
   },
 ): Promise<{ contentHash: string; queued: boolean }> {
@@ -535,6 +418,7 @@ async function fundEscrow(
   if (target.tokenNoteSecret !== undefined) {
     return runtime.runTokenEscrowFundingFlow({
       wallet: params.wallet,
+      accountCreation: { kind: "contract", body: offer.l2ContractBody },
       assetId: offer.terms.assetId,
       amount: offer.terms.amount,
       noteSecret: target.tokenNoteSecret,
@@ -545,113 +429,10 @@ async function fundEscrow(
   }
   return runtime.runNoteFundedTransferFlow({
     wallet: params.wallet,
+    accountCreation: { kind: "contract", body: offer.l2ContractBody },
     amount: offer.terms.amount,
-    issuanceOwnerCommitment: 0n,
     data: { self: [sellerRecord(offer)] },
     ...request,
     ...(params.onProgress === undefined ? {} : { onProgress: params.onProgress }),
   });
-}
-
-/** Both transactions use existing notes: creation spends no value and funding uses
- * the contract's committed receive key without waiting for registration. */
-async function publishFastOffer(
-  params: PublishOfferParams,
-  runtime: PublishOfferRuntime,
-  node: PcashNodeClient,
-  target: EscrowTarget,
-): Promise<EscrowOpening> {
-  const submission = params.submission!;
-  const prepared = { ...params.resume };
-  const checkpoint = () => params.onCheckpoint?.({
-    l2ContractContentHash: prepared.l2ContractContentHash!,
-    ...(prepared.l2ContractTransactionHex ? { l2ContractTransactionHex: prepared.l2ContractTransactionHex } : {}),
-    ...(prepared.fundingContentHash ? { fundingContentHash: prepared.fundingContentHash } : {}),
-    ...(prepared.fundingTransactionHex ? { fundingTransactionHex: prepared.fundingTransactionHex } : {}),
-  });
-  const to = contractExtendedCode(params.offer, target.contractWallet);
-  const validUntilTimestamp = offerFundingValidUntil(params.offer.terms.deadlineT);
-  if (!prepared.fundingContentHash) {
-    params.assertActive?.();
-    await requirePublicationWindow(params, node);
-    await preflightFunding(params, runtime, { to, openFeeAmount: params.fundingOpenFeeAmount, validUntilTimestamp });
-  }
-  if (!prepared.l2ContractContentHash) {
-    params.assertActive?.();
-    params.onProgress?.("preparing", "Preparing your listing. Approve the listing authorization in your wallet.");
-    await runtime.runSponsoredContractCreationFlow({ wallet: params.wallet, node,
-      submission: deferSubmission(submission),
-      contract: { body: params.offer.l2ContractBody, address: params.offer.l2ContractAddress },
-      openFeeAmount: 0n, validUntilTimestamp,
-      onPreparedContentHash: async (contentHash, transactionHex) => {
-        prepared.l2ContractContentHash = contentHash; prepared.l2ContractTransactionHex = transactionHex;
-        await checkpoint();
-      },
-      ...(params.onProgress ? { onProgress: params.onProgress } : {}),
-    });
-  }
-  if (!prepared.fundingContentHash) {
-    params.assertActive?.();
-    await fundEscrow(params, runtime, target, { node, to,
-      submission: deferSubmission(submission),
-      openFeeAmount: params.fundingOpenFeeAmount, validUntilTimestamp,
-      beforeSubmit: () => requirePublicationWindow(params, node),
-      onPreparedContentHash: async (contentHash, transactionHex) => {
-        prepared.fundingContentHash = contentHash; prepared.fundingTransactionHex = transactionHex;
-        await checkpoint();
-      },
-    });
-  }
-  // Ethereum batches are not atomic. Reconcile each item independently and
-  // retain both identities before asking for the single Ethereum approval.
-  const entries = [
-    { contentHash: prepared.l2ContractContentHash!, transactionHex: prepared.l2ContractTransactionHex, kind: "contractAccount" },
-    { contentHash: prepared.fundingContentHash!, transactionHex: prepared.fundingTransactionHex, kind: "privateValue" },
-  ] as const;
-  const missing = [];
-  for (const entry of entries) {
-    const receipt = await pollReceipt(node, entry.contentHash);
-    if (receipt?.outcome !== "succeeded") missing.push({ ...entry, entry: fromHex(entry.transactionHex!) });
-  }
-  if (missing.length) {
-    params.assertActive?.();
-    await requirePublicationWindow(params, node);
-    const recovery = await submission.l1Recovery?.();
-    const reconciliation = await recovery?.reconcile();
-    if (reconciliation?.latched) {
-      const inFlight = (await recovery!.show()).entries;
-      const carrying = batchEntryCarrying(inFlight, missing[0]!.contentHash);
-      if (!carrying?.transactionHash || !missing.every((entry) => batchEntryCarrying(inFlight, entry.contentHash) === carrying)) {
-        throw new Error("An earlier Ethereum submission needs attention. Check its outcome before continuing this listing.");
-      }
-      params.onProgress?.("confirming", "Your listing is on its way. Waiting for Ethereum confirmation…");
-    } else {
-      const first = missing[0]!;
-      const status = await node.status();
-      const batch = await submission.preflight({ transactionBytes: first.entry, status,
-        additionalTransactions: missing.slice(1).map((entry) => entry.entry), retry: params.resume !== undefined });
-      params.assertActive?.();
-      params.onProgress?.("submitting", "Approve one Ethereum transaction to publish your listing. Gas is paid in ETH.");
-      await submission.submit({ transactionBytes: first.entry, status,
-        prepared: batch, retry: params.resume !== undefined });
-    }
-  }
-  params.onProgress?.("confirming", "Waiting for your listing to be confirmed…");
-  const receipts = [];
-  for (const entry of entries) {
-    const receipt = await runtime.awaitAcceptedReceipt(node, entry.contentHash, {
-      ...(params.pollIntervalMs === undefined ? {} : { pollIntervalMs: params.pollIntervalMs }),
-      ...(params.pollMaxAttempts === undefined ? {} : { pollMaxAttempts: params.pollMaxAttempts }),
-    });
-    requireReceiptKind(receipt, entry.kind, entry.contentHash);
-    receipts.push(receipt);
-  }
-  const [contractReceipt, fundingReceipt] = receipts as [ReceiptResult, ReceiptResult];
-  await params.onCheckpoint?.({ l2ContractContentHash: prepared.l2ContractContentHash!,
-    ...(prepared.l2ContractTransactionHex ? { l2ContractTransactionHex: prepared.l2ContractTransactionHex } : {}),
-    fundingContentHash: prepared.fundingContentHash!,
-    ...(prepared.fundingTransactionHex ? { fundingTransactionHex: prepared.fundingTransactionHex } : {}),
-    l2ContractAcceptedBlock: contractReceipt.inclusion.l1BlockNumber.toString(), l2ContractAcceptedBlockHash: contractReceipt.inclusion.l1BlockHash,
-    fundingAcceptedBlock: fundingReceipt.inclusion.l1BlockNumber.toString(), fundingAcceptedBlockHash: fundingReceipt.inclusion.l1BlockHash });
-  return recoverEscrow(params, runtime, node, target, fundingReceipt);
 }

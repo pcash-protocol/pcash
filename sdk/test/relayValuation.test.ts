@@ -51,7 +51,6 @@ function entry(id: number, overrides: Partial<MempoolItemResult> = {}): MempoolI
     stableId: hash,
     conflictKeys: [],
     kind: "privateValue",
-    fundingMode: null,
     byteSize: 100n,
     openFeeAmount: 0n,
     issuanceOwnerCommitment: OPEN,

@@ -26,7 +26,7 @@ function wireReceipt(overrides: Record<string, unknown> = {}): Record<string, un
     settledOpenFeeAmount: "0x0",
     settledIssuanceAmount: "0x0",
     kind: "privateValue",
-    fundingMode: null,
+    accountCreation: 0 as const,
     outputLeafStart: null,
     outputsAdded: "0x0",
     nullifiers,

@@ -1,4 +1,3 @@
-import { transactionIdentity as submissionIdentity } from "@pcash/sdk/protocol";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -8,8 +7,8 @@ import { bytesToHex, keccak256, numberToHex } from "viem";
 import { openNodeWallet } from "@pcash/wallet";
 import {
   addressHex,
+  WIRE_PROOF_BYTES,
   DEFAULT_NETWORK_CONFIG,
-  encodeContractAccountCreation,
   fieldToHex,
   privateKeyPcashActionSigner,
   type PcashNodeClient,
@@ -18,6 +17,8 @@ import {
 import {
   derivePcashProfileFromPrivateKey,
   deterministicMlKemKeysFromApplicationSeed,
+  walletAction,
+  type DurableSubmissionAdapter,
   type PcashProfile,
 } from "@pcash/sdk/wallet";
 import type { SpendableNote } from "@pcash/sdk/wallet/scanning";
@@ -32,34 +33,23 @@ import {
   type PublishOfferRuntime,
 } from "../src/client/publishOffer.ts";
 import { MIN_CLAIM_WINDOW_SECONDS } from "../src/commitments.mts";
-import { deriveTokenEscrowNoteSecret } from "../src/client/tokenEscrowFunding.ts";
+import { deriveTokenEscrowNoteSecret, runTokenEscrowFundingFlow } from "../src/client/tokenEscrowFunding.ts";
+import { runNoteFundedTransferFlow } from "../src/client/noteFundedTransfer.ts";
 import { testToken } from "./tokenFixtures.ts";
 import {
   anchoredPrivateValueTransaction,
-  sponsoredContractFunding,
   fixtureContractBody,
 } from "./anchoredTransaction.ts";
 import { ChainSim, noteTo, profileAccount, simNode } from "./walletChain.ts";
 
 const FUNDING_ANCHOR = 0x5151n;
-const L2_CONTRACT_ENTRY = encodeContractAccountCreation(
-  DEFAULT_NETWORK_CONFIG.pcashChainId,
-  fixtureContractBody(),
-  sponsoredContractFunding(FUNDING_ANCHOR),
-);
-const L2_CONTRACT_CONTENT_HASH = keccak256(L2_CONTRACT_ENTRY);
-const SPONSORED_L2_CONTRACT_ENTRY_HEX = bytesToHex(L2_CONTRACT_ENTRY);
-const FUNDING_ENTRY_HEX = bytesToHex(anchoredPrivateValueTransaction(FUNDING_ANCHOR));
+const FUNDING_ENTRY_HEX = bytesToHex(anchoredPrivateValueTransaction(FUNDING_ANCHOR, 1n, 1n, 0n, 0n, { kind: "contract", body: fixtureContractBody() }));
 const FUNDING_CONTENT_HASH = keccak256(FUNDING_ENTRY_HEX);
-const LATEST_TIMESTAMP = 10_000n;
 const CHAIN_ID = DEFAULT_NETWORK_CONFIG.pcashChainId;
 const FUNDING_LEAF = 42n;
-const L1_HASH = `0x${"22".repeat(32)}`;
-const CREATION_FEE = 3n;
 const FUNDING_FEE = 1n;
-const OPEN_FEES = { creationOpenFeeAmount: CREATION_FEE, fundingOpenFeeAmount: FUNDING_FEE };
-const NO_OPEN_FEES = { creationOpenFeeAmount: 0n, fundingOpenFeeAmount: 0n };
-const NODE_CAPABILITIES = { acceptedTransactionTypes: [0, 1, 2, 3], acceptedBatchVersions: [1] } as const;
+const OPEN_FEES = { fundingOpenFeeAmount: FUNDING_FEE };
+const NO_OPEN_FEES = { fundingOpenFeeAmount: 0n };
 
 const SELLER_PRIVATE_KEY = Uint8Array.from({ length: 32 }, (_, index) => index + 1);
 const sellerWallet = derivePcashProfileFromPrivateKey(SELLER_PRIVATE_KEY, DEFAULT_NETWORK_CONFIG);
@@ -135,12 +125,12 @@ async function runPublish(
 
 function receipt(kind: ReceiptResult["kind"], outputLeafStart: bigint | null): ReceiptResult {
   return {
-    contentHash: kind === "contractAccount" ? L2_CONTRACT_CONTENT_HASH : FUNDING_CONTENT_HASH,
+    contentHash: FUNDING_CONTENT_HASH,
     transactionId: kind === "contractAccount" ? `0x${"e1".repeat(32)}` : `0x${"e2".repeat(32)}`,
     outcome: "succeeded",
     failureDetail: null,
     kind,
-    fundingMode: kind === "contractAccount" ? "sponsored" : null,
+    accountCreation: 1,
     l1Sender: "0x0000000000000000000000000000000000000000",
     issuanceOwnerCommitment: null,
     settledOpenFeeAmount: 0n,
@@ -169,616 +159,315 @@ function recoveredNote(overrides: Partial<SpendableNote> = {}): SpendableNote {
   };
 }
 
-function runtime(events: string[], recovered: SpendableNote[], fees = OPEN_FEES): PublishOfferRuntime {
+function runtime(events: string[], recovered: SpendableNote[] = [recoveredNote()], fee = FUNDING_FEE): PublishOfferRuntime {
+  const to = buildExtendedCode({ chainId: offer.chainId, address: offer.l2ContractAddress, mlKemPublicKey: offer.l2ContractWallet.mlKemPublicKey });
   return {
-    submitBuiltTransaction: async (entry) => {
-      const isL2Contract = bytesToHex(entry) === bytesToHex(
-        encodeContractAccountCreation(offer.chainId, offer.l2ContractBody, sponsoredContractFunding(FUNDING_ANCHOR)),
-      );
-      events.push(isL2Contract ? "submit L2 smart contract" : "submit funding");
-      return { contentHash: isL2Contract ? L2_CONTRACT_CONTENT_HASH : FUNDING_CONTENT_HASH, receipt: null, queued: true };
-    },
-    runSponsoredContractCreationFlow: async (params) => {
-      events.push("sponsor L2 smart contract");
-      assert.equal(params.openFeeAmount, fees.creationOpenFeeAmount);
-      assert.equal(params.contract.address, offer.l2ContractAddress);
-      assert.equal(bytesToHex(params.contract.body), bytesToHex(offer.l2ContractBody));
-      assert.equal(params.validUntilTimestamp, offer.terms.deadlineT - MIN_CLAIM_WINDOW_SECONDS - 1n);
-      await params.onPreparedContentHash?.(L2_CONTRACT_CONTENT_HASH, SPONSORED_L2_CONTRACT_ENTRY_HEX);
-      return {
-        contentHash: L2_CONTRACT_CONTENT_HASH,
-        transactionHex: SPONSORED_L2_CONTRACT_ENTRY_HEX,
-        queued: true,
-        settled: false,
-        changeAmount: 0n,
-      };
+    resumeValueTransaction: async (_wallet, intent) => {
+      assert.equal(intent.transactionHex, FUNDING_ENTRY_HEX);
+      events.push("resume");
+      return { state: "pending", contentHash: FUNDING_CONTENT_HASH, queued: intent.submission?.mode !== "l1" };
     },
     awaitAcceptedReceipt: async (_node, contentHash) => {
-      events.push(`await ${contentHash}`);
-      return contentHash === L2_CONTRACT_CONTENT_HASH ? receipt("contractAccount", null) : receipt("privateValue", FUNDING_LEAF);
+      assert.equal(contentHash, FUNDING_CONTENT_HASH);
+      events.push("accepted");
+      return receipt("privateValue", FUNDING_LEAF);
     },
     preflightNoteFundedTransfer: async (params) => {
-      events.push("preflight funding");
-      assert.equal(params.wallet.network.chainId, CHAIN_ID);
+      events.push("preflight");
       assert.equal(params.amount, offer.terms.amount);
-      assert.equal(params.openFeeAmount, fees.creationOpenFeeAmount + fees.fundingOpenFeeAmount);
-      assert.equal(params.issuanceOwnerCommitment, 0n);
-      assert.equal(params.to, numberToHex(offer.l2ContractAddress, { size: 20 }));
-      assert.equal(params.validUntilTimestamp, offer.terms.deadlineT - MIN_CLAIM_WINDOW_SECONDS - 1n);
-      return { inputCount: 1, inputTotal: offer.terms.amount + fees.creationOpenFeeAmount + fees.fundingOpenFeeAmount };
+      assert.equal(params.openFeeAmount, fee);
+      assert.equal(params.to, to);
+      assert.deepEqual(params.accountCreation, { kind: "contract", body: offer.l2ContractBody });
+      return { inputCount: 1, inputTotal: offer.terms.amount + fee };
     },
     runNoteFundedTransferFlow: async (params) => {
-      events.push("fund escrow");
-      assert.equal(params.wallet.network.chainId, CHAIN_ID);
-      assert.equal(params.amount, offer.terms.amount);
-      assert.equal(params.openFeeAmount, fees.fundingOpenFeeAmount);
-      assert.equal(params.issuanceOwnerCommitment, 0n);
+      events.push("fund");
+      assert.equal(params.openFeeAmount, fee);
+      assert.equal(params.to, to);
       assert.equal(params.validUntilTimestamp, offer.terms.deadlineT - MIN_CLAIM_WINDOW_SECONDS - 1n);
-      assert.equal(params.to, numberToHex(offer.l2ContractAddress, { size: 20 }));
-      await params.beforeSubmit?.();
+      assert.deepEqual(params.accountCreation, { kind: "contract", body: offer.l2ContractBody });
+      const status = await node.status();
+      const prepared = params.submission?.mode === "l1" ? await params.submission.preflight({ transactionBytes: Uint8Array.from(Buffer.from(FUNDING_ENTRY_HEX.slice(2), "hex")), status, retry: false }) : undefined;
+      await params.beforeSubmit?.(FUNDING_CONTENT_HASH, FUNDING_ENTRY_HEX);
       await params.onPreparedContentHash?.(FUNDING_CONTENT_HASH, FUNDING_ENTRY_HEX);
-      return {
-        contentHash: FUNDING_CONTENT_HASH,
-        recipient: params.to,
-        amount: params.amount,
-        changeAmount: 1n,
-        settled: false,
-        queued: true,
-      };
+      if (params.submission?.mode === "l1") await params.submission.submit({ transactionBytes: Uint8Array.from(Buffer.from(FUNDING_ENTRY_HEX.slice(2), "hex")), status, retry: false, prepared });
+      return { contentHash: FUNDING_CONTENT_HASH, recipient: params.to, amount: params.amount, changeAmount: 1n, settled: false, queued: params.submission?.mode !== "l1" };
     },
-    preflightTokenEscrowFunding: async () => { throw new Error("native offers do not fund a token escrow"); },
-    runTokenEscrowFundingFlow: async () => { throw new Error("native offers do not fund a token escrow"); },
-    recoverTokenEscrow: async () => { throw new Error("native offers do not recover a token escrow"); },
-    scanWallet: async (_node, wallet, chainId, range) => {
-      events.push("scan escrow");
+    preflightTokenEscrowFunding: async () => { throw new Error("unexpected token preflight"); },
+    runTokenEscrowFundingFlow: async () => { throw new Error("unexpected token funding"); },
+    recoverTokenEscrow: async () => { throw new Error("unexpected token recovery"); },
+    scanWallet: async (_node, wallet, chainId) => {
+      events.push("recover");
       assert.equal(wallet.address, offer.l2ContractAddress);
       assert.equal(chainId, CHAIN_ID);
-      assert.equal(range, undefined);
-      return {
-        scanned: recovered.length,
-        decrypted: recovered.length,
-        trialDecryptAttempts: recovered.length,
-        recovered,
-        sent: [],
-        transactionRecords: [],
-        receivedData: [],
-      };
+      return { scanned: recovered.length, decrypted: recovered.length, trialDecryptAttempts: recovered.length,
+        recovered, sent: [], transactionRecords: [], receivedData: [] };
     },
   };
 }
 
-describe("publishOffer", () => {
-  it("passes an application ceiling to selected sponsored creation for a multi-day offer", async () => {
-    const events: string[] = [];
-    const selected = runtime(events, []);
-    const multiDayOffer = { ...offer, terms: { ...offer.terms, deadlineT: LATEST_TIMESTAMP + 3n * 86_400n } };
-    selected.preflightNoteFundedTransfer = async () => ({ inputCount: 1, inputTotal: 1n });
-    selected.runSponsoredContractCreationFlow = async (params) => {
-      assert.equal(params.validUntilTimestamp, multiDayOffer.terms.deadlineT - MIN_CLAIM_WINDOW_SECONDS - 1n);
-      assert.equal(params.validUntilMode, "ceiling");
-      throw new Error("creation checked");
-    };
-    await assert.rejects(runPublish({
-      offer: multiDayOffer, ...NO_OPEN_FEES, privateRelayFeeAmount: 1n,
-      selectedRelayQuote: { recipient: 1n, requestQuote: async () => { throw new Error("stubbed publication must not quote"); } },
-      readL1Timestamp: async () => LATEST_TIMESTAMP,
-    }, selected), /creation checked/);
+const params = { offer, ...OPEN_FEES, readL1Timestamp: async () => 0n };
+const resume = { fundingContentHash: FUNDING_CONTENT_HASH, fundingTransactionHex: FUNDING_ENTRY_HEX };
+function flowNode(accepted = false, retained = false): PcashNodeClient {
+  return simNode(sellerChain, {
+    getReceipt: async () => accepted ? [receipt("privateValue", FUNDING_LEAF)] : [],
+    getMempoolTransaction: async () => retained ? { contentHash: FUNDING_CONTENT_HASH, status: "ready" } : null,
+    getBlockByHash: async () => ({ hash: numberToHex(FUNDING_ANCHOR, { size: 32 }), timestamp: (await node.status()).latestBlockTimestamp }),
   });
+}
 
-  it("continues directly published registration and funding without relaying them again", async () => {
+describe("atomic listing publication", () => {
+  it("preflights one fee, checkpoints one transaction, and waits for one outcome", async () => {
     const events: string[] = [];
-    const direct = runtime(events, [recoveredNote()]);
-    const creation = direct.runSponsoredContractCreationFlow;
-    const funding = direct.runNoteFundedTransferFlow;
-    direct.runSponsoredContractCreationFlow = async (params) => ({ ...await creation(params), queued: false });
-    direct.runNoteFundedTransferFlow = async (params) => ({ ...await funding(params), queued: false });
-    const opening = await runPublish({
-      offer, ...OPEN_FEES, readL1Timestamp: async () => 1n,
-      relay: async () => { throw new Error("already published to Ethereum"); },
-    }, direct, node, async () => { events.push("scan seller change"); });
-    assert.ok(opening);
-    assert.deepEqual(events, [
-      "preflight funding", "sponsor L2 smart contract", `await ${L2_CONTRACT_CONTENT_HASH}`,
-      "scan seller change", "fund escrow", `await ${FUNDING_CONTENT_HASH}`, "scan escrow",
-    ]);
+    const checkpoints: unknown[] = [];
+    const result = await runPublish({ ...params, relay: async hash => { assert.equal(hash, FUNDING_CONTENT_HASH); events.push("relay"); },
+      onCheckpoint: checkpoint => { checkpoints.push(checkpoint); events.push("checkpoint"); } }, runtime(events));
+    assert.deepEqual(events, ["preflight", "fund", "checkpoint", "relay", "accepted", "checkpoint", "recover"]);
+    assert.deepEqual(checkpoints[0], resume);
+    assert.deepEqual(result, { leafIndex: Number(FUNDING_LEAF), noteSecret: fieldToHex(0xabcn), amount: fieldToHex(offer.terms.amount) });
+    assert.equal((checkpoints[1] as { fundingAcceptedBlock: string }).fundingAcceptedBlock, "99");
   });
-
-  it("resumes a saved registration by relaying it and then its funding in dependency order", async () => {
-    const events: string[] = [];
-    const result = await runPublish({
-      offer, ...OPEN_FEES, readL1Timestamp: async () => 1n,
-      resume: { l2ContractContentHash: L2_CONTRACT_CONTENT_HASH },
-      relay: async (id) => { events.push(`relay ${id}`); },
-    }, runtime(events, [recoveredNote()]));
-    assert.ok(result);
-    assert.deepEqual(events, [
-      `relay ${L2_CONTRACT_CONTENT_HASH}`, `await ${L2_CONTRACT_CONTENT_HASH}`,
-      "fund escrow", `relay ${FUNDING_CONTENT_HASH}`, `await ${FUNDING_CONTENT_HASH}`, "scan escrow",
-    ]);
+  it("refuses insufficient value before preparing a transaction", async () => {
+    const events: string[] = []; const run = runtime(events);
+    run.preflightNoteFundedTransfer = async () => { throw new Error("insufficient notes"); };
+    await assert.rejects(runPublish(params, run), /insufficient notes/);
+    assert.deepEqual(events, []);
   });
-
-  it("requires more than the minimum claim window on the selected L1", () => {
-    assert.doesNotThrow(() => assertOfferPublicationWindow(MIN_CLAIM_WINDOW_SECONDS + 700n, 699n));
-    assert.throws(() => assertOfferPublicationWindow(MIN_CLAIM_WINDOW_SECONDS + 700n, 700n), /deadline is too close/);
-  });
-
-  it("rejects a signerless wallet before submitting the contract account", async () => {
-    const dataDir = mkdtempSync(join(tmpdir(), "pcash-publish-watch-only-"));
-    const wallet = await openNodeWallet({ dataDir, node, profile: sellerWallet });
-    const events: string[] = [];
-    try {
-      await assert.rejects(publishOffer({
-        wallet,
-        offer,
-        ...OPEN_FEES,
-        readL1Timestamp: async () => 0n,
-      }, runtime(events, [recoveredNote()])), /requires a spendable wallet/);
-      assert.deepEqual(events, []);
-    } finally {
-      await wallet.close();
-      rmSync(dataDir, { recursive: true, force: true });
+  it("checks the publication window before proving and again before journaling", async () => {
+    for (const expiresAfterPreparation of [false, true]) {
+      let reads = 0; const events: string[] = [];
+      await assert.rejects(runPublish({ ...params, readL1Timestamp: async () => ++reads === 1 && expiresAfterPreparation ? 0n : 700n }, runtime(events)), /deadline is too close/);
+      assert.deepEqual(events, expiresAfterPreparation ? ["preflight", "fund"] : []);
     }
   });
-
-  it("sponsors the contract creation fee, checkpoints both tx ids, waits in dependency order, and returns the exact funding leaf", async () => {
+  it("refuses a wallet that cannot recover this escrow before preparing value", async () => {
     const events: string[] = [];
-    const opening = await runPublish({
-      offer,
-      ...OPEN_FEES,
-      readL1Timestamp: async () => 0n,
-      onCheckpoint: async (checkpoint) => {
-        if (checkpoint.fundingContentHash === undefined) {
-          assert.equal(checkpoint.l2ContractTransactionHex, SPONSORED_L2_CONTRACT_ENTRY_HEX);
-        } else {
-          assert.equal(checkpoint.fundingTransactionHex, FUNDING_ENTRY_HEX);
-        }
-        events.push(checkpoint.fundingAcceptedBlock !== undefined
-          ? "accepted funding"
-          : checkpoint.fundingContentHash !== undefined
-            ? "checkpoint funding"
-            : checkpoint.l2ContractAcceptedBlock !== undefined
-              ? "accepted L2 smart contract"
-              : "checkpoint L2 smart contract");
-      },
-    }, runtime(events, [
-      recoveredNote({ leafIndex: FUNDING_LEAF - 1n, noteSecret: 0xdefn }),
-      recoveredNote(),
-    ]), node, async () => { events.push("scan seller change"); });
-
-    assert.deepEqual(events, [
-      "preflight funding",
-      "sponsor L2 smart contract",
-      "checkpoint L2 smart contract",
-      `await ${L2_CONTRACT_CONTENT_HASH}`,
-      "accepted L2 smart contract",
-      "scan seller change",
-      "fund escrow",
-      "checkpoint funding",
-      `await ${FUNDING_CONTENT_HASH}`,
-      "accepted funding",
-      "scan escrow",
-    ]);
-    assert.deepEqual(opening, {
-      leafIndex: Number(FUNDING_LEAF),
-      noteSecret: fieldToHex(0xabcn),
-      amount: fieldToHex(offer.terms.amount),
-    });
-  });
-
-  it("funds a token offer with one asset send under the seller-derived escrow secret", async () => {
-    const events: string[] = [];
-    const token = testToken();
-    const tokenOffer = { ...offer, terms: { ...offer.terms, assetId: token.assetId } };
-    const noteSecret = deriveTokenEscrowNoteSecret({
-      seller: sellerWallet, chainId: CHAIN_ID, offerId: tokenOffer.terms.id, contractAddress: tokenOffer.l2ContractAddress,
-    });
-    const tokens = runtime(events, []);
-    tokens.preflightNoteFundedTransfer = async () => { throw new Error("token offers fund no native escrow"); };
-    tokens.runNoteFundedTransferFlow = async () => { throw new Error("token offers fund no native escrow"); };
-    tokens.scanWallet = async () => { throw new Error("a token escrow opens from its derived secret"); };
-    tokens.preflightTokenEscrowFunding = async (params) => {
-      events.push("preflight token funding");
-      assert.equal(params.assetId, token.assetId);
-      assert.equal(params.amount, tokenOffer.terms.amount);
-      assert.equal(params.openFeeAmount, CREATION_FEE + FUNDING_FEE);
-      assert.equal(params.validUntilTimestamp, tokenOffer.terms.deadlineT - MIN_CLAIM_WINDOW_SECONDS - 1n);
-    };
-    tokens.runTokenEscrowFundingFlow = async (params) => {
-      events.push("fund token escrow");
-      assert.equal(params.assetId, token.assetId);
-      assert.equal(params.amount, tokenOffer.terms.amount);
-      assert.equal(params.noteSecret, noteSecret);
-      assert.equal(params.openFeeAmount, FUNDING_FEE);
-      assert.equal(params.validUntilTimestamp, tokenOffer.terms.deadlineT - MIN_CLAIM_WINDOW_SECONDS - 1n);
-      assert.equal(params.to, buildExtendedCode({
-        chainId: CHAIN_ID, address: tokenOffer.l2ContractAddress, mlKemPublicKey: tokenOffer.l2ContractWallet.mlKemPublicKey,
-      }));
-      await params.beforeSubmit?.();
-      await params.onPreparedContentHash?.(FUNDING_CONTENT_HASH, FUNDING_ENTRY_HEX);
-      return { contentHash: FUNDING_CONTENT_HASH, queued: true };
-    };
-    tokens.recoverTokenEscrow = async (_node, receipt, note) => {
-      events.push("recover token escrow");
-      assert.equal(receipt.outputLeafStart, FUNDING_LEAF);
-      assert.deepEqual(note, {
-        owner: tokenOffer.l2ContractAddress, assetId: token.assetId, amount: tokenOffer.terms.amount, noteSecret,
-      });
-      return { leafIndex: Number(FUNDING_LEAF), noteSecret: fieldToHex(noteSecret), amount: fieldToHex(tokenOffer.terms.amount) };
-    };
-    const opening = await runPublish({
-      offer: tokenOffer, ...OPEN_FEES, readL1Timestamp: async () => 0n,
-      relay: async (id) => { events.push(`relay ${id}`); },
-    }, tokens);
-    assert.deepEqual(opening, {
-      leafIndex: Number(FUNDING_LEAF), noteSecret: fieldToHex(noteSecret), amount: fieldToHex(tokenOffer.terms.amount),
-    });
-    assert.deepEqual(events, [
-      "preflight token funding", "sponsor L2 smart contract", `relay ${L2_CONTRACT_CONTENT_HASH}`, `await ${L2_CONTRACT_CONTENT_HASH}`,
-      "fund token escrow", `relay ${FUNDING_CONTENT_HASH}`, `await ${FUNDING_CONTENT_HASH}`, "recover token escrow",
-    ]);
-  });
-
-  it("sponsors the creation even when no relayer fee is offered", async () => {
-    const events: string[] = [];
-    await runPublish({
-      offer,
-      ...NO_OPEN_FEES,
-      readL1Timestamp: async () => 0n,
-    }, runtime(events, [recoveredNote()], NO_OPEN_FEES));
-
-    assert.deepEqual(events, [
-      "preflight funding",
-      "sponsor L2 smart contract",
-      `await ${L2_CONTRACT_CONTENT_HASH}`,
-      "fund escrow",
-      `await ${FUNDING_CONTENT_HASH}`,
-      "scan escrow",
-    ]);
-  });
-
-  it("budgets the creation fee and the funding fee before publishing anything", async () => {
-    // Publication pays two relayer fees: the creation pays its fee from the
-    // seller's notes, then the funding transfer pays its own. A balance that
-    // covers only one must be refused before the irreversible creation.
-    const events: string[] = [];
-    const budget = offer.terms.amount + CREATION_FEE;
-    const runtimeWithBudget = (): PublishOfferRuntime => ({
-      ...runtime(events, [recoveredNote()]),
-      preflightNoteFundedTransfer: async (params) => {
-        events.push("preflight funding");
-        if (params.amount + (params.openFeeAmount ?? 0n) > budget) {
-          throw new Error(`insufficient notes to cover ${params.amount + (params.openFeeAmount ?? 0n)}`);
-        }
-        return { inputCount: 1, inputTotal: budget };
-      },
-    });
-    await assert.rejects(runPublish({
-      offer,
-      ...OPEN_FEES,
-      readL1Timestamp: async () => 0n,
-    }, runtimeWithBudget()), /insufficient notes/);
-    assert.deepEqual(events, ["preflight funding"]);
-
-    // Nothing was created: the seller keeps its balance instead of paying for
-    // a contract it can never fund.
-    assert.equal(events.includes("sponsor L2 smart contract"), false);
-  });
-
-  it("relays a pending registration before selecting funding inputs from its change", async () => {
-    const events: string[] = [];
-    await runPublish({
-      offer,
-      ...OPEN_FEES,
-      readL1Timestamp: async () => 0n,
-      resume: { l2ContractContentHash: L2_CONTRACT_CONTENT_HASH },
-      relay: async (id) => { events.push(`relay ${id}`); },
-    }, {
-      ...runtime(events, [recoveredNote()]),
-      preflightNoteFundedTransfer: async () => { throw new Error("registration still reserves the only note"); },
-    }, node, async () => { events.push("sync change"); });
-    assert.deepEqual(events, [
-      `relay ${L2_CONTRACT_CONTENT_HASH}`, `await ${L2_CONTRACT_CONTENT_HASH}`, "sync change",
-      "fund escrow", `relay ${FUNDING_CONTENT_HASH}`, `await ${FUNDING_CONTENT_HASH}`, "scan escrow",
-    ]);
-  });
-
-  it("resumes from admitted L2 smart contract and funding ids without re-admitting", async () => {
-    const events: string[] = [];
-    await runPublish({
-      offer,
-      ...OPEN_FEES,
-      readL1Timestamp: async () => 700n,
-      resume: { l2ContractContentHash: L2_CONTRACT_CONTENT_HASH, fundingContentHash: FUNDING_CONTENT_HASH },
-      onCheckpoint: (checkpoint) => { events.push(checkpoint.fundingContentHash ? "accepted funding" : "accepted L2 smart contract"); },
-    }, runtime(events, [recoveredNote()]));
-
-    assert.deepEqual(events, [
-      `await ${L2_CONTRACT_CONTENT_HASH}`,
-      "accepted L2 smart contract",
-      `await ${FUNDING_CONTENT_HASH}`,
-      "accepted funding",
-      "scan escrow",
-    ]);
-  });
-
-  it("re-admits exact persisted L2 smart contract and funding bytes when no accepted receipt exists", async () => {
-    const events: string[] = [];
-    const restoredNode = simNode(sellerChain, {
-      getBlockByHash: async () => ({
-        hash: numberToHex(FUNDING_ANCHOR, { size: 32 }),
-        timestamp: sellerChain.status().latestBlockTimestamp - 1n,
-      }),
-    });
-    await runPublish({
-      offer,
-      ...OPEN_FEES,
-      readL1Timestamp: async () => 0n,
-      resume: {
-        l2ContractContentHash: L2_CONTRACT_CONTENT_HASH,
-        l2ContractTransactionHex: bytesToHex(L2_CONTRACT_ENTRY),
-        fundingContentHash: FUNDING_CONTENT_HASH,
-        fundingTransactionHex: FUNDING_ENTRY_HEX,
-      },
-    }, runtime(events, [recoveredNote()]), restoredNode);
-
-    assert.deepEqual(events, [
-      "submit L2 smart contract",
-      `await ${L2_CONTRACT_CONTENT_HASH}`,
-      "submit funding",
-      `await ${FUNDING_CONTENT_HASH}`,
-      "scan escrow",
-    ]);
-  });
-
-  it("rejects amount matches at other leaves and other amounts at the funding leaf", async () => {
-    const events: string[] = [];
-    await assert.rejects(
-      runPublish({
-        offer,
-        ...OPEN_FEES,
-        readL1Timestamp: async () => 700n,
-        resume: { l2ContractContentHash: L2_CONTRACT_CONTENT_HASH, fundingContentHash: FUNDING_CONTENT_HASH },
-      }, runtime(events, [
-        recoveredNote({ leafIndex: FUNDING_LEAF - 1n }),
-        recoveredNote({ amount: offer.terms.amount - 1n }),
-      ])),
-      /did not recover.*funding leaf 42/,
-    );
-  });
-
-  it("does not create an L2 smart contract after the publication window closes", async () => {
-    const events: string[] = [];
-    await assert.rejects(
-      runPublish({
-        offer,
-        ...OPEN_FEES,
-        readL1Timestamp: async () => 700n,
-        onCheckpoint: () => { events.push("unexpected checkpoint"); },
-      }, runtime(events, [recoveredNote()])),
-      /deadline is too close/,
-    );
+    await assert.rejects(runPublish({ ...params, offer: { ...offer, reclaimAuthority: sellerWallet.address + 1n } }, runtime(events)), /reclaim authority/);
     assert.deepEqual(events, []);
   });
-
-  it("does not create an L2 smart contract when the seller cannot fund the escrow", async () => {
+  it("does not submit when the durable checkpoint fails", async () => {
     const events: string[] = [];
-    const blockedRuntime = runtime(events, [recoveredNote()]);
-    blockedRuntime.preflightNoteFundedTransfer = async () => {
-      events.push("preflight funding");
-      throw new Error("insufficient notes to cover 50");
+    await assert.rejects(runPublish({ ...params, onCheckpoint: async () => { throw new Error("storage offline"); } }, runtime(events)), /storage offline/);
+    assert.deepEqual(events, ["preflight", "fund"]);
+  });
+  it("re-admits the same saved bytes without another proof or fee selection", async () => {
+    const events: string[] = [];
+    await runPublish({ ...params, resume }, runtime(events), flowNode());
+    assert.deepEqual(events, ["resume", "accepted", "recover"]);
+  });
+  for (const accepted of [false, true]) it(`delegates retained or accepted resume without preparing another payment (accepted: ${accepted})`, async () => {
+    const events: string[] = []; const run = runtime(events);
+    run.resumeValueTransaction = async (_wallet, intent) => {
+      assert.equal(intent.transactionHex, FUNDING_ENTRY_HEX);
+      events.push("resume");
+      return { state: accepted ? "accepted" : "pending", contentHash: FUNDING_CONTENT_HASH, queued: !accepted };
     };
-    await assert.rejects(
-      runPublish({
-        offer,
-        ...OPEN_FEES,
-        readL1Timestamp: async () => 0n,
-        onCheckpoint: () => { events.push("unexpected checkpoint"); },
-      }, blockedRuntime),
-      /insufficient notes to cover 50/,
-    );
-    assert.deepEqual(events, ["preflight funding"]);
+    await runPublish({ ...params, resume }, run, flowNode(accepted, !accepted));
+    assert.deepEqual(events, ["resume", "accepted", "recover"]);
   });
-
-  for (const fee of [offer.terms.amount, offer.terms.amount * 2n]) it(`funds the full escrow with an additional fee of ${fee}`, async () => {
+  it("can finish a finalized checkpoint whose exact bytes were released", async () => {
     const events: string[] = [];
-    await runPublish({
-      offer,
-      creationOpenFeeAmount: fee,
-      fundingOpenFeeAmount: fee,
-      readL1Timestamp: async () => 0n,
-    }, runtime(events, [recoveredNote()], { creationOpenFeeAmount: fee, fundingOpenFeeAmount: fee }));
-    assert.ok(events.includes("preflight funding"));
-    assert.ok(events.includes("fund escrow"));
+    await runPublish({ ...params, resume: { fundingContentHash: FUNDING_CONTENT_HASH } }, runtime(events), flowNode(true));
+    assert.deepEqual(events, ["accepted", "recover"]);
   });
-
-  for (const step of ["creation", "funding"] as const) it(`rejects a negative ${step} fee before creating accounts`, async () => {
-    const fees = { ...OPEN_FEES, [`${step}OpenFeeAmount`]: -1n };
-    const events: string[] = [];
-    await assert.rejects(
-      runPublish({
-        offer,
-        ...fees,
-        readL1Timestamp: async () => 0n,
-        onCheckpoint: () => { events.push("unexpected checkpoint"); },
-      }, runtime(events, [recoveredNote()])),
-      /fee must be nonnegative/,
-    );
-    assert.deepEqual(events, []);
+  it("restores a missing listing checkpoint when the wallet recognizes an existing action", async () => {
+    const checkpoints: unknown[] = []; const run = runtime([]);
+    run.runNoteFundedTransferFlow = async request => {
+      await request.onPreparedContentHash?.(FUNDING_CONTENT_HASH, FUNDING_ENTRY_HEX);
+      return { contentHash: FUNDING_CONTENT_HASH, recipient: request.to, amount: request.amount, changeAmount: 1n, settled: true, queued: false };
+    };
+    await runPublish({ ...params, onCheckpoint: value => { checkpoints.push(value); } }, run, flowNode(true));
+    assert.deepEqual(checkpoints[0], resume);
+    assert.equal((checkpoints[1] as { fundingTransactionHex: string }).fundingTransactionHex, FUNDING_ENTRY_HEX);
   });
-
-  it("rechecks the deadline after proving and before journaling escrow funding", async () => {
-    const events: string[] = [];
-    const timestamps = [0n, 0n, 700n];
-    await assert.rejects(
-      runPublish({
-        offer,
-        ...OPEN_FEES,
-        readL1Timestamp: async () => timestamps.shift() ?? 700n,
-        onCheckpoint: (checkpoint) => {
-          events.push(checkpoint.fundingContentHash === undefined ? "checkpoint L2 smart contract" : "checkpoint funding");
-        },
-      }, runtime(events, [recoveredNote()])),
-      /deadline is too close/,
-    );
-    assert.deepEqual(events, [
-      "preflight funding",
-      "sponsor L2 smart contract",
-      "checkpoint L2 smart contract",
-      `await ${L2_CONTRACT_CONTENT_HASH}`,
-      "checkpoint L2 smart contract",
-      "fund escrow",
-    ]);
+  it("checks the accepted receipt kind and recovers only its exact output", async () => {
+    const run = runtime([]); run.awaitAcceptedReceipt = async () => receipt("contractAccount", null);
+    await assert.rejects(runPublish(params, run), /expected privateValue/);
+    for (const wrong of [{ leafIndex: FUNDING_LEAF + 1n }, { amount: 1n }, { outputIndex: 1 }, { owner: 1n }, { assetId: 1n }]) {
+      await assert.rejects(runPublish(params, runtime([], [recoveredNote(wrong)])), /did not recover/);
+    }
   });
-
-  it("does not restore dropped prepared transactions after the publication window closes", async () => {
-    const events: string[] = [];
-    // The simulated node has no receipt and no mempool entry for either transaction.
-    const droppedNode = simNode(sellerChain);
-    await assert.rejects(
-      runPublish({
-        offer,
-        ...OPEN_FEES,
-        readL1Timestamp: async () => 700n,
-        resume: { l2ContractContentHash: L2_CONTRACT_CONTENT_HASH, l2ContractTransactionHex: bytesToHex(L2_CONTRACT_ENTRY) },
-      }, runtime(events, [recoveredNote()]), droppedNode),
-      /deadline is too close/,
-    );
-    assert.deepEqual(events, []);
+  it("passes one selected-relay fee and quote to preflight and funding", async () => {
+    const events: string[] = []; const run = runtime(events, undefined, 0n);
+    const quote = {} as NonNullable<PublishOfferParams["selectedRelayQuote"]>;
+    const preflight = run.preflightNoteFundedTransfer;
+    const funding = run.runNoteFundedTransferFlow;
+    run.preflightNoteFundedTransfer = async request => { assert.equal(request.privateRelayFeeAmount, 7n); assert.equal(request.selectedRelayQuote, quote); return preflight(request); };
+    run.runNoteFundedTransferFlow = async request => { assert.equal(request.privateRelayFeeAmount, 7n); assert.equal(request.selectedRelayQuote, quote); return funding(request); };
+    await runPublish({ ...params, ...NO_OPEN_FEES, privateRelayFeeAmount: 7n, selectedRelayQuote: quote }, run);
+    await assert.rejects(runPublish({ ...params, privateRelayFeeAmount: 7n }, runtime([])), /authenticated relayer/);
   });
-
-  it("distinguishes accepted publication receipts from finalized receipts", async () => {
-    let finalizedL1BlockNumber = 89n;
-    const finalityNode = {
-      getReceipt: async () => [{
-        contentHash: L2_CONTRACT_CONTENT_HASH,
-        transactionId: `0x${"e1".repeat(32)}`,
-        outcome: "succeeded",
-        failureDetail: null,
-        l1Sender: "0x0000000000000000000000000000000000000000",
-        issuanceOwnerCommitment: null,
-        settledOpenFeeAmount: 0n,
-        settledIssuanceAmount: 0n,
-        kind: "contractAccount",
-        inclusion: {
-          l1BlockNumber: 90n,
-          l1BlockHash: L1_HASH,
-          l1TransactionIndex: 0n,
-          batchItemIndex: 0n,
-        },
-        outputLeafStart: null,
-      }],
-      status: async () => ({ ...NODE_CAPABILITIES, finalizedL1BlockNumber }),
-    } as unknown as PcashNodeClient;
-
-    assert.equal((await readOfferPublicationFinality(finalityNode, L2_CONTRACT_CONTENT_HASH, "contractAccount")).phase, "accepted");
-    finalizedL1BlockNumber = 90n;
-    assert.equal((await readOfferPublicationFinality(finalityNode, L2_CONTRACT_CONTENT_HASH, "contractAccount")).phase, "finalized");
+  it("funds a token escrow with the same attachment and a recoverable secret", async () => {
+    const token = testToken(); const tokenOffer = { ...offer, terms: { ...offer.terms, assetId: token.assetId } };
+    const expectedSecret = deriveTokenEscrowNoteSecret({ seller: sellerWallet, chainId: offer.chainId, offerId: offer.terms.id, contractAddress: offer.l2ContractAddress });
+    const events: string[] = []; const run = runtime(events);
+    run.preflightTokenEscrowFunding = async request => { events.push("preflight token"); assert.equal(request.openFeeAmount, FUNDING_FEE); assert.deepEqual(request.accountCreation, { kind: "contract", body: offer.l2ContractBody }); };
+    run.runTokenEscrowFundingFlow = async request => { events.push("fund token"); assert.equal(request.noteSecret, expectedSecret); assert.deepEqual(request.accountCreation, { kind: "contract", body: offer.l2ContractBody }); await request.beforeSubmit?.(FUNDING_CONTENT_HASH, FUNDING_ENTRY_HEX); await request.onPreparedContentHash?.(FUNDING_CONTENT_HASH, FUNDING_ENTRY_HEX); return { contentHash: FUNDING_CONTENT_HASH, queued: true }; };
+    run.recoverTokenEscrow = async (_node, accepted, note) => { events.push("recover token"); assert.equal(accepted.outputLeafStart, FUNDING_LEAF); assert.equal(note.noteSecret, expectedSecret); return { leafIndex: Number(FUNDING_LEAF), noteSecret: fieldToHex(expectedSecret), amount: fieldToHex(note.amount) }; };
+    await runPublish({ ...params, offer: tokenOffer }, run);
+    assert.deepEqual(events, ["preflight token", "fund token", "accepted", "recover token"]);
   });
 });
 
-describe("Fast listing batches", () => {
-  function fastRuntime(events: string[]) {
-    const value = runtime(events, [recoveredNote()]);
-    value.preflightNoteFundedTransfer = async (params) => {
-      assert.equal(params.openFeeAmount, FUNDING_FEE);
-      assert.notEqual(params.to, numberToHex(offer.l2ContractAddress, { size: 20 }));
-      return { inputCount: 1, inputTotal: offer.terms.amount + FUNDING_FEE };
-    };
-    value.runSponsoredContractCreationFlow = async (params) => {
-      assert.equal(params.openFeeAmount, 0n);
-      assert.equal(params.submission?.prepareOnly, true);
-      events.push("authorize creation");
-      await params.onPreparedContentHash?.(L2_CONTRACT_CONTENT_HASH, SPONSORED_L2_CONTRACT_ENTRY_HEX);
-      return { contentHash: L2_CONTRACT_CONTENT_HASH, transactionHex: SPONSORED_L2_CONTRACT_ENTRY_HEX, queued: false, settled: false, changeAmount: 0n };
-    };
-    value.runNoteFundedTransferFlow = async (params) => {
-      assert.equal(params.submission?.prepareOnly, true);
-      assert.equal(params.openFeeAmount, FUNDING_FEE);
-      assert.notEqual(params.to, numberToHex(offer.l2ContractAddress, { size: 20 }));
-      events.push("authorize funding");
-      await params.onPreparedContentHash?.(FUNDING_CONTENT_HASH, FUNDING_ENTRY_HEX);
-      return { contentHash: FUNDING_CONTENT_HASH, recipient: params.to, amount: params.amount, changeAmount: 1n, settled: false, queued: false };
-    };
-    return value;
-  }
-  const resume = { l2ContractContentHash: L2_CONTRACT_CONTENT_HASH, l2ContractTransactionHex: SPONSORED_L2_CONTRACT_ENTRY_HEX,
-    fundingContentHash: FUNDING_CONTENT_HASH, fundingTransactionHex: FUNDING_ENTRY_HEX };
-  function fastNode(accepted: string[] = []): PcashNodeClient {
-    return simNode(sellerChain, { getReceipt: async ({ contentHash }: { contentHash: string }) => {
-      if (!accepted.includes(contentHash)) return [];
-      const parsed = receipt(contentHash === L2_CONTRACT_CONTENT_HASH ? "contractAccount" : "privateValue", contentHash === L2_CONTRACT_CONTENT_HASH ? null : 42n);
-      return [{ ...parsed, contentHash, inclusion: { ...parsed.inclusion, l1BlockNumber: 90n, l1BlockHash: L1_HASH } }];
-    } });
-  }
-  it("saves both authorizations before one ordered Ethereum submission", async () => {
-    const events: string[] = [];
-    const checkpoints: unknown[] = [];
-    const result = await runPublish({ offer, ...OPEN_FEES, readL1Timestamp: async () => 0n,
-      onCheckpoint: checkpoint => { checkpoints.push(checkpoint); },
-      submission: { mode: "l1", preflight: async ({ transactionBytes: entry, additionalTransactions }) => {
-        assert.equal(bytesToHex(entry), SPONSORED_L2_CONTRACT_ENTRY_HEX);
-        assert.deepEqual(additionalTransactions?.map(entry => bytesToHex(entry)), [FUNDING_ENTRY_HEX]);
-        assert.deepEqual(checkpoints[1], resume);
-      }, submit: async () => {
-        events.push("Ethereum approval");
-        return { accepted: false, queued: false, output: undefined };
-      } },
-    }, fastRuntime(events), fastNode());
-    assert.equal(result?.leafIndex, Number(FUNDING_LEAF));
-    assert.deepEqual(events.slice(0, 3), ["authorize creation", "authorize funding", "Ethereum approval"]);
+describe("direct listing publication", () => {
+  it("uses the real adapter and checkpoints before one Ethereum submission", async () => {
+    const events: string[] = []; let checkpoint: unknown;
+    const run = runtime(events); const fund = run.runNoteFundedTransferFlow;
+    run.runNoteFundedTransferFlow = async request => { assert.equal(request.submission?.prepareOnly, undefined); return fund(request); };
+    await runPublish({ ...params, onCheckpoint: value => { checkpoint = value; }, submission: {
+      mode: "l1", preflight: async request => { assert.equal(bytesToHex(request.transactionBytes), FUNDING_ENTRY_HEX); assert.equal(request.additionalTransactions, undefined); },
+      submit: async () => { assert.deepEqual(checkpoint, resume); events.push("Ethereum approval"); return { accepted: false, queued: false, output: undefined }; },
+    } }, run, flowNode());
+    assert.deepEqual(events, ["preflight", "fund", "Ethereum approval", "accepted", "recover"]);
   });
-  for (const accepted of [[], [L2_CONTRACT_CONTENT_HASH], [FUNDING_CONTENT_HASH], [L2_CONTRACT_CONTENT_HASH, FUNDING_CONTENT_HASH]]) {
-    it(`resumes exact bytes with ${accepted.length} accepted batch items (${accepted[0] ?? "none"})`, async () => {
-      const events: string[] = [];
-      let submissions = 0;
-      const missing = [L2_CONTRACT_CONTENT_HASH, FUNDING_CONTENT_HASH].filter(id => !accepted.includes(id));
-      await runPublish({
-        offer, ...OPEN_FEES, readL1Timestamp: async () => 0n, resume: {
-          l2ContractContentHash: L2_CONTRACT_CONTENT_HASH, fundingContentHash: FUNDING_CONTENT_HASH,
-          ...(accepted.includes(L2_CONTRACT_CONTENT_HASH) ? {} : { l2ContractTransactionHex: SPONSORED_L2_CONTRACT_ENTRY_HEX }),
-          ...(accepted.includes(FUNDING_CONTENT_HASH) ? {} : { fundingTransactionHex: FUNDING_ENTRY_HEX }),
-        },
-        submission: {
-          mode: "l1", preflight: async ({ additionalTransactions, transactionBytes }) => {
-            const { contentHash } = submissionIdentity(transactionBytes);
 
-            assert.equal(contentHash, missing[0]);
-            assert.equal(additionalTransactions?.length, missing.length - 1);
-          }, submit: async () => {
-            submissions++;
-            return { accepted: false, queued: false, output: undefined };
-          }
-        },
-      }, fastRuntime(events), fastNode(accepted));
-      assert.equal(submissions, missing.length ? 1 : 0);
-      assert.ok(!events.some(event => event.startsWith("authorize")));
-    });
-  }
-  it("finishes mempool publication when both finalized checkpoints have discarded their bytes", async () => {
-    const events: string[] = [];
-    const result = await runPublish({ offer, ...OPEN_FEES, readL1Timestamp: async () => 0n,
-      resume: { l2ContractContentHash: L2_CONTRACT_CONTENT_HASH, fundingContentHash: FUNDING_CONTENT_HASH },
-    }, runtime(events, [recoveredNote()]), fastNode([L2_CONTRACT_CONTENT_HASH, FUNDING_CONTENT_HASH]));
-    assert.equal(result?.leafIndex, Number(FUNDING_LEAF));
-    assert.ok(!events.includes("fund escrow"));
-    assert.ok(!events.includes("sponsor L2 smart contract"));
-  });
-  it("waits for a known pending partial batch instead of sending it twice", async () => {
-    await runPublish({ offer, ...OPEN_FEES, readL1Timestamp: async () => 0n, resume,
-      submission: { mode: "l1", l1Recovery: async () => ({
-        reconcile: async () => ({ latched: true, entries: [] }),
-        show: async () => ({ latched: true, entries: [{ kind: "batch", transactionHash: L1_HASH, selected: [FUNDING_CONTENT_HASH] }] }),
-      }) as never, preflight: async () => { assert.fail("must not prepare a duplicate batch"); },
-      submit: async () => { assert.fail("must not request another approval"); } },
-    }, fastRuntime([]), fastNode([L2_CONTRACT_CONTENT_HASH]));
-  });
-  it("retains both entries when the Ethereum wallet rejects so Continue needs no new PCASH authorizations", async () => {
-    let saved: typeof resume | undefined;
-    await assert.rejects(runPublish({ offer, ...OPEN_FEES, readL1Timestamp: async () => 0n,
-      onCheckpoint: checkpoint => { saved = checkpoint as typeof resume; },
+  it("checks the publication window again after checkpointing and before Ethereum submission", async () => {
+    let reads = 0; let saved: unknown; let submitted = false;
+    await assert.rejects(runPublish({ ...params,
+      readL1Timestamp: async () => ++reads < 3 ? 0n : 700n,
+      onCheckpoint: value => { saved = value; },
       submission: { mode: "l1", preflight: async () => undefined,
-        submit: async () => { throw new Error("User rejected Ethereum approval"); } },
-    }, fastRuntime([]), fastNode()), /rejected/);
+        submit: async () => { submitted = true; return { accepted: false, queued: false, output: null }; } },
+    }, runtime([]), flowNode()), /deadline is too close/);
     assert.deepEqual(saved, resume);
+    assert.equal(submitted, false);
   });
+
+  it("stops publication if the active listing changes after its checkpoint", async () => {
+    let active = true; let submitted = false;
+    await assert.rejects(runPublish({ ...params,
+      assertActive: () => { if (!active) throw new Error("listing changed"); },
+      onCheckpoint: () => { active = false; },
+      submission: { mode: "l1", preflight: async () => undefined,
+        submit: async () => { submitted = true; return { accepted: false, queued: false, output: null }; } },
+    }, runtime([]), flowNode()), /listing changed/);
+    assert.equal(submitted, false);
+  });
+
+  for (const accepted of [false, true]) it(`delegates exact transaction resume (accepted: ${accepted})`, async () => {
+    const events: string[] = []; const run = runtime(events);
+    run.resumeValueTransaction = async (_wallet, intent) => {
+      events.push("resume");
+      assert.equal(intent.transactionHex, FUNDING_ENTRY_HEX);
+      assert.equal(intent.submission?.mode, "l1");
+      return { state: accepted ? "accepted" : "pending", contentHash: FUNDING_CONTENT_HASH };
+    };
+    await runPublish({ ...params, resume, submission: { mode: "l1", preflight: async () => { assert.fail("application preflight"); }, submit: async () => { assert.fail("application submission"); } } }, run, flowNode(accepted));
+    assert.deepEqual(events, ["resume", "accepted", "recover"]);
+  });
+
+  it("waits for an in-flight wallet result without a second preflight or submission", async () => {
+    const run = runtime([]);
+    run.resumeValueTransaction = async () => ({ state: "pending", contentHash: FUNDING_CONTENT_HASH, queued: false });
+    await runPublish({ ...params, resume, submission: { mode: "l1", preflight: async () => { assert.fail("duplicate preflight"); }, submit: async () => { assert.fail("duplicate submission"); } } }, run, flowNode());
+  });
+
+  it("retains a rejected approval's exact checkpoint and resumes it without proving again", async () => {
+    let saved: unknown;
+    const run = runtime([]);
+    const submission: DurableSubmissionAdapter = { mode: "l1", preflight: async () => undefined,
+      submit: async () => { throw new Error("approval rejected"); } };
+    await assert.rejects(runPublish({ ...params, onCheckpoint: value => { saved = value; }, submission }, run, flowNode()), /approval rejected/);
+    assert.deepEqual(saved, resume);
+    run.runNoteFundedTransferFlow = async () => { assert.fail("must resume the saved bytes"); };
+    run.resumeValueTransaction = async (_wallet, intent) => {
+      assert.equal(intent.transactionHex, resume.fundingTransactionHex);
+      return { state: "accepted", contentHash: FUNDING_CONTENT_HASH };
+    };
+    await runPublish({ ...params, resume: saved as typeof resume, submission }, run, flowNode(true));
+  });
+
+  it("surfaces the wallet's blocked reason without a new proof", async () => {
+    const events: string[] = []; const run = runtime(events);
+    run.resumeValueTransaction = async () => ({ state: "blocked", contentHash: FUNDING_CONTENT_HASH, message: "wait for finalized expiry" });
+    await assert.rejects(runPublish({ ...params, resume }, run, flowNode()), /wait for finalized expiry/);
+    assert.deepEqual(events, []);
+  });
+
+  it("clears the application checkpoint only after the wallet permits a rebuild", async () => {
+    const events: string[] = []; const run = runtime(events);
+    run.resumeValueTransaction = async () => { events.push("resume"); return { state: "rebuildable", contentHash: FUNDING_CONTENT_HASH }; };
+    await runPublish({ ...params, resume, onFundingRebuild: hash => { assert.equal(hash, FUNDING_CONTENT_HASH); events.push("reset checkpoint"); } }, run, flowNode());
+    assert.deepEqual(events, ["resume", "reset checkpoint", "preflight", "fund", "accepted", "recover"]);
+    run.runNoteFundedTransferFlow = async () => { assert.fail("checkpoint race must stop rebuilding"); };
+    await assert.rejects(runPublish({ ...params, resume, onFundingRebuild: () => { throw new Error("checkpoint changed"); } }, run, flowNode()), /checkpoint changed/);
+  });
+});
+
+it("keeps a strict claim window and distinguishes accepted from finalized funding", async () => {
+  assert.throws(() => assertOfferPublicationWindow(700n + MIN_CLAIM_WINDOW_SECONDS, 700n), /deadline is too close/);
+  assert.doesNotThrow(() => assertOfferPublicationWindow(701n + MIN_CLAIM_WINDOW_SECONDS, 700n));
+  for (const finalized of [98n, 99n]) {
+    const current = simNode(sellerChain, { getReceipt: async () => [receipt("privateValue", FUNDING_LEAF)], status: async () => ({ finalizedL1BlockNumber: finalized }) });
+    assert.equal((await readOfferPublicationFinality(current, FUNDING_CONTENT_HASH)).phase, finalized === 99n ? "finalized" : "accepted");
+  }
+});
+
+for (const token of [false, true]) for (const persistCheckpoint of [false, true]) it(`checkpoints ${token ? "token" : "native"} funding before the preflight RPC sees proof bytes (checkpoint succeeds: ${persistCheckpoint})`, async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), "pcash-publication-preflight-"));
+  const chain = new ChainSim(CHAIN_ID, { l1ChainId: DEFAULT_NETWORK_CONFIG.l1ChainId, inboxAddress: addressHex(DEFAULT_NETWORK_CONFIG.inboxAddress) });
+  const asset = testToken();
+  chain.addBlock({ accounts: [profileAccount(chain, sellerWallet)], transactions: [{
+    outputs: [noteTo(sellerWallet, 1_000n), token ? { ...noteTo(sellerWallet, 1_000n), assetId: asset.assetId } : null, null, null, null],
+  }] });
+  const walletNode = simNode(chain, { getBlockByHash: async (hash: string) => BigInt(hash) === chain.head.hash
+    ? { hash, timestamp: chain.head.envelope.header.timestamp } : null });
+  const actualOffer = { ...offer, terms: { ...offer.terms, assetId: token ? asset.assetId : 0n,
+    deadlineT: chain.head.envelope.header.timestamp + MIN_CLAIM_WINDOW_SECONDS + 1_000n } };
+  let proofs = 0; let preflights = 0; let failPreflight = true;
+  const checkpoints: { contentHash: string; transactionHex: string }[] = [];
+  const submitted: Uint8Array[] = [];
+  const submission: DurableSubmissionAdapter = {
+    mode: "l1",
+    preflight: async ({ transactionBytes }) => {
+      preflights++;
+      assert.equal(checkpoints.length, 1, "checkpoint must precede external gas estimation");
+      assert.equal(bytesToHex(transactionBytes), checkpoints[0]!.transactionHex);
+      if (failPreflight) throw new Error("gas estimation failed after receiving the proof");
+      return null;
+    },
+    submit: async ({ transactionBytes }) => { submitted.push(transactionBytes); return { accepted: false, queued: false, output: null }; },
+  };
+  const provers: NonNullable<Parameters<typeof openNodeWallet>[0]["provers"]> = {
+    privateValue: { proveAndEncode: async build => { proofs++; return build.encodeTransaction(new Uint8Array(WIRE_PROOF_BYTES)); } },
+    assetAction: { shapes: [0], proveAndEncode: async build => { proofs++; return build.encodeTransaction(new Uint8Array(WIRE_PROOF_BYTES)); } },
+  };
+  const first = await openNodeWallet({ dataDir, node: walletNode, profile: sellerWallet, signer: sellerSigner, provers });
+  const run = runtime([]);
+  run.runNoteFundedTransferFlow = runNoteFundedTransferFlow;
+  run.runTokenEscrowFundingFlow = runTokenEscrowFundingFlow;
+  run.preflightTokenEscrowFunding = async () => {};
+  run.preflightNoteFundedTransfer = async () => ({ inputCount: 1, inputTotal: 1_000n });
+  try {
+    await first.sync();
+    if (token) await first.importAssetDefinition(asset.definition);
+    await assert.rejects(publishOffer({ wallet: first, offer: actualOffer, fundingOpenFeeAmount: 0n, submission,
+      readL1Timestamp: async () => chain.head.envelope.header.timestamp,
+      onCheckpoint: checkpoint => {
+        if (!persistCheckpoint) throw new Error("checkpoint storage failed");
+        checkpoints.push({ contentHash: checkpoint.fundingContentHash, transactionHex: checkpoint.fundingTransactionHex! });
+      },
+    }, run), persistCheckpoint ? /gas estimation failed/ : /checkpoint storage failed/);
+    const stored = await first.execute(walletAction("test:preflight-exposure", ({ store }) => store.load()));
+    assert.equal(stored?.pendingNoteFundedTransfers?.length ?? 0, 0);
+    assert.equal(stored?.pendingAssetActions?.length ?? 0, 0);
+    assert.equal(stored?.mempoolOutbox?.length ?? 0, 0);
+  } finally { await first.close(); }
+  assert.equal(proofs, 1);
+  assert.equal(preflights, persistCheckpoint ? 1 : 0);
+  assert.equal(submitted.length, 0);
+  if (!persistCheckpoint) return;
+  failPreflight = false;
+  const reopened = await openNodeWallet({ dataDir, node: walletNode, profile: sellerWallet, signer: sellerSigner,
+    provers: { privateValue: { proveAndEncode: async () => { throw new Error("must not reprove"); } },
+      assetAction: { shapes: [0], proveAndEncode: async () => { throw new Error("must not reprove"); } } } });
+  try {
+    const resumed = await reopened.resumeValueTransaction({ transactionHex: checkpoints[0]!.transactionHex, submission });
+    assert.equal(resumed.state, "pending");
+    assert.equal(resumed.contentHash, checkpoints[0]!.contentHash);
+  } finally { await reopened.close(); }
+  assert.equal(proofs, 1);
+  assert.equal(preflights, 2);
+  assert.equal(submitted.length, 1);
+  assert.equal(bytesToHex(submitted[0]!), checkpoints[0]!.transactionHex);
 });

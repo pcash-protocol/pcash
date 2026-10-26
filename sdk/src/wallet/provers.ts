@@ -8,7 +8,6 @@ import { CIRCUIT_PROVING_RUNTIMES, CIRCUIT_SRS_POINTS, PRIVATE_VALUE_PROFILES } 
 import {
   proveTransferTransactionChonk,
   proveAssetCreationChonk,
-  proveSponsoredContractCreationChonk,
   proveUserAccountUpdateChonk,
   srsPointsForCircuits,
   wasmChonkBackend,
@@ -77,21 +76,6 @@ export function createWalletProvers(kind: ProverKind): WalletRuntimeProvers {
         const proof = await proveUserAccountUpdateChonk({
           build,
           authorizationPackage: "account_rule_admin_ecdsa",
-          authorizationWitnessMap: build.readableEcdsaWitnessMap,
-          resolve,
-          backend,
-        });
-        return build.encodeTransaction(proof.proof);
-      },
-    },
-    sponsoredContractCreation: {
-      async proveAndEncode(build) {
-        if (build.readableEcdsaWitnessMap === undefined) {
-          throw new Error("sponsored contract creation did not produce a sponsorship witness");
-        }
-        const proof = await proveSponsoredContractCreationChonk({
-          build,
-          authorizationPackage: "account_rule_contract_fee_sponsorship_ecdsa",
           authorizationWitnessMap: build.readableEcdsaWitnessMap,
           resolve,
           backend,

@@ -89,6 +89,7 @@ function fixture(
     global: {
       openFeeAmount: 0n, issuanceOwnerCommitment, notBeforeTimestamp: 8n, validUntilTimestamp: 9n, carrierContextHash: 0n, assetBurnAmount: 0n,
       deliveryCommitment: deliveryCommitment(OUTPUT_DATA, ARENA),
+      accountCreationCommitment: 0n,
     },
     inputs: [
       {
@@ -161,6 +162,7 @@ test("reclaim witness signs semantic Marketplace terms", () => {
     issuanceOwnerCommitment: "0",
     relayFeeAmount: "0",
     relayFeeOwnerCommitment: "0",
+    accountCreationCommitment: "0",
     transactionContext: TRANSACTION_CONTEXT.toString(),
     notBefore: "8",
     validUntil: "9",
@@ -250,6 +252,7 @@ test("an existing reclaim signature is invalid under a different L1 domain", () 
     issuanceOwnerCommitment: 0n,
     relayFeeAmount: 0n,
     relayFeeOwnerCommitment: 0n,
+    accountCreationCommitment: 0n,
     transactionContext: TRANSACTION_CONTEXT,
     notBefore: 8n,
     validUntil: 9n,

@@ -1,7 +1,6 @@
 import { PRIVATE_VALUE_PROFILES, privateValueProfile, type PrivateValueShape } from "../constants/privateValueProfiles.ts";
 import type { NativeTransferBuild } from "../builders/index.ts";
 import type { UserAccountUpdateBuild } from "../builders/accountUpdate.ts";
-import type { SponsoredContractCreationBuild } from "../builders/contractCreation.ts";
 import type { AssetActionBuild } from "../builders/assetAction.ts";
 import type { ChonkCircuitKind, ChonkVkArtifacts } from "../protocol/account.ts";
 import { privateValuePublicInputNames, type WitnessMap } from "../protocol/witness.ts";
@@ -197,34 +196,6 @@ export function userAccountUpdateStack(params: UserAccountUpdateParams): Promise
     buildKernelWitnessMap: params.build.buildKernelWitnessMap,
     hidingKernelName: "user_account_update_hiding_kernel",
     publicInputNames: [...TYPE0_NAMES, "account_update_commitment"],
-    publicInputs: params.build.publicInputs,
-    resolve: params.resolve,
-  });
-}
-
-interface SponsoredContractCreationParams {
-  eventApplication?: EventApplication;
-  build: SponsoredContractCreationBuild;
-  authorizationPackage: string;
-  authorizationWitnessMap: WitnessMap;
-  resolve: ChonkCircuitResolver;
-}
-
-/** Fold the sponsor's installed sponsorship rule into a contract-account creation. */
-export async function proveSponsoredContractCreationChonk(
-  params: SponsoredContractCreationParams & ProveOptions,
-): Promise<NativeChonkResult> {
-  return proveStack(await sponsoredContractCreationStack(params), params);
-}
-
-export function sponsoredContractCreationStack(params: SponsoredContractCreationParams): Promise<ChonkStack> {
-  return singleRuleStack({
-    rule: { packageName: params.authorizationPackage, witnessMap: params.authorizationWitnessMap },
-    eventApplication: params.eventApplication,
-    kernelName: "contract_creation_kernel",
-    buildKernelWitnessMap: params.build.buildKernelWitnessMap,
-    hidingKernelName: "contract_creation_hiding_kernel",
-    publicInputNames: [...TYPE0_NAMES, "contract_address"],
     publicInputs: params.build.publicInputs,
     resolve: params.resolve,
   });

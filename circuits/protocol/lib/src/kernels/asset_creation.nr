@@ -42,7 +42,7 @@ pub fn asset_creation<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
     event_statement: [Field; EVENT_STATEMENT_LENGTH],
     event_application_vk: AppVerificationKey,
     event_salt: Field,
-) -> [Field; N_IN + N_OUT + 9] {
+) -> [Field; N_IN + N_OUT + 10] {
     open_value_state(
         recent_pcash_block_hash,
         block_header_state_siblings,

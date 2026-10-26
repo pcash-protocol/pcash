@@ -42,7 +42,7 @@ pub enum ItemExclusionReason {
     UnknownKind,
     UnknownPrivateValueShape,
     UnknownAuthorizationMode,
-    UnknownFundingMode,
+    UnknownAccountCreationTag,
     UnknownReceiveKeyMode,
     UnknownPublishesNkRootFlag,
     UnknownYParity,
@@ -50,6 +50,7 @@ pub enum ItemExclusionReason {
     TrailingBytes,
     WrongChainId,
     DirectModeOutsideInbox,
+    DirectCreationAttachment,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -271,7 +272,7 @@ codec_enum!(ItemExclusionReason: u8 {
     UnknownKind,
     UnknownPrivateValueShape,
     UnknownAuthorizationMode,
-    UnknownFundingMode,
+    UnknownAccountCreationTag,
     UnknownReceiveKeyMode,
     UnknownPublishesNkRootFlag,
     UnknownYParity,
@@ -279,6 +280,7 @@ codec_enum!(ItemExclusionReason: u8 {
     TrailingBytes,
     WrongChainId,
     DirectModeOutsideInbox,
+    DirectCreationAttachment,
 });
 
 codec_struct!(L1DeliveryItem {
@@ -372,7 +374,7 @@ mod tests {
     fn result(l1_transaction_index: u64, batch_item_index: u64) -> crate::TransactionResult {
         crate::TransactionResult {
             tx_type: 0,
-            funding_mode: 0,
+            account_creation: 0,
             l1_transaction_index,
             batch_item_index,
             outcome: crate::TransactionOutcome::Succeeded,

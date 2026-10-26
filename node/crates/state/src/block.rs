@@ -86,6 +86,7 @@ pub enum TransactionOutcome {
     EmptyContractFunctionSet = 22,
     SelectorsNotStrictlyIncreasing = 23,
     CarrierContextMismatch = 24,
+    AccountCreationMismatch = 25,
 }
 
 codec_enum!(TransactionOutcome: u16 {
@@ -114,6 +115,7 @@ codec_enum!(TransactionOutcome: u16 {
     EmptyContractFunctionSet,
     SelectorsNotStrictlyIncreasing,
     CarrierContextMismatch,
+    AccountCreationMismatch,
 });
 
 impl TransactionOutcome {
@@ -132,8 +134,8 @@ impl TransactionOutcome {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TransactionResult {
     pub tx_type: u8,
-    /// A contract-account creation's funding mode; zero for other types.
-    pub funding_mode: u8,
+    /// Account creation: 0 for none, 1 for insertion, 2 for reuse.
+    pub account_creation: u8,
     pub l1_transaction_index: u64,
     pub batch_item_index: u64,
     pub outcome: TransactionOutcome,
@@ -149,7 +151,7 @@ pub struct TransactionResult {
 
 codec_struct!(TransactionResult {
     tx_type,
-    funding_mode,
+    account_creation,
     l1_transaction_index,
     batch_item_index,
     outcome,
@@ -174,7 +176,7 @@ fn transaction_result_leaf(result: &TransactionResult) -> Fr {
     poseidon(&[
         domain_tags::TRANSACTION_RESULT_DOMAIN,
         Fr::from(u64::from(result.tx_type)),
-        Fr::from(u64::from(result.funding_mode)),
+        Fr::from(u64::from(result.account_creation)),
         Fr::from(result.l1_transaction_index),
         Fr::from(result.batch_item_index),
         Fr::from(u64::from(result.outcome.as_u16())),
@@ -628,6 +630,7 @@ mod tests {
             TransactionOutcome::EmptyContractFunctionSet,
             TransactionOutcome::SelectorsNotStrictlyIncreasing,
             TransactionOutcome::CarrierContextMismatch,
+            TransactionOutcome::AccountCreationMismatch,
         ];
         for (expected, code) in codes.into_iter().enumerate() {
             assert_eq!(usize::from(code.as_u16()), expected);

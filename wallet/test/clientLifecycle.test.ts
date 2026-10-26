@@ -16,7 +16,7 @@ import { releaseExpiredAccountActivation } from "@pcash/sdk/wallet/web";
 import { syncWallet } from "@pcash/sdk/wallet/testing";
 import { createWalletRuntime } from "@pcash/sdk/wallet/testing";
 import { privateKeyPcashActionSigner, serializeEcdsaSignature, signDigest, type PcashActionSigner } from "@pcash/sdk/eip712";
-import { assertTransactionTypeAccepted, transactionTypeOf, decodeTransaction, encodePrivateValueTransaction, encodeUserAccountCreation, WIRE_PROOF_BYTES } from "@pcash/sdk/protocol";
+import { assertTransactionTypeAccepted, transactionTypeOf, decodeTransaction, privateValuePublicInputs, encodePrivateValueTransaction, encodeUserAccountCreation, WIRE_PROOF_BYTES } from "@pcash/sdk/protocol";
 import {
   parseLocalChainCode,
   resolveRecipientDelivery,
@@ -122,7 +122,7 @@ const saveWalletState = async (path: string, data: WalletFileData, chain?: Map<s
 };
 
 const STUB_PROVERS = {
-  privateValue: { proveAndEncode: async () => { throw new Error("unexpected private-value prove"); } },
+  privateValue: { proveAndEncode: async (build: { encodeTransaction(proof: Uint8Array): Uint8Array }) => build.encodeTransaction(new Uint8Array(WIRE_PROOF_BYTES)) },
   userAccountUpdate: {
     proveAndEncode: async (build: { encodeTransaction: (proof: Uint8Array) => Uint8Array }) =>
       build.encodeTransaction(new Uint8Array(WIRE_PROOF_BYTES)),
@@ -364,7 +364,7 @@ const receiptAt =(block: number, accepted: boolean, contentHash = `0x${"00".repe
   settledOpenFeeAmount: "0x0",
   settledIssuanceAmount: "0x0",
   kind: "userAccountCreation",
-  fundingMode: null,
+  accountCreation: 0,
   outputLeafStart: null,
   outputsAdded: "0x0",
   nullifiers: null,
@@ -393,6 +393,9 @@ const profileAccountRow = (): AccountRow => ({
 const saveUnactivatedWallet = (path: string) =>
   saveWalletState(path, emptyWalletFile(TEST_PROFILE.address), localChain(10n).records);
 
+const activationStatus = (latest: bigint, finalized: bigint) => ({ ...statusResult(latest, finalized), latestBlockHash: word(localChain(latest).anchor.blockHash) });
+const activationBlock = (number: bigint) => ({ ...blockDto(number, word(number - 1n)), hash: word(localChain(number).anchor.blockHash) });
+
 describe("account runtime", () => {
   it("creates the Ethereum-derived default profile with the requested receive key", async () => {
     const calls: MockCall[] = [];
@@ -400,10 +403,10 @@ describe("account runtime", () => {
     let submittedEntry = "";
     const replacement = generateMlKemKeyPair(new Uint8Array(64).fill(0x44));
     const node = mockNode({
-      pcash_status: () => statusResult(10n, 9n),
-      pcash_getBlockByNumber: () => ({ ...blockDto(10n, word(9n)), hash: word(10n) }),
+      pcash_status: () => activationStatus(10n, 9n),
+      pcash_getBlockByNumber: () => activationBlock(10n),
       pcash_submitRawTransaction: ([entry]) => {
-        expect(entry).toMatch(/^0x01/);
+        expect(entry).toMatch(/^0x00/);
         submittedEntry = entry as string;
         submittedContentHash = toHex(keccak256(Uint8Array.from(Buffer.from((entry as string).slice(2), "hex"))));
         return {
@@ -429,8 +432,8 @@ describe("account runtime", () => {
 
   it("publishes a new account on the wallet's own L1 creation path unless the caller names one", async () => {
     const creationNode = (calls: MockCall[]) => mockNode({
-      pcash_status: () => statusResult(10n, 9n),
-      pcash_getBlockByNumber: () => ({ ...blockDto(10n, word(9n)), hash: word(10n) }),
+      pcash_status: () => activationStatus(10n, 9n),
+      pcash_getBlockByNumber: () => activationBlock(10n),
       pcash_submitRawTransaction: ([entry]) => ({
         contentHash: toHex(keccak256(Uint8Array.from(Buffer.from((entry as string).slice(2), "hex")))),
         statementId: word(0x22n), stableId: word(0x33n), status: "ready", headCheckedBlock: "0xa", headCheckedBlockHash: word(0x0an),
@@ -474,8 +477,8 @@ describe("account runtime", () => {
 
   it("prepares direct creation without an action signer and preserves its exact mode on retry", async () => {
     const node = mockNode({
-      pcash_status: () => statusResult(10n, 9n),
-      pcash_getBlockByNumber: () => ({ ...blockDto(10n, word(9n)), hash: word(10n) }),
+      pcash_status: () => activationStatus(10n, 9n),
+      pcash_getBlockByNumber: () => activationBlock(10n),
     });
     const path = join(mkdtempSync(join(tmpdir(), "pcash-direct-prepare-")), "wallet.pglite");
     await saveUnactivatedWallet(path);
@@ -496,8 +499,8 @@ describe("account runtime", () => {
 
   it("refuses a direct activation sent from another Ethereum account before preflight", async () => {
     const node = mockNode({
-      pcash_status: () => statusResult(10n, 9n),
-      pcash_getBlockByNumber: () => ({ ...blockDto(10n, word(9n)), hash: word(10n) }),
+      pcash_status: () => activationStatus(10n, 9n),
+      pcash_getBlockByNumber: () => activationBlock(10n),
     });
     const path = join(mkdtempSync(join(tmpdir(), "pcash-direct-sender-")), "wallet.pglite");
     await saveUnactivatedWallet(path);
@@ -516,8 +519,8 @@ describe("account runtime", () => {
 
   it("refuses an activation signature that recovers to another account before journaling", async () => {
     const node = mockNode({
-      pcash_status: () => statusResult(10n, 9n),
-      pcash_getBlockByNumber: () => ({ ...blockDto(10n, word(9n)), hash: word(10n) }),
+      pcash_status: () => activationStatus(10n, 9n),
+      pcash_getBlockByNumber: () => activationBlock(10n),
     });
     const path = join(mkdtempSync(join(tmpdir(), "pcash-signed-signer-")), "wallet.pglite");
     await saveUnactivatedWallet(path);
@@ -544,8 +547,8 @@ describe("account runtime", () => {
 
   it("keeps direct activation bytes through transaction rejection and retries only the Ethereum submission", async () => {
     const node = mockNode({
-      pcash_status: () => statusResult(10n, 9n),
-      pcash_getBlockByNumber: () => ({ ...blockDto(10n, word(9n)), hash: word(10n) }),
+      pcash_status: () => activationStatus(10n, 9n),
+      pcash_getBlockByNumber: () => activationBlock(10n),
     });
     const path = join(mkdtempSync(join(tmpdir(), "pcash-direct-retry-")), "wallet.pglite");
     await saveUnactivatedWallet(path);
@@ -575,8 +578,8 @@ describe("account runtime", () => {
 
   it("keeps setup and mining bytes across reload and retries only the Ethereum submission", async () => {
     const node = mockNode({
-      pcash_status: () => statusResult(10n, 9n),
-      pcash_getBlockByNumber: () => ({ ...blockDto(10n, word(9n)), hash: word(10n) }),
+      pcash_status: () => activationStatus(10n, 9n),
+      pcash_getBlockByNumber: () => activationBlock(10n),
     });
     const path = join(mkdtempSync(join(tmpdir(), "pcash-direct-retry-")), "wallet.pglite");
     await saveUnactivatedWallet(path);
@@ -594,14 +597,15 @@ describe("account runtime", () => {
         return { accepted: false, queued: true, l1Hash: word(0xaan), output: null };
       },
     };
-    const proveAndEncode = vi.fn<NoteFundedProver["proveAndEncode"]>(async (build) => encodePrivateValueTransaction({ shape: build.shape, publicInputs: build.publicInputs, proof: new Uint8Array(WIRE_PROOF_BYTES), outputData: build.outputData, arena: build.arena }));
-    const actionSigner = { address: privateKeyPcashActionSigner(TEST_PRIV_KEY).address, signTypedData: vi.fn(async () => { throw new Error("setup mining must not sign"); }) };
+    const proveAndEncode = vi.fn<NoteFundedProver["proveAndEncode"]>(async (build) => build.encodeTransaction(new Uint8Array(WIRE_PROOF_BYTES)));
+    const realSigner = privateKeyPcashActionSigner(TEST_PRIV_KEY);
+    const actionSigner = { ...realSigner, signTypedData: vi.fn(realSigner.signTypedData.bind(realSigner)) };
     const open = () => createWalletRuntime({ node, chainId: PCASH_CHAIN_ID, wallet: TEST_PROFILE, store,
       signer: actionSigner, provers: { ...STUB_PROVERS, privateValue: { proveAndEncode } }, userAccountCreationSubmission: adapter });
     const first = open();
     const prepared = await first.prepareAccountActivation({ authorizationMode: "direct", mine: true });
-    expect(prepared.miningTransactionHex).toBeDefined();
-    expect(decodeTransaction(Uint8Array.from(Buffer.from(prepared.miningTransactionHex!.slice(2), "hex")))).toMatchObject({ kind: 0 });
+    expect(prepared.transactionHex).toBeDefined();
+    expect(decodeTransaction(Uint8Array.from(Buffer.from(prepared.transactionHex!.slice(2), "hex")))).toMatchObject({ kind: 0 });
     const runtime = open();
     expect(await runtime.prepareAccountActivation({ authorizationMode: "direct", mine: true })).toEqual(prepared);
     expect(proveAndEncode).toHaveBeenCalledOnce();
@@ -610,12 +614,12 @@ describe("account runtime", () => {
     reject = false;
     await runtime.submitAccountActivation();
     expect(entries).toEqual([prepared.transactionHex, prepared.transactionHex]);
-    expect(batches).toEqual([[prepared.transactionHex, prepared.miningTransactionHex], [prepared.transactionHex, prepared.miningTransactionHex]]);
+    expect(batches).toEqual([[prepared.transactionHex], [prepared.transactionHex]]);
     expect(proveAndEncode).toHaveBeenCalledOnce();
     const mining = (await store.load())?.pendingNoteFundedTransfers?.[0];
-    expect(actionSigner.signTypedData).not.toHaveBeenCalled();
+    expect(actionSigner.signTypedData).toHaveBeenCalledOnce();
     expect(proveAndEncode.mock.calls[0]![0].authorizationCircuit).toBe("account_rule_mine");
-    expect(mining).toMatchObject({ kind: "mine", transactionHex: prepared.miningTransactionHex, transferAmount: "0", openFeeAmount: "0", change: null });
+    expect(mining).toMatchObject({ kind: "mine", transactionHex: prepared.transactionHex, transferAmount: "0", openFeeAmount: "0", change: null });
     expect(mining?.inputs).toHaveLength(4);
     expect(mining?.inputs.every((input) => input.spentCommitment === null)).toBe(true);
     expect((await store.load())?.pendingUserAccountCreations?.[0]).toMatchObject({ state: "l1-submitted", l1TxHash: word(0xaan) });
@@ -628,8 +632,8 @@ describe("account runtime", () => {
   it.each(["prepared", "broadcast-requested", "l1-submitted", "declined"] as const)(
     "keeps the winning setup proof when a second tab finishes during %s", async (stage) => {
       const node = mockNode({
-        pcash_status: () => statusResult(10n, 9n),
-        pcash_getBlockByNumber: () => ({ ...blockDto(10n, word(9n)), hash: word(10n) }),
+        pcash_status: () => activationStatus(10n, 9n),
+        pcash_getBlockByNumber: () => activationBlock(10n),
       });
       const path = join(mkdtempSync(join(tmpdir(), "pcash-setup-race-")), "wallet.pglite");
       await saveUnactivatedWallet(path);
@@ -655,14 +659,13 @@ describe("account runtime", () => {
         const proveAndEncode: NoteFundedProver["proveAndEncode"] = async (build) => {
           started.resolve();
           await finish.promise;
-          return encodePrivateValueTransaction({ shape: build.shape, publicInputs: build.publicInputs, proof: new Uint8Array(WIRE_PROOF_BYTES).fill(proofByte), outputData: build.outputData, arena: build.arena });
+          return build.encodeTransaction(new Uint8Array(WIRE_PROOF_BYTES).fill(proofByte));
         };
         const runtime = createWalletRuntime({ node, chainId: PCASH_CHAIN_ID, wallet: TEST_PROFILE, store,
           signer: privateKeyPcashActionSigner(TEST_PRIV_KEY), provers: { ...STUB_PROVERS, privateValue: { proveAndEncode } }, userAccountCreationSubmission: adapter });
         return { runtime, started, finish };
       };
       const a = tab(1), b = tab(2);
-      await a.runtime.prepareAccountActivation({ authorizationMode: "direct" });
       const first = a.runtime.prepareAccountActivation({ authorizationMode: "direct", mine: true });
       const second = b.runtime.prepareAccountActivation({ authorizationMode: "direct", mine: true });
       await Promise.all([a.started.promise, b.started.promise]);
@@ -680,13 +683,13 @@ describe("account runtime", () => {
       }
       b.finish.resolve();
       const authoritative = await second;
-      expect(authoritative).toMatchObject({ contentHash: winner.contentHash, miningTransactionHex: winner.miningTransactionHex,
+      expect(authoritative).toMatchObject({ contentHash: winner.contentHash, transactionHex: winner.transactionHex,
         state: stage === "declined" ? "prepared" : stage });
       const saved = await store.load();
       expect(saved?.pendingUserAccountCreations).toEqual([authoritative]);
       expect(saved?.pendingNoteFundedTransfers).toHaveLength(1);
-      expect(saved?.pendingNoteFundedTransfers?.[0]?.transactionHex).toBe(winner.miningTransactionHex);
-      if (stage !== "prepared") expect(batches).toEqual([[winner.transactionHex, winner.miningTransactionHex]]);
+      expect(saved?.pendingNoteFundedTransfers?.[0]?.transactionHex).toBe(winner.transactionHex);
+      if (stage !== "prepared") expect(batches).toEqual([[winner.transactionHex]]);
       if (stage === "broadcast-requested") { finishSubmission.resolve(); await submission; }
       if (stage === "declined") {
         expect(await b.runtime.prepareAccountActivation({ authorizationMode: "direct", mine: true })).toEqual(authoritative);
@@ -694,10 +697,10 @@ describe("account runtime", () => {
     },
   );
 
-  it.each(["cleared", "replaced", "submitted"] as const)("discards a late setup proof after activation is %s", async (change) => {
+  it.each(["cleared", "replaced"] as const)("discards a late setup proof after activation is %s", async (change) => {
     const node = mockNode({
-      pcash_status: () => statusResult(10n, 9n),
-      pcash_getBlockByNumber: () => ({ ...blockDto(10n, word(9n)), hash: word(10n) }),
+      pcash_status: () => activationStatus(10n, 9n),
+      pcash_getBlockByNumber: () => activationBlock(10n),
     });
     const path = join(mkdtempSync(join(tmpdir(), "pcash-setup-stale-")), "wallet.pglite");
     await saveUnactivatedWallet(path);
@@ -705,7 +708,7 @@ describe("account runtime", () => {
     const started = deferred(), finish = deferred();
     const proveAndEncode: NoteFundedProver["proveAndEncode"] = async (build) => {
       started.resolve(); await finish.promise;
-      return encodePrivateValueTransaction({ shape: build.shape, publicInputs: build.publicInputs, proof: new Uint8Array(WIRE_PROOF_BYTES), outputData: build.outputData, arena: build.arena });
+      return build.encodeTransaction(new Uint8Array(WIRE_PROOF_BYTES));
     };
     const adapter: DurableSubmissionAdapter<null, null> = { mode: "l1", l1Sender: TEST_L1_SENDER, preflight: async () => null,
       submit: async () => ({ accepted: false, queued: true, l1Hash: word(0xaan), output: null }) };
@@ -714,11 +717,8 @@ describe("account runtime", () => {
     const a = open(), b = open();
     const pending = a.prepareAccountActivation({ authorizationMode: "direct", mine: true });
     await started.promise;
-    if (change === "submitted") await b.submitAccountActivation();
-    else {
-      await b.clearAccountActivation();
-      if (change === "replaced") await b.prepareAccountActivation({ authorizationMode: "direct", validUntilTimestamp: 999n });
-    }
+    await b.clearAccountActivation();
+    if (change === "replaced") await b.prepareAccountActivation({ authorizationMode: "direct", validUntilTimestamp: tsOfBlock(10n) + 999n });
     const before = await store.load();
     finish.resolve();
     await expect(pending).rejects.toThrow(/Account activation (changed|was submitted) while preparing setup mining/);
@@ -728,8 +728,8 @@ describe("account runtime", () => {
 
   it.each([false, true])("recovers a broadcast hash after a receipt failure (interrupted handoff: %s)", async (interrupted) => {
     const node = mockNode({
-      pcash_status: () => statusResult(10n, 9n),
-      pcash_getBlockByNumber: () => ({ ...blockDto(10n, word(9n)), hash: word(10n) }),
+      pcash_status: () => activationStatus(10n, 9n),
+      pcash_getBlockByNumber: () => activationBlock(10n),
     });
     const path = join(mkdtempSync(join(tmpdir(), "pcash-activation-hash-")), "wallet.pglite");
     await saveUnactivatedWallet(path);
@@ -766,11 +766,42 @@ describe("account runtime", () => {
     expect(submit).toHaveBeenCalledOnce();
   });
 
+  it("does not retire a setup another tab began broadcasting during reconciliation", async () => {
+    const reading = deferred(), finish = deferred();
+    let delay = false;
+    const node = mockNode({
+      pcash_status: () => activationStatus(10n, 9n),
+      pcash_getBlockByNumber: () => activationBlock(10n),
+    });
+    const originalStatus = node.status.bind(node);
+    node.status = async () => {
+      if (!delay) return originalStatus();
+      reading.resolve(); await finish.promise;
+      return { ...await originalStatus(), latestBlockTimestamp: tsOfBlock(10n) + 2_000n };
+    };
+    const path = join(mkdtempSync(join(tmpdir(), "pcash-activation-reconcile-race-")), "wallet.pglite");
+    await saveUnactivatedWallet(path);
+    const store = await stateStore(path, TEST_PROFILE.address);
+    const runtime = createWalletRuntime({ node, chainId: PCASH_CHAIN_ID, wallet: TEST_PROFILE, store });
+    await runtime.prepareAccountActivation({ authorizationMode: "direct" });
+    delay = true;
+    const reconciling = runtime.accountActivation();
+    await reading.promise;
+    await store.transaction(data => {
+      data!.pendingUserAccountCreations![0]!.state = "broadcast-requested";
+      return { data: data!, value: undefined };
+    });
+    finish.resolve();
+    await expect(reconciling).resolves.toMatchObject({ state: "broadcast-requested" });
+    expect((await store.load())?.pendingUserAccountCreations).toHaveLength(1);
+  });
+
   it.each(["ambiguous", "pending", "unobserved"])("retains expired activation while its Ethereum submission is %s", async (outcome) => {
     const hash = outcome === "ambiguous" ? null : word(0xaan);
     let expired = false;
     const node = mockNode({
-      pcash_status: () => statusResult(expired ? 200n : 10n, 9n),
+      pcash_status: () => activationStatus(expired ? 200n : 10n, 9n),
+      pcash_getBlockByNumber: ([number]) => activationBlock(BigInt(number as string)),
     });
     const path = join(mkdtempSync(join(tmpdir(), "pcash-expired-activation-")), "wallet.pglite");
     await saveUnactivatedWallet(path);
@@ -827,7 +858,8 @@ describe("account runtime", () => {
 
   it("refuses to replace a different exact activation intent", async () => {
     const node = mockNode({
-      pcash_status: () => statusResult(10n, 9n),
+      pcash_status: () => activationStatus(10n, 9n),
+      pcash_getBlockByNumber: ([number]) => activationBlock(BigInt(number as string)),
     });
     const path = join(mkdtempSync(join(tmpdir(), "pcash-account-intent-")), "wallet.pglite");
     await saveUnactivatedWallet(path);
@@ -844,7 +876,8 @@ describe("account runtime", () => {
 
   it("refuses an activation deadline beyond its recent block's window", async () => {
     const node = mockNode({
-      pcash_status: () => statusResult(10n, 9n),
+      pcash_status: () => activationStatus(10n, 9n),
+      pcash_getBlockByNumber: ([number]) => activationBlock(BigInt(number as string)),
     });
     const path = join(mkdtempSync(join(tmpdir(), "pcash-account-deadline-")), "wallet.pglite");
     await saveUnactivatedWallet(path);
@@ -858,6 +891,29 @@ describe("account runtime", () => {
     expect(pending.validUntilTimestamp).toBe(windowEnd.toString());
   });
 
+  it("bounds attached setup to the timestamp of its synced proof anchor", async () => {
+    let latest = 170n;
+    const node = mockNode({
+      pcash_status: () => activationStatus(latest, 9n),
+      pcash_getBlockByNumber: ([number]) => activationBlock(BigInt(number as string)),
+    });
+    const path = join(mkdtempSync(join(tmpdir(), "pcash-setup-anchor-window-")), "wallet.pglite");
+    await saveUnactivatedWallet(path);
+    const runtime = await runtimeFor(node, path, false);
+    const windowEnd = tsOfBlock(10n) + RECENT_PCASH_BLOCK_WINDOW_SECONDS;
+    await expect(runtime.prepareAccountActivation({ validUntilTimestamp: windowEnd + 1n })).rejects.toThrow(/beyond its recent PCASH block's window/);
+    const pending = await runtime.prepareAccountActivation();
+    expect(BigInt(pending.validUntilTimestamp)).toBe(windowEnd);
+    const action = decodeTransaction(Uint8Array.from(Buffer.from(pending.transactionHex.slice(2), "hex")));
+    expect(action).toMatchObject({ kind: 0, accountCreation: { kind: "user" } });
+    if (action.kind !== 0 || action.accountCreation?.kind !== "user") throw new Error("attached setup required");
+    expect(privateValuePublicInputs(action)[15]).toBe(windowEnd);
+    expect(decodeTransaction(action.accountCreation.transactionBytes)).toMatchObject({ validUntilTimestamp: windowEnd });
+    latest = 311n;
+    await expect(runtime.accountActivation()).resolves.toBeNull();
+    await expect(runtime.prepareAccountActivation()).rejects.toThrow(/snapshot has expired/);
+  });
+
   it("serializes direct activation submission across wallet instances", async () => {
     const path = join(mkdtempSync(join(tmpdir(), "pcash-account-direct-")), "wallet.pglite");
     const address = accountDto().address;
@@ -866,6 +922,7 @@ describe("account runtime", () => {
     const data = emptyWalletFile(TEST_PROFILE.address);
     addPendingUserAccountCreation(data, {
       contentHash,
+      publication: "self",
       transactionHex: toHex(entry),
       address,
       pcashChainId: PCASH_CHAIN_ID.toString(),
@@ -877,7 +934,7 @@ describe("account runtime", () => {
       ruleSetCommitment: "1",
       receiveKeyHash: word(0n),
       recentPcashBlockNumber: "10",
-      recentPcashBlockHash: word(10n),
+      recentPcashBlockHash: word(localChain(10n).anchor.blockHash),
       validUntilTimestamp: (tsOfBlock(10n) + 1_800n).toString(),
       state: "prepared",
       l1TxHash: null,
@@ -885,8 +942,8 @@ describe("account runtime", () => {
     });
     await saveWalletState(path, data);
     const node = mockNode({
-      pcash_status: () => statusResult(10n, 9n),
-      pcash_getBlockByNumber: () => ({ ...blockDto(10n, word(9n)), hash: word(10n) }),
+      pcash_status: () => activationStatus(10n, 9n),
+      pcash_getBlockByNumber: () => activationBlock(10n),
     });
     let releaseSubmit!: () => void;
     const submitted = new Promise<void>((resolve) => {
@@ -934,6 +991,7 @@ describe("account runtime", () => {
     const data = emptyWalletFile(TEST_PROFILE.address);
     addPendingUserAccountCreation(data, {
       contentHash: toHex(keccak256(entry)),
+      publication: "self",
       transactionHex: toHex(entry),
       address,
       pcashChainId: PCASH_CHAIN_ID.toString(),
@@ -945,7 +1003,7 @@ describe("account runtime", () => {
       ruleSetCommitment: "1",
       receiveKeyHash: word(0n),
       recentPcashBlockNumber: "10",
-      recentPcashBlockHash: word(10n),
+      recentPcashBlockHash: word(localChain(10n).anchor.blockHash),
       validUntilTimestamp: (tsOfBlock(10n) + 1_800n).toString(),
       state: "prepared",
       l1TxHash: null,
@@ -953,8 +1011,8 @@ describe("account runtime", () => {
     });
     await saveWalletState(path, data);
     const node = mockNode({
-      pcash_status: () => statusResult(10n, 9n),
-      pcash_getBlockByNumber: () => ({ ...blockDto(10n, word(9n)), hash: word(10n) }),
+      pcash_status: () => activationStatus(10n, 9n),
+      pcash_getBlockByNumber: () => activationBlock(10n),
     });
     const adapter: DurableSubmissionAdapter<null, unknown> = {
       mode: "mempool",
@@ -983,7 +1041,7 @@ describe("account runtime", () => {
     const calls: MockCall[] = [];
     let submittedContentHash = "";
     const node = mockNode({
-      pcash_status: () => ({ ...statusResult(10n, 9n), latestBlockHash: boundaryId(anchor) }),
+      pcash_status: () => ({ ...activationStatus(10n, 9n), latestBlockHash: boundaryId(anchor) }),
       pcash_submitRawTransaction: ([entry]) => {
         submittedContentHash = toHex(keccak256(Uint8Array.from(Buffer.from((entry as string).slice(2), "hex"))));
         return {
@@ -1278,11 +1336,11 @@ describe("awaitReceipt lifecycle (reorg-safe)", () => {
 
   it("accepts contract-account receipts", async () => {
     const node = mockNode({
-      pcash_getReceipt: () => [{ ...receiptAt(5, true, contentHash), kind: "contractAccount", fundingMode: "sponsored" }],
+      pcash_getReceipt: () => [{ ...receiptAt(5, true, contentHash), kind: "contractAccount", accountCreation: 1 }],
     });
     const r = await awaitReceipt(node, contentHash, { pollIntervalMs: 0, pollMaxAttempts: 1 });
     expect(r?.kind).toBe("contractAccount");
-    expect(r?.fundingMode).toBe("sponsored");
+    expect(r?.accountCreation).toBe(1);
   });
 
   it("--finalized waits for inclusion <= finalized and survives an intervening reorg", async () => {

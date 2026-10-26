@@ -276,6 +276,7 @@ const transactionGlobal = {
   carrierContextHash: 0xcc01n,
   assetBurnAmount: 12n,
   deliveryCommitment: deliveryCommitmentValue,
+  accountCreationCommitment: 0xcca1n,
 };
 const privateValueCommitmentValue = poseidon(
   tag("PRIVATE_VALUE_COMMITMENT_DOMAIN"),
@@ -287,6 +288,7 @@ const privateValueCommitmentValue = poseidon(
   transactionGlobal.carrierContextHash,
   transactionGlobal.assetBurnAmount,
   transactionGlobal.deliveryCommitment,
+  transactionGlobal.accountCreationCommitment,
   ...inputSlotClasses.flatMap((slotClass, index) => [slotClass, inputCommitments[index], transactionNullifiers[index]]),
   ...outputSlotClasses.flatMap((slotClass, index) => [slotClass, outputBodyCommitments[index]]),
 );
@@ -1085,56 +1087,56 @@ const denseFieldRoot = (leaves, depth) => {
 const resultsPoster = posterOwnerCommitment;
 const resultsReward = 2n * 10n ** 18n;
 const resultsOpenFee = 1_000n;
-// The last private-value word is the events commitment, here of one example entry under a per-transaction salt.
+// The statement binds an example event under a per-transaction salt, followed by its attachment commitment.
 const resultsEventEntry = poseidon(tag("EVENT_ENTRY_DOMAIN"), 0xe7e0n, 0n);
 const resultsEventsCommitment = (salt) => poseidon(tag("EVENT_DOMAIN"), resultsEventEntry, salt);
 const feeSection = (seed, fee) => [PCASH_CHAIN_ID, historicalBlockHash,
   ...[1n, 2n, 3n, 4n].map((slot) => seed + slot), ...[1n, 2n, 3n, 4n, 5n].map((slot) => seed + 0x100n + slot),
-  seed + 0x200n, fee, 0n, 0n, 999n, 0xeeee01n, resultsEventsCommitment(seed + 0x300n)];
+  seed + 0x200n, fee, 0n, 0n, 999n, 0xeeee01n, resultsEventsCommitment(seed + 0x300n), 0n];
 const largeStatement = [PCASH_CHAIN_ID, historicalBlockHash,
   ...Array.from({ length: 32 }, (_, slot) => 0xa000n + BigInt(slot)),
   ...Array.from({ length: 32 }, (_, slot) => 0xb000n + BigInt(slot)),
-  0xc000n, 0n, issuanceOwnerCommitment, 0n, 999n, 0xeeee02n, resultsEventsCommitment(0xc300n)];
-const sponsoredContractAddress = 0x5ec0000000000000000000000000000000005ec0n;
+  0xc000n, 0n, issuanceOwnerCommitment, 0n, 999n, 0xeeee02n, resultsEventsCommitment(0xc300n), 0n];
+const attachmentCommitment = 0x5ec0n;
 const resultTransactions = [
   {
-    txType: 0, fundingMode: 0, l1TransactionIndex: 2n, batchItemIndex: 0n, outcomeCode: 0,
+    txType: 0, accountCreation: 0, l1TransactionIndex: 2n, batchItemIndex: 0n, outcomeCode: 0,
     posterOwnerCommitment: resultsPoster, outputStartIndex: 40n,
     statement: [PCASH_CHAIN_ID, historicalBlockHash, ...transactionNullifiers, ...outputBodyCommitments,
-      deliveryCommitmentValue, 0n, issuanceOwnerCommitment, 10n, 999n, 0xeeee03n, resultsEventsCommitment(0xe300n)],
+      deliveryCommitmentValue, 0n, issuanceOwnerCommitment, 10n, 999n, 0xeeee03n, resultsEventsCommitment(0xe300n), transactionGlobal.accountCreationCommitment],
   },
   {
-    txType: 0, fundingMode: 0, l1TransactionIndex: 2n, batchItemIndex: 1n, outcomeCode: 0,
+    txType: 0, accountCreation: 0, l1TransactionIndex: 2n, batchItemIndex: 1n, outcomeCode: 0,
     posterOwnerCommitment: resultsPoster, outputStartIndex: 45n, statement: largeStatement,
   },
   {
-    txType: 3, fundingMode: 0, l1TransactionIndex: 2n, batchItemIndex: 2n, outcomeCode: 0,
+    txType: 3, accountCreation: 0, l1TransactionIndex: 2n, batchItemIndex: 2n, outcomeCode: 0,
     posterOwnerCommitment: resultsPoster, outputStartIndex: 77n,
     statement: [...feeSection(0x9000n, resultsOpenFee), accountUpdateCommitmentValue],
   },
   {
-    txType: 2, fundingMode: 1, l1TransactionIndex: 3n, batchItemIndex: 0n, outcomeCode: 0,
+    txType: 0, accountCreation: 1, l1TransactionIndex: 3n, batchItemIndex: 0n, outcomeCode: 0,
     posterOwnerCommitment: resultsPoster, outputStartIndex: 82n,
-    statement: [...feeSection(0x9800n, 0n), sponsoredContractAddress],
+    statement: [...feeSection(0x9800n, 0n).slice(0, -1), attachmentCommitment],
   },
   {
-    txType: 1, fundingMode: 0, l1TransactionIndex: 3n, batchItemIndex: 1n, outcomeCode: 0,
+    txType: 1, accountCreation: 1, l1TransactionIndex: 3n, batchItemIndex: 1n, outcomeCode: 0,
     posterOwnerCommitment: resultsPoster, outputStartIndex: 0n,
     statement: [ADDRESS, nullifierKeyCommitmentValue, accountRuleSetCommitment, receiveKeyHash],
   },
   {
-    txType: 2, fundingMode: 0, l1TransactionIndex: 3n, batchItemIndex: 3n, outcomeCode: 0,
+    txType: 2, accountCreation: 1, l1TransactionIndex: 3n, batchItemIndex: 3n, outcomeCode: 0,
     posterOwnerCommitment: resultsPoster, outputStartIndex: 0n,
     statement: [contractAddress, nullifierKeyCommitmentValue, contractFunctionSetCommitment, 0n],
   },
   {
-    txType: 2, fundingMode: 1, l1TransactionIndex: 4n, batchItemIndex: 0n, outcomeCode: 8,
+    txType: 2, accountCreation: 0, l1TransactionIndex: 4n, batchItemIndex: 0n, outcomeCode: 8,
     posterOwnerCommitment: 0x5151n, outputStartIndex: 0n, statement: null,
   },
 ].map((result) => {
   const statementHash = result.statement === null ? 0n : poseidon(tag("TRANSACTION_STATEMENT_DOMAIN"), ...result.statement);
   // The leaf's tree index is the transaction's position, so the leaf omits it.
-  const leaf = poseidon(tag("TRANSACTION_RESULT_DOMAIN"), BigInt(result.txType), BigInt(result.fundingMode),
+  const leaf = poseidon(tag("TRANSACTION_RESULT_DOMAIN"), BigInt(result.txType), BigInt(result.accountCreation),
     result.l1TransactionIndex, result.batchItemIndex, BigInt(result.outcomeCode),
     result.posterOwnerCommitment, result.outputStartIndex, statementHash);
   return { ...result, statementHash, leaf };
@@ -1152,7 +1154,7 @@ protocolVectors.transactionResults = {
   depth: FIELD_TREE_DEPTH,
   transactions: resultTransactions.map((result) => ({
     txType: result.txType,
-    fundingMode: result.fundingMode,
+    accountCreation: result.accountCreation,
     l1TransactionIndex: Number(result.l1TransactionIndex),
     batchItemIndex: Number(result.batchItemIndex),
     outcomeCode: result.outcomeCode,
@@ -1363,11 +1365,11 @@ writeText("circuits/rules/lib/src/generated/reference_rule_vectors.nr", referenc
 
 // Reference ECDSA and readable-rule EIP-712 vectors.
 const signingHashFor = (structHash) => keccak_256(concatBytes(Uint8Array.from([0x19, 0x01]), domainSeparator, structHash));
-const paymentType = "PcashPayment(uint256 pcashChainId,address recipient,uint256 amount,uint256 openFeeAmount,address issuanceRecipient,uint256 issuanceOwnerCommitment,uint256 relayFeeAmount,uint256 relayFeeOwnerCommitment,uint256 transactionContext,uint64 notBefore,uint64 validUntil)";
+const paymentType = "PcashPayment(uint256 pcashChainId,address recipient,uint256 amount,uint256 openFeeAmount,address issuanceRecipient,uint256 issuanceOwnerCommitment,uint256 relayFeeAmount,uint256 relayFeeOwnerCommitment,uint256 accountCreationCommitment,uint256 transactionContext,uint64 notBefore,uint64 validUntil)";
 const detailType = "PcashTransactionDetail(uint256 pcashChainId,address authorizingAddress,uint256 spentAssetId,uint256 spentAssetAmount,uint256 assetBurnAmount," +
   [0, 1, 2, 3, 4].map((index) =>
     `address out${index}Recipient,uint256 out${index}Amount,uint256 out${index}AssetId`).join(",") +
-  ",uint256 openFeeAmount,address issuanceRecipient,uint256 issuanceOwnerCommitment,uint256 transactionContext,uint64 notBefore,uint64 validUntil,uint256 privateValueCommitment)";
+  ",uint256 openFeeAmount,address issuanceRecipient,uint256 issuanceOwnerCommitment,uint256 accountCreationCommitment,uint256 transactionContext,uint64 notBefore,uint64 validUntil,uint256 privateValueCommitment)";
 const paymentFields = [
   PCASH_CHAIN_ID,
   0x2222222222222222222222222222222222222222n,
@@ -1377,6 +1379,7 @@ const paymentFields = [
   transactionGlobal.issuanceOwnerCommitment,
   0n,
   0n,
+  transactionGlobal.accountCreationCommitment,
   payoutTxContext,
   10n,
   999n,
@@ -1393,6 +1396,7 @@ const detailFields = [
   0n,
   ADDRESS,
   transactionGlobal.issuanceOwnerCommitment,
+  transactionGlobal.accountCreationCommitment,
   payoutTxContext,
   10n,
   999n,

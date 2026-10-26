@@ -8,18 +8,14 @@ import { encodePrivateValueTransaction } from "../../sdk/src/protocol/codec.ts";
 import { privateValueProfileFixture } from "../../sdk/test/privateValueProfileFixtures.ts";
 import { buildNativeTransfer } from "../../sdk/src/builders/nativeTransfer.ts";
 import { prepareUserAccountUpdate } from "../../sdk/src/builders/accountUpdate.ts";
-import { prepareSponsoredContractCreation } from "../../sdk/src/builders/contractCreation.ts";
 import { DEFAULT_NETWORK_CONFIG } from "../../sdk/src/protocol/network.ts";
 import { authorizePcashRequestWithPrivateKey } from "../../sdk/src/eip712/authorization.ts";
 import { field32 } from "../../sdk/src/utils/bytes.ts";
 import { receiveKeyHash } from "../../sdk/src/protocol/account.ts";
-import { buildContractBody, functionSelector } from "../../sdk/src/protocol/contract.ts";
-import { ACCOUNT_KIND_USER } from "../../sdk/src/constants/params.ts";
 import { defaultUserAccountRuleSet } from "../../sdk/src/rules/referenceRules.ts";
 import {
   prepareEventApplication,
   proveAssetCreationChonk,
-  proveSponsoredContractCreationChonk,
   proveSponsoredTransferChonk,
   proveTransferTransactionChonk,
   proveUserAccountUpdateChonk,
@@ -186,52 +182,6 @@ const accountUpdate = prepareUserAccountUpdate(accountParams);
 const accountUpdateAuthorization = accountUpdate.authorizeReadableEcdsa!(
   authorizePcashRequestWithPrivateKey(accountWallet.privKey, accountUpdate.authorizationRequest!),
 );
-// A contract-account creation whose fee the same user account sponsors.
-const contract = buildContractBody({
-  nullifierKey: { publishesNkRoot: true, nkRoot: 0x5151n },
-  functions: [{ selector: functionSelector(0), applicationVkHash: 0x1234n, configurationCommitment: 0x5678n }],
-});
-const sponsorFixture = feePaymentFixture({
-  wallet: accountWallet,
-  inputAmount: 2_000n,
-  noteSecret: 0xcafen,
-  accountIndex: 7,
-  accountRuleSetCommitment: rules.accountRuleSetCommitment,
-  receiveKeyHash: receiveKeyHash(accountWallet.mlKemPublicKey),
-});
-const creationParams = {
-  network: DEFAULT_NETWORK_CONFIG,
-  contract: { body: contract.body, address: contract.address },
-  sponsor: {
-    address: accountWallet.address,
-    nkRoot: accountWallet.nkRoot,
-    accountIndex: sponsorFixture.accountIndex,
-    accountSiblings: sponsorFixture.accountSiblings,
-    accountRuleSetCommitment: rules.accountRuleSetCommitment,
-    accountKind: ACCOUNT_KIND_USER,
-    accountRevision: 1n,
-    receiveKeyHash: receiveKeyHash(accountWallet.mlKemPublicKey),
-    rule: {
-      configurationCommitment: rules.contractFeeSponsorshipRule.configurationCommitment,
-      commitmentBlinder: rules.contractFeeSponsorshipRule.commitmentBlinder,
-      entryIndex: rules.contractFeeSponsorshipRule.entryIndex,
-      siblings: rules.contractFeeSponsorshipRule.siblings,
-    },
-  },
-  sponsorWallet: accountWallet,
-  sponsorReceiveKey: accountWallet.mlKemPublicKey,
-  snapshot: { ...sponsorFixture.snapshot, recentPcashBlockHash: sponsorFixture.recentPcashBlockHash },
-  fee: {
-    openFeeAmount: 250n,
-    validUntilTimestamp: 1_000_000n,
-    inputs: sponsorFixture.inputs,
-    dummyInputEntropy: 43n,
-  },
-};
-const creation = prepareSponsoredContractCreation(creationParams);
-const creationAuthorization = creation.authorizeReadableEcdsa(
-  authorizePcashRequestWithPrivateKey(accountWallet.privKey, creation.authorizationRequest),
-);
 const runtimeCases = [
   () => emit("private_value", transfer.publicInputs, () => proveTransferTransactionChonk({
     build: transfer,
@@ -251,13 +201,6 @@ const runtimeCases = [
     build: accountUpdate,
     authorizationPackage: "account_rule_admin_ecdsa",
     authorizationWitnessMap: accountUpdateAuthorization.witnessMap,
-    resolve: resolveCircuit,
-    backend: nativeChonkBackend(1),
-  })),
-  () => emit("contract_creation", creation.publicInputs, () => proveSponsoredContractCreationChonk({
-    build: creation,
-    authorizationPackage: "account_rule_contract_fee_sponsorship_ecdsa",
-    authorizationWitnessMap: creationAuthorization.witnessMap,
     resolve: resolveCircuit,
     backend: nativeChonkBackend(1),
   })),

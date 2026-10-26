@@ -151,21 +151,5 @@ export function createBrowserWalletProvers(
         });
       },
     },
-    sponsoredContractCreation: {
-      async proveAndEncode(build) {
-        if (build.readableEcdsaWitnessMap === undefined) {
-          throw new Error("sponsored contract creation did not produce a sponsorship witness map");
-        }
-        return run(async (browserProver, onStatus, signal) => {
-          const result = await browserProver.proveSponsoredContractCreation({
-            authorizationWitnessMap: build.readableEcdsaWitnessMap!,
-            buildKernelWitnessMap: build.buildKernelWitnessMap,
-            expectedPublicInputs: [...build.publicInputs],
-            authorizationCircuitUrl: CIRCUIT_URLS.account_rule_contract_fee_sponsorship_ecdsa,
-          }, onStatus, signal);
-          return build.encodeTransaction(result.proof);
-        });
-      },
-    },
   };
 }

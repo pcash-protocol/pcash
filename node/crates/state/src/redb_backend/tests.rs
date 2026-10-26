@@ -92,7 +92,7 @@ fn transaction_effects_round_trip_through_the_committed_read_snapshot() {
     let mut block = input(0);
     block.transaction_results.push(TransactionResult {
         tx_type: 3,
-        funding_mode: 0,
+        account_creation: 0,
         l1_transaction_index: 0,
         batch_item_index: 0,
         outcome: TransactionOutcome::Succeeded,
@@ -307,7 +307,7 @@ fn compact_block_metadata_does_not_read_transaction_bodies() {
     let content_hash = crate::content_hash(&transaction);
     block_input.transaction_results = vec![TransactionResult {
         tx_type: 0,
-        funding_mode: 0,
+        account_creation: 0,
         l1_transaction_index: 0,
         batch_item_index: 0,
         outcome: TransactionOutcome::ProofRejected,
@@ -1188,7 +1188,7 @@ fn block_records_are_permanent_across_prune_reorg_and_reload() {
     let content_hash = crate::content_hash(&replacement_transaction);
     replacement.transaction_results.push(TransactionResult {
         tx_type: 0,
-        funding_mode: 0,
+        account_creation: 0,
         l1_transaction_index: 0,
         batch_item_index: 0,
         outcome: TransactionOutcome::Succeeded,

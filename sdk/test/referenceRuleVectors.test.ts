@@ -143,9 +143,10 @@ describe("readable rule vectors", () => {
       issuanceOwnerCommitment: fields[5]!,
       relayFeeAmount: fields[6]!,
       relayFeeOwnerCommitment: fields[7]!,
-      transactionContext: fields[8]!,
-      notBefore: fields[9]!,
-      validUntil: fields[10]!,
+  accountCreationCommitment: fields[8]!,
+      transactionContext: fields[9]!,
+      notBefore: fields[10]!,
+      validUntil: fields[11]!,
     };
     const network = { ...DEFAULT_NETWORK_CONFIG, pcashChainId: message.pcashChainId };
     expect(bytesHex(pcashSigningHash(paymentTypedData(network, message)))).toBe(vector.signingHash);

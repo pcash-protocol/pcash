@@ -32,6 +32,7 @@ const TokenListRoute = lazy(() => import("./routes/tokens/TokenListPage.tsx"));
 const CreateTokenRoute = lazy(() => import("./routes/tokens/CreateTokenPage.tsx"));
 const TokenRoute = lazy(() => import("./routes/tokens/TokenPage.tsx"));
 const ClaimRoute = lazy(() => import("./routes/tokens/ClaimPage.tsx"));
+const ReceiveRoute = lazy(() => import("./routes/receive/ReceivePage.tsx"));
 const DropRoute = lazy(() => import("./routes/tokens/DropPage.tsx"));
 const MessagesRoute = lazy(() => import("./routes/messages/MessagesRoute.tsx"));
 const fixtureMode = import.meta.env.VITE_PCASH_MODE === "fixtures";
@@ -48,6 +49,7 @@ const tokensRoute = routeById("tokens");
 const newTokenRoute = routeById("token-new");
 const tokenRoute = routeById("token");
 const claimRoute = routeById("claim");
+const receiveRoute = routeById("receive");
 const dropRoute = routeById("drop");
 const messagesRoute = routeById("messages");
 const termsRoute = routeById("terms");
@@ -137,6 +139,7 @@ export function appRoutes({ docsRoute, legalPage, getPage, tokenListPage }: {
         { path: newTokenRoute.path, element: <CreateTokenRoute /> },
         { path: tokenRoute.path, element: <TokenPageRoute /> },
         { path: claimRoute.path, element: <ClaimRoute /> },
+        { path: receiveRoute.path, element: <ReceiveRoute /> },
         { path: dropRoute.path, element: <DropPageRoute /> },
         { path: `${messagesRoute.path}/*`, element: <MessagesRoute /> },
         { path: termsRoute.path, element: legalPage ?? <LazyLegalRoute /> },

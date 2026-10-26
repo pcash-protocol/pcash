@@ -5,7 +5,7 @@
     {
       "name": "claim",
       "selector": 0,
-      "applicationVkHash": "0x0c77be6af34f0c357ddfdbdf2275b5a52513060b00fbbdbcc571c1f50a1ed130",
+      "applicationVkHash": "0x263e90172ae3eeb6928fc936e7330c13408fe1f5bde174029b508377be2e4d9f",
       "arguments": [
         {
           "name": "feePaid",

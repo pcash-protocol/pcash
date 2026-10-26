@@ -212,6 +212,7 @@ mod tests {
             carrier_context_hash: 0,
             asset_burn_amount: 0,
             delivery_commitment: 0x61,
+            account_creation_commitment: 0,
             input_slot_classes: [SLOT_CLASS_DUMMY; 4],
             output_slot_classes,
         };
@@ -361,6 +362,7 @@ mod tests {
             carrier_context_hash: 0,
             asset_burn_amount: 0,
             delivery_commitment: 0x61,
+            account_creation_commitment: 0,
             input_slot_classes: [
                 SLOT_CLASS_NATIVE,
                 SLOT_CLASS_DUMMY,

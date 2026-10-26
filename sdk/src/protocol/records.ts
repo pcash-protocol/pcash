@@ -15,6 +15,7 @@ export const RECORD_SCHEMA = {
   sender: "0x03",
   sentEnvelopes: "0x04",
   sentOpenings: "0x05",
+  directSendOpenings: "0x06",
 } as const;
 
 const BUILTIN = new Set<string>(Object.values(RECORD_SCHEMA));
@@ -116,7 +117,8 @@ export interface TransactionData {
 }
 
 export interface ResolvedTransactionData {
-  recipients?: readonly { recipientAddress: bigint; receiveKey: Uint8Array; records: readonly DataRecord[] }[];
+  /** A recipient without a receive key is paid a direct send in the same transaction, whose envelope carries its records. */
+  recipients?: readonly { recipientAddress: bigint; receiveKey?: Uint8Array; records: readonly DataRecord[] }[];
   self?: readonly DataRecord[];
   public?: readonly DataRecord[];
 }

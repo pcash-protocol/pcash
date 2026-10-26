@@ -227,7 +227,7 @@ mod tests {
 
     #[test]
     fn exclusion_reason_comes_from_the_failing_framing_check() {
-        let rules = ProtocolRules::new([vec![], vec![]], vec![], vec![]);
+        let rules = ProtocolRules::new([vec![], vec![]], vec![]);
         assert_eq!(
             Batch::decode_accepted(&[], &rules, 0).unwrap_err(),
             BatchExclusionReason::TruncatedFraming

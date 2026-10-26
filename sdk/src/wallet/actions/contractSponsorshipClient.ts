@@ -51,7 +51,7 @@ import { loadReceiveKeyAtSnapshot } from "./localChain.ts";
 import {
   actionPublication,
   fixPublication,
-  PADDED_PRIVATE_VALUE_BYTE_SIZE,
+  paddedPrivateValueByteSize,
   planPublication,
   publicationOf,
   publicationValidUntil,
@@ -65,6 +65,7 @@ import { WalletSyncRequiredError } from "../chainState.ts";
 import { assertWalletStoreMatches } from "./walletSession.ts";
 import { assertPcashProfileMatchesAccount, type PcashProfile } from "../externalIdentity.ts";
 import { InsufficientNotesError, selectInputNotes, type PendingAssetAction, type WalletNote } from "../noteStore.ts";
+import { directSendsToRecord } from "../directSends.ts";
 import type { WalletStateStore } from "../store.ts";
 
 /** One consistent snapshot the contract's side of the action is built from. */
@@ -110,6 +111,7 @@ export interface SponsoredContractAssetActionPrimary {
 }
 
 export interface SponsoredContractAssetActionIntent extends DurableSubmissionCallbacks {
+  accountCreation?: import("@pcash/sdk/protocol").AccountCreationAttachment;
   /** The Contract Account whose asset action this wallet sponsors. */
   contract: bigint;
   /** Input and output slots the contract's side occupies; this wallet fills the rest. */
@@ -213,7 +215,7 @@ export async function runSponsoredContractAssetActionClient<Prepared, Output>(
   }
   let plan = await planPublication({
     qualifying: true,
-    byteSize: PADDED_PRIVATE_VALUE_BYTE_SIZE,
+    byteSize: paddedPrivateValueByteSize(SHAPE.shapeId, params.accountCreation),
     openFeeAmount: params.openFeeAmount,
     privateRelayFeeAmount: params.privateRelayFeeAmount,
     publication,
@@ -353,6 +355,7 @@ export async function runSponsoredContractAssetActionClient<Prepared, Output>(
       });
     }
     return buildAssetAction({
+      ...(params.accountCreation === undefined ? {} : { accountCreation: params.accountCreation }),
       shape: SHAPE.shapeId,
       pcashChainId: params.chainId,
       snapshot: roots,
@@ -370,11 +373,12 @@ export async function runSponsoredContractAssetActionClient<Prepared, Output>(
       ...(params.notBeforeTimestamp === undefined ? {} : { notBeforeTimestamp: params.notBeforeTimestamp }),
       validUntilTimestamp,
       dummyInputSeed,
-      sender: { outgoingKey: params.wallet.outgoingKey },
+      sender: { outgoingKey: params.wallet.outgoingKey, directSendOpenings: directSendsToRecord(data, params.wallet.address, feeNotes) },
     });
   };
   // The input set and dummy seed fix nullifiers before recipient outputs exist.
   const fixed = await fixPublication({
+    maxTransactionBytes: paddedPrivateValueByteSize(SHAPE.shapeId, params.accountCreation),
     selectedRelayQuote: params.selectedRelayQuote,
     publication,
     owner: params.wallet,

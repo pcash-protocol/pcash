@@ -48,6 +48,7 @@ const CONTEXTS = {
   OUTPUT_DATA_HASH_DOMAIN: "output_data_hash",
   ARENA_HASH_DOMAIN: "arena_hash",
   DELIVERY_COMMITMENT_DOMAIN: "delivery_commitment",
+  ACCOUNT_CREATION_ATTACHMENT_DOMAIN: "account_creation_attachment",
   STATE_COMMITMENT_DOMAIN: "state_commitment",
   BLOCK_HEADER_DOMAIN: "block_header",
   GENESIS_PARENT_DOMAIN: "genesis_parent",

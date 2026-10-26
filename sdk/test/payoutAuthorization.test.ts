@@ -16,6 +16,7 @@ const issuanceOwnerCommitment = ownerCommitment(issuanceRecipient, issuanceSecre
 const message: PaymentMessage = {
   pcashChainId: chainId, recipient: 0xdefn, amount: 100n, openFeeAmount: 0n,
   issuanceRecipient, issuanceOwnerCommitment, relayFeeAmount: 0n, relayFeeOwnerCommitment: 0n,
+  accountCreationCommitment: 0n,
   transactionContext: payoutTransactionContext(chainId, nullifiers), notBefore: 0n, validUntil: 100n,
 };
 const paymentSigningHash = (m: PaymentMessage) => pcashSigningHash(paymentTypedData(DEFAULT_NETWORK_CONFIG, m));

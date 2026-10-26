@@ -103,7 +103,6 @@ const nativeProver: MarketplaceProver = {
     return { proof: result.proof };
   },
   proveUserAccountUpdate: async () => { throw new Error("not an account update"); },
-  proveSponsoredContractCreation: async () => { throw new Error("not a contract creation"); },
   proveAssetAction: async (args) => {
     const build = { shape: 0 as const, publicInputs: [...args.expectedPublicInputs] };
     const result = args.operation === "transfer"

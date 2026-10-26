@@ -65,7 +65,6 @@ import {
 import { TokensError } from "./errors.ts";
 import { TOKENS_VALIDITY_WINDOW_SECONDS, type TokenClaimResult } from "./links.ts";
 import {
-  ensureContract,
   fundContractNotes,
   ownRecords,
   patchRecord,
@@ -185,9 +184,8 @@ export async function advanceDrop<Prepared, Output>(
   const drop = recordDrop(record, await walletNkRoot(rt));
   if (record.funding === undefined) {
     const openFeeAmount = record.openFeeAmount === undefined ? undefined : BigInt(record.openFeeAmount);
-    await ensureContract(rt, key, drop, openFeeAmount, onProgress);
     const funding = await fundContractNotes(rt, key, {
-      contract: drop.address,
+      contract: drop,
       assetId: drop.configuration.assetId,
       notes: planDropInventory(drop, record.count),
       jobId: record.fundingJobId,

@@ -94,6 +94,12 @@ export const routeManifest: readonly RouteDefinition[] = [
     metadata: { title: "Claim tokens", description: "Claim the tokens a PCASH claim link holds into your own wallet." },
   },
   {
+    id: "receive",
+    path: "/receive",
+    renderMode: "client",
+    metadata: { title: "Receive PCASH", description: "Receive PCASH someone sent to your Ethereum address before you set up PCASH." },
+  },
+  {
     id: "drop",
     path: "/drop/:contractAddress",
     renderMode: "client",

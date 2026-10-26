@@ -35,13 +35,13 @@ use pcash_rpc::catalog::{
 };
 use pcash_rpc::dto::{
     AccountDto, AccountProofDto, AccountProofResultDto, BlockDto, BlockHashDivergenceDto,
-    BlockHeaderDto, BlockId, BlockPayoutsDto, ContractDto, ContractFunctionDto,
-    ContractFundingMode, ContractPageDto, ContractPresent, ContractResultDto, ContractSummaryDto,
-    ContractVerificationStatusDto, DerivationDto, ExplorerCursorDto, FeeEstimateDto,
-    ForkCapabilityDto, HistoryProofDto, InclusionId, L1LogProofDto, L1OriginProofDto,
-    MempoolPageDto, MempoolTransactionDto, NodeInfoDto, NullifierProofsDto, OutputPageDto,
-    OutputPathDto, PeerDirectionDto, PeerInfoDto, PreparedRelayDto, ReceiptDto, ReceiveMaterialDto,
-    StatusDto, TransactionDto, TransactionKind, TransactionPageDto, TransactionSummaryDto,
+    BlockHeaderDto, BlockId, BlockPayoutsDto, ContractDto, ContractFunctionDto, ContractPageDto,
+    ContractPresent, ContractResultDto, ContractSummaryDto, ContractVerificationStatusDto,
+    DerivationDto, ExplorerCursorDto, FeeEstimateDto, ForkCapabilityDto, HistoryProofDto,
+    InclusionId, L1LogProofDto, L1OriginProofDto, MempoolPageDto, MempoolTransactionDto,
+    NodeInfoDto, NullifierProofsDto, OutputPageDto, OutputPathDto, PeerDirectionDto, PeerInfoDto,
+    PreparedRelayDto, ReceiptDto, ReceiveMaterialDto, StatusDto, TransactionDto, TransactionKind,
+    TransactionPageDto, TransactionSummaryDto,
 };
 use pcash_rpc::handlers;
 use pcash_rpc::IssuanceRoute;
@@ -106,7 +106,7 @@ fn declared_publication_for(transaction: &Transaction) -> Option<(U256, B256)> {
     let section = match transaction {
         Transaction::PrivateValue(section) => section,
         Transaction::UserAccountUpdate(update) => &update.section,
-        Transaction::ContractAccountCreation(creation) => creation.section()?,
+        Transaction::ContractAccountCreation(_) => return None,
         Transaction::UserAccountCreation(_) => return None,
     };
     let profile = section.shape().profile();
@@ -164,12 +164,12 @@ pub struct ReceiptRecord {
     pub has_open_fee: bool,
     pub byte_size: u64,
     pub kind: u8,
-    pub funding_mode: Option<ContractFundingMode>,
+    pub account_creation: u8,
     pub lifecycle_address: Option<Address>,
     pub output_leaf_start: Option<u64>,
     pub outputs_added: u64,
     /// Populated by successful private-value sections, including those in
-    /// account updates and sponsored contract creation; absent when none were consumed.
+    /// account updates; absent when none were consumed.
     pub nullifiers: Option<Vec<B256>>,
     /// Present for successful account creation or update.
     pub account: Option<AccountReceiptData>,
@@ -202,7 +202,7 @@ impl ReceiptRecord {
             settled_open_fee_amount: self.settled_open_fee_amount,
             settled_issuance_amount: self.settled_issuance_amount,
             kind: transaction_kind(self.kind),
-            funding_mode: self.funding_mode,
+            account_creation: self.account_creation,
             output_leaf_start: self.output_leaf_start,
             outputs_added: self.outputs_added,
             nullifiers: self.nullifiers.clone(),
@@ -252,7 +252,7 @@ fn receipt_transaction_summary(
         declared_issuance_owner_commitment: declared.map(|(_, owner)| owner),
         issuance_route: issuance_route(transaction[0], declared.map(|(_, owner)| owner)),
         kind: transaction_kind(transaction[0]),
-        funding_mode: ContractFundingMode::of(&transaction),
+        account_creation: receipt.account_creation,
         block: BlockId {
             block_number,
             block_hash: block.hash,
@@ -854,7 +854,7 @@ impl NodeInner {
                 },
                 byte_size: transaction.len() as u64,
                 kind,
-                funding_mode: ContractFundingMode::of(transaction),
+                account_creation: result.account_creation,
                 lifecycle_address,
                 output_leaf_start,
                 outputs_added,

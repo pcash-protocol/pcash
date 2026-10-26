@@ -29,11 +29,13 @@ const router = createBrowserRouter(appRoutes({
 }));
 const application = <StrictMode><RouterProvider router={router} /></StrictMode>;
 
-if (root.hasChildNodes() && root.dataset.prerenderPath === normalizedPathname) {
-  hydrateRoot(root, application);
-} else {
-  root.replaceChildren();
-  for (const element of document.head.querySelectorAll("[data-pcash-route-metadata]")) element.remove();
-  document.title = "PCASH";
-  createRoot(root).render(application);
-}
+export const mountedRoot = root.hasChildNodes() && root.dataset.prerenderPath === normalizedPathname
+  ? hydrateRoot(root, application)
+  : (() => {
+      root.replaceChildren();
+      for (const element of document.head.querySelectorAll("[data-pcash-route-metadata]")) element.remove();
+      document.title = "PCASH";
+      const created = createRoot(root);
+      created.render(application);
+      return created;
+    })();

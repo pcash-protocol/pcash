@@ -29,12 +29,10 @@ export function PublicationProgress({
   const unit = listed && listingUnit(listed);
   const done = progress.phase === "done";
   const paused = progress.phase === "error";
-  // Once one of its transactions exists, a listing continues from what was saved.
+  // Once its transaction exists, a listing continues from what was saved.
   const saved = pendingPublication !== undefined || progress.publication?.contentHash !== undefined;
   const waiting = !done && !paused;
-  // A listing signs once to create its contract and once to fund its escrow; neither signature costs gas.
-  const signing = progress.publication?.step === "funding" ? "Sign in your wallet to fund the listing. Signing is free."
-    : "Sign in your wallet to create the listing. Signing is free.";
+  const signing = "Sign in your wallet to create and fund the listing. Signing is free.";
   const detail = done ? "Your listing is available for buyers."
     : paused ? saved ? "Your progress is saved. Continue when you’re ready." : "Nothing was submitted. You can change the listing and publish it again."
     : awaitingSignature ? signing
@@ -63,7 +61,7 @@ export function PublicationProgress({
     <TransactionDetails proof={proof} message={progress.message}>
       {progress.publication?.contentHash && <p>
         <Link to={`/tx/${progress.publication.contentHash}`}>
-          {progress.publication.step === "funding" ? "View escrow funding submission" : "View listing creation submission"}
+          View listing submission
         </Link>
         {" — track its confirmation on PCASH."}
       </p>}

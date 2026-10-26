@@ -83,7 +83,7 @@ export interface EligibilityDrop extends TemplateContract {
   dropSeed: bigint;
   configuration: DropConfiguration;
   configurationCommitment: bigint;
-  /** Unsigned contract-account body for sponsored creation. */
+  /** Unsigned contract-account body attached to each funding transaction. */
   body: Uint8Array;
   accountStateCommitment: bigint;
   /** The claim function's entry, which scopes every claim marker. */

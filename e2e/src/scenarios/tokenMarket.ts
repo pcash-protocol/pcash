@@ -110,7 +110,6 @@ export async function runTokenMarketScenario(fixture: ScenarioFixture): Promise<
         amount,
         ethPriceWei: ETH_PRICE_WEI,
         purchaseMinutes,
-        creationOpenFeeAmount: openFee,
         fundingOpenFeeAmount: openFee,
       }, { relay: async (contentHash) => { await fixture.harness.relayExact([contentHash]); } });
       if (!published.catalogPublished) throw new Error(`the ${amount} FOO listing was not published`);

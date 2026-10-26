@@ -1,3 +1,4 @@
+import { accountCreationAttachmentCommitment, type AccountCreationAttachment } from "../protocol/codec.ts";
 import type { ResolvedTransactionData } from "../protocol/records.ts";
 import { prepareEvent, type EventOptions } from "../protocol/events.ts";
 import { PRIVATE_VALUE_PROFILES, privateValueProfile, type PrivateValueShape } from "../constants/privateValueProfiles.ts";
@@ -310,6 +311,7 @@ export interface BuildNativeTransferParams extends EventOptions {
   notBeforeTimestamp?: FieldNumberish;
   /** The carrier context the delivering carrier must have; 0 = any delivery. Default 0. */
   carrierContextHash?: FieldNumberish;
+  accountCreation?: AccountCreationAttachment;
   /** Canonical recent PCASH block selected for this proof. */
   recentPcashBlockHash: FieldNumberish;
   /** State root and depth-4 opening under the selected block header. */
@@ -393,6 +395,13 @@ export interface BuildNativeTransferParams extends EventOptions {
   recipientReceiveKey?: Uint8Array;
   /** Alternative to `recipientReceiveKey`: an extended code. */
   recipientExtendedCode?: string;
+  /**
+   * Alternative to a receive key: slot 0 is a direct send. Its envelope is
+   * keyed by its note secret, so it carries the records `data` names for its
+   * address, and the sender region records its opening, flagged so the sender
+   * can rebuild the link it shares. Requires `sender`.
+   */
+  recipientDirectSend?: true;
   /** Transaction data: encrypted for recipients and the sender, and public records anyone reads. */
   data?: ResolvedTransactionData | undefined;
   /**
@@ -902,6 +911,10 @@ export function buildNativeTransfer(params: BuildNativeTransferParams): NativeTr
     return resolved;
   };
   const outputDataOverrides = params.outputData ?? [];
+  if (params.recipientDirectSend === true && (params.sender === undefined || params.recipientReceiveKey !== undefined
+    || params.recipientExtendedCode !== undefined || outputDataOverrides[0] !== undefined)) {
+    throw new Error("a direct send needs a sender region and no other slot-0 delivery");
+  }
   const slot0Delivery: OutRole | undefined = paymentAmount === 0n ? undefined : {
     recipientAddress,
     amount: paymentAmount,
@@ -947,6 +960,9 @@ export function buildNativeTransfer(params: BuildNativeTransferParams): NativeTr
       if (paid) {
         sentOpenings.push({ slot: i, recipientAddress: owner, assetId: 0n, amount, noteSecret: ns });
       }
+    } else if (i === 0 && !isDummy && params.recipientDirectSend === true) {
+      envelopeOutputs.push({ slot: i, recipientAddress: owner, note: { chainId, assetId: 0n, amount, owner, noteSecret: ns } });
+      sentOpenings.push({ slot: i, directSend: true, recipientAddress: owner, assetId: 0n, amount, noteSecret: ns });
     } else if (isDummy) {
       // Padded by default so the real-output count is not observable.
       outputData = sizeClassFiller();
@@ -1037,6 +1053,7 @@ export function buildNativeTransfer(params: BuildNativeTransferParams): NativeTr
   assertArena(arena, shape);
   const delivery = deliveryCommitment(outputData, arena);
   const { issuanceRecipient, issuanceNoteSecret, transactionContext } = authorizationIssuanceOpening(issuanceOwnerCommitment, chainId, nullifiers, params.designatedIssuanceOpening, shape);
+  const accountCreationCommitment = accountCreationAttachmentCommitment(params.accountCreation, chainId);
   const transaction: PrivateValue = {
     global: {
       openFeeAmount,
@@ -1046,6 +1063,7 @@ export function buildNativeTransfer(params: BuildNativeTransferParams): NativeTr
       carrierContextHash,
       assetBurnAmount: 0n,
       deliveryCommitment: delivery,
+      accountCreationCommitment,
     },
     inputs: inputSlots.map((slot, index) => ({
       slotClass: inputSlotClasses[index]!,
@@ -1077,6 +1095,7 @@ export function buildNativeTransfer(params: BuildNativeTransferParams): NativeTr
     validUntil,
     carrierContextHash,
     eventOpening.eventsCommitment,
+    accountCreationCommitment,
   ];
 
   // --- Optional readable payment-rule witness (the default user rule).
@@ -1100,6 +1119,7 @@ export function buildNativeTransfer(params: BuildNativeTransferParams): NativeTr
         relayFeeAmount: privateRelayRole?.amount ?? 0n,
         relayFeeOwnerCommitment: privateRelayRole === undefined ? 0n
           : outputSlots[TRANSFER_N_OUT - 1]!.ownerCommitment,
+        accountCreationCommitment,
         transactionContext,
         notBefore,
         validUntil,
@@ -1146,6 +1166,7 @@ export function buildNativeTransfer(params: BuildNativeTransferParams): NativeTr
         relayFeeAmount: privateRelayRole?.amount ?? 0n,
         relayFeeOwnerCommitment: privateRelayRole === undefined ? 0n
           : outputSlots[TRANSFER_N_OUT - 1]!.ownerCommitment,
+        accountCreationCommitment,
         transactionContext,
         notBefore,
         validUntil,
@@ -1249,7 +1270,7 @@ export function buildNativeTransfer(params: BuildNativeTransferParams): NativeTr
     buildKernelWitnessMap,
     outputData,
     arena,
-    encodeTransaction: (proof) => encodePrivateValueTransaction({ shape, publicInputs, proof, outputData, arena }),
+    encodeTransaction: (proof) => encodePrivateValueTransaction({ shape, publicInputs, proof, outputData, arena, ...(params.accountCreation === undefined ? {} : { accountCreation: params.accountCreation }) }),
     scenario: {
       nk,
       p,
@@ -1269,7 +1290,7 @@ export function buildNativeTransfer(params: BuildNativeTransferParams): NativeTr
 export type BuildMineActionParams = Pick<BuildNativeTransferParams,
   | "chainId" | "network" | "wallet"
   | "issuanceOwnerCommitment" | "designatedIssuanceOpening" | "dummyInputEntropy"
-  | "validUntilTimestamp" | "notBeforeTimestamp" | "carrierContextHash" | "recentPcashBlockHash"
+  | "validUntilTimestamp" | "notBeforeTimestamp" | "carrierContextHash" | "accountCreation" | "recentPcashBlockHash"
   | "stateRoot" | "stateRootHeaderSiblings" | "outputRoot" | "outputRootStateSiblings"
   | "accountStateRoot" | "accountStateRootStateSiblings" | "accountIndex" | "accountSiblings"
   | "accountRevision" | "receiveKeyHash" | "sender" | "data"
@@ -1293,6 +1314,7 @@ export function buildMineAction(params: BuildMineActionParams): NativeTransferBu
     validUntilTimestamp: params.validUntilTimestamp,
     ...(params.notBeforeTimestamp !== undefined ? { notBeforeTimestamp: params.notBeforeTimestamp } : {}),
     ...(params.carrierContextHash !== undefined ? { carrierContextHash: params.carrierContextHash } : {}),
+    ...(params.accountCreation === undefined ? {} : { accountCreation: params.accountCreation }),
     recentPcashBlockHash: params.recentPcashBlockHash,
     stateRoot: params.stateRoot,
     stateRootHeaderSiblings: params.stateRootHeaderSiblings,

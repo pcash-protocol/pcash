@@ -62,17 +62,11 @@ hiding_kernel_known_answer!(
     "user_account_update",
     "user_account_update_hiding_kernel"
 );
-hiding_kernel_known_answer!(
-    CONTRACT_CREATION_HIDING_KERNEL_KAT,
-    "contract_creation",
-    "contract_creation_hiding_kernel"
-);
 
-pub(super) const HIDING_KERNEL_KATS: [KnownAnswer; 4] = [
+pub(super) const HIDING_KERNEL_KATS: [KnownAnswer; 3] = [
     PRIVATE_VALUE_HIDING_KERNEL_KAT,
     LARGE_PRIVATE_VALUE_HIDING_KERNEL_KAT,
     USER_ACCOUNT_UPDATE_HIDING_KERNEL_KAT,
-    CONTRACT_CREATION_HIDING_KERNEL_KAT,
 ];
 
 /// Framed requests a fresh worker answers before it is trusted: a positive and

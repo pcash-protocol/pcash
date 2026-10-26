@@ -8,7 +8,11 @@ import { prerenderRoutes } from "./routes/routeManifest.ts";
 vi.stubGlobal("fetch", () => new Promise(() => undefined));
 vi.stubGlobal("scrollTo", () => undefined);
 
+let currentRoot: { unmount(): void } | undefined;
+
 afterEach(() => {
+  currentRoot?.unmount();
+  currentRoot = undefined;
   vi.restoreAllMocks();
   document.head.replaceChildren();
   document.body.replaceChildren();
@@ -21,7 +25,8 @@ it.each(prerenderRoutes.map(({ path }) => path))("hydrates the prerendered %s pa
   const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
   const heading = document.querySelector("h1")!;
   vi.resetModules();
-  await import("./renderApp.tsx");
+  const { mountedRoot } = await import("./renderApp.tsx");
+  currentRoot = mountedRoot;
   // Each page's metadata effect runs once it has committed.
   await vi.waitFor(() => expect(document.head.querySelector("title[data-pcash-route-metadata]")).not.toBeNull(), { timeout: 10_000 });
   expect(errors.mock.calls.map((call) => String(call[0]))).toEqual([]);

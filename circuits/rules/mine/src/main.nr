@@ -49,6 +49,7 @@ mod tests {
             carrier_context_hash: 0,
             asset_burn_amount: 0,
             delivery_commitment: 0,
+            account_creation_commitment: 0,
             input_slot_classes: [SLOT_CLASS_DUMMY; S_INPUTS],
             input_commitments: [0; S_INPUTS],
             nullifiers: [1; S_INPUTS],

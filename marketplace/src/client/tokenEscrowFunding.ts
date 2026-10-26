@@ -13,7 +13,7 @@ import {
   type PcashNodeClient,
 } from "@pcash/sdk/browser";
 import type { SelectedRelayQuoteProvider } from "@pcash/sdk/eip712";
-import type { TransactionData } from "@pcash/sdk/protocol";
+import type { TransactionData, AccountCreationAttachment } from "@pcash/sdk/protocol";
 import type { ProvePhase } from "@pcash/sdk/browser-prover";
 import type { DurableSubmissionAdapter, PcashProfile, Wallet } from "@pcash/sdk/wallet";
 import { noteFundedTransferValidUntil } from "@pcash/sdk/wallet/actions";
@@ -23,6 +23,7 @@ import { marketplaceMempoolSubmission, submitBuiltTransaction } from "./submitBu
 export interface TokenEscrowFundingParams {
   submission?: DurableSubmissionAdapter;
   wallet: Wallet;
+  accountCreation?: AccountCreationAttachment;
   node: PcashNodeClient;
   assetId: bigint;
   /** The escrow contract's extended code: its address and receive key. */
@@ -36,8 +37,8 @@ export interface TokenEscrowFundingParams {
   privateRelayFeeAmount?: bigint;
   selectedRelayQuote?: SelectedRelayQuoteProvider;
   validUntilTimestamp: bigint;
-  /** Called after proof construction, before the transaction is journaled or submitted. */
-  beforeSubmit?: () => void | Promise<void>;
+  /** Run after preflight and before the wallet journal is written. */
+  beforeSubmit?: (contentHash: string, transactionHex: Hex) => void | Promise<void>;
   /** Called after the exact content hash is durably journaled, before network submission. */
   onPreparedContentHash?: (contentHash: string, transactionHex: Hex) => void | Promise<void>;
   onProgress?: (phase: ProvePhase, message: string) => void;
@@ -51,9 +52,10 @@ export interface TokenEscrowFundingResult {
 
 export interface TokenEscrowFundingPreflightParams {
   wallet: Wallet;
+  accountCreation?: AccountCreationAttachment;
   assetId: bigint;
   amount: bigint;
-  /** Every PCASH fee the listing's creation and funding pay. */
+  /** Every PCASH fee the listing's funding pays. */
   openFeeAmount: bigint;
   privateRelayFeeAmount?: bigint;
   selectedRelayQuote?: SelectedRelayQuoteProvider;
@@ -82,17 +84,19 @@ export async function runTokenEscrowFundingFlow(
     ...(params.selectedRelayQuote === undefined ? {} : { selectedRelayQuote: params.selectedRelayQuote }),
   });
   const result = await params.wallet.sendAsset({
+    settlePollMaxAttempts: 1,
     ...(params.submission ? { submission: params.submission } : params.openFeeAmount === 0n ? {} : {
       submission: marketplaceMempoolSubmission(params.node, runtime.submitBuiltTransaction, params.onProgress),
     }),
     assetId: params.assetId,
+    ...(params.accountCreation === undefined ? {} : { accountCreation: params.accountCreation }),
     outputs: [{ to: params.to, amount: params.amount, noteSecret: params.noteSecret }],
     data: params.data,
     openFeeAmount: params.openFeeAmount,
     ...(params.privateRelayFeeAmount === undefined ? {} : { privateRelayFeeAmount: params.privateRelayFeeAmount }),
     ...(params.selectedRelayQuote === undefined ? {} : { selectedRelayQuote: params.selectedRelayQuote }),
     validUntilTimestamp,
-    ...(params.beforeSubmit === undefined ? {} : { beforeJournal: params.beforeSubmit }),
+    ...(params.beforeSubmit === undefined ? {} : { beforeJournal: (contentHash: string, transactionHex: string) => params.beforeSubmit!(contentHash, transactionHex as Hex) }),
     ...(params.onPreparedContentHash === undefined
       ? {}
       : { onPrepared: (contentHash: string, transactionHex: string) => params.onPreparedContentHash!(contentHash, transactionHex as Hex) }),
@@ -101,7 +105,7 @@ export async function runTokenEscrowFundingFlow(
   return { contentHash: result.contentHash, queued: result.queued && result.submission?.l1Hash === undefined };
 }
 
-/** Fail before contract publication when this wallet cannot fund the token escrow and both fees. */
+/** Fail before contract publication when this wallet cannot fund the token escrow and its fee. */
 export async function preflightTokenEscrowFunding(params: TokenEscrowFundingPreflightParams): Promise<void> {
   const holding = (await params.wallet.assets()).find((asset) => asset.assetId === params.assetId);
   const spendable = holding?.spendable ?? 0n;
@@ -112,6 +116,7 @@ export async function preflightTokenEscrowFunding(params: TokenEscrowFundingPref
   // The fees are paid from PCASH notes, as a zero-amount transfer would pay them.
   await params.wallet.preflightSend({
     amount: 0n,
+    ...(params.accountCreation === undefined ? {} : { accountCreation: params.accountCreation }),
     openFeeAmount: params.openFeeAmount,
     ...(params.privateRelayFeeAmount === undefined ? {} : { privateRelayFeeAmount: params.privateRelayFeeAmount }),
     ...(params.selectedRelayQuote === undefined ? {} : { selectedRelayQuote: params.selectedRelayQuote }),

@@ -34,14 +34,14 @@ export function privateValueProfiles(source) {
     const openFeeAmount = deliveryCommitment + 1;
     return {
       name, shapeId, inputs, outputs,
-      publicInputs: inputs + outputs + 9,
+      publicInputs: inputs + outputs + 10,
       wireInputs: inputs + outputs + 7,
       // A 32-byte salt plus 520 bytes per output: eight 65-byte cells.
       arenaBytes: 32 + 520 * outputs,
       offsets: { chainId: 0, recentBlockHash: 1, nullifiers: 2, outputs: outputStart,
         deliveryCommitment, openFeeAmount, issuanceOwner: openFeeAmount + 1,
         notBefore: openFeeAmount + 2, validUntil: openFeeAmount + 3, carrierContextHash: openFeeAmount + 4,
-        eventsCommitment: openFeeAmount + 5 },
+        eventsCommitment: openFeeAmount + 5, accountCreationCommitment: openFeeAmount + 6 },
     };
   });
 }

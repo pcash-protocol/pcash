@@ -1,4 +1,6 @@
+import { sameAccountCreation } from "./accountCreation.ts";
 import type { PcashNodeClient } from "@pcash/sdk/clients";
+import { decodeTransaction, type AccountCreationAttachment, type RawPrivateValueTransaction } from "@pcash/sdk/protocol";
 import { buildAssetAction, openedAssetActionOutput, ownerChangeAssetActionOutput, type AssetActionBuild, type AssetActionOutput } from "@pcash/sdk/builders";
 import { requestPcashAuthorization, type PcashActionSigner, type SelectedRelayQuoteProvider } from "@pcash/sdk/eip712";
 import { PRIVATE_VALUE_PROFILES } from "@pcash/sdk/constants";
@@ -14,13 +16,14 @@ import {
   type AssetDefinition,
   type FungibleMetadata,
 } from "@pcash/sdk/protocol";
-import { addressHex, bytes32Hex, randomFieldEntropy } from "@pcash/sdk/utils";
+import { addressHex, bytes32Hex, fromHex, randomFieldEntropy } from "@pcash/sdk/utils";
 import type { PcashProfile } from "../externalIdentity.ts";
 import { loadWalletStateOrEmpty, type WalletStateStore } from "../store.ts";
 import { knownAssetDefinition, selectInputNotes, storedAssetDefinition, walletAssetRecord, type WalletFileData } from "../noteStore.ts";
+import { directSendsToRecord } from "../directSends.ts";
 import { collectAssetActionWitnesses, prepareAssetAction, submitPendingAssetAction, submitPreparedAssetAction, type AssetActionSubmissionResult } from "./assetActionClient.ts";
 import { settlePollOptions, type DurableSubmissionAdapter, type DurableSubmissionCallbacks, type SettlePollOptions } from "./durableSubmission.ts";
-import { actionPublication, fixPublication, noteNullifier, pendingIssuanceBeneficiary, planPublication, publicationOf, publicationValidUntil, type ActionPublication } from "./publication.ts";
+import { actionPublication, fixPublication, noteNullifier, pendingIssuanceBeneficiary, planPublication, publicationOf, publicationValidUntil, paddedPrivateValueByteSize, type ActionPublication } from "./publication.ts";
 
 import { registeredSelfReceiveKey } from "./selfDelivery.ts";
 
@@ -29,6 +32,7 @@ export interface AssetCreationProver {
 }
 
 export interface AssetCreationIntent extends DurableSubmissionCallbacks {
+  accountCreation?: AccountCreationAttachment;
   metadata: FungibleMetadata;
   initialSupply: bigint;
   validUntilTimestamp?: bigint;
@@ -94,11 +98,13 @@ export async function runAssetCreationClient<Prepared, Output>(params: AssetCrea
   });
   if (params.retryContentHash !== undefined) {
     const pending = data.pendingAssetActions?.find((item) => item.contentHash.toLowerCase() === params.retryContentHash!.toLowerCase());
-    if (pending === undefined || pending.assetCreationReview === undefined || pending.receiptKind === "contractAccount") {
+    if (pending === undefined || pending.assetCreationReview === undefined) {
       throw new Error("retryContentHash does not name a journaled standard asset creation");
     }
+    const transaction = decodeTransaction(fromHex(pending.transactionHex)) as RawPrivateValueTransaction;
     if (BigInt(pending.assetCreationReview.metadataCommitment) !== fungibleMetadataCommitment(params.metadata)
       || BigInt(pending.assetCreationReview.initialSupply) !== params.initialSupply
+      || !sameAccountCreation(transaction.accountCreation, params.accountCreation)
       || BigInt(pending.ownedOutputs.find((output) => output.outputIndex === 0)?.owner ?? 0n) !== params.wallet.address
       || BigInt(pending.ownedOutputs.find((output) => output.outputIndex === 0)?.amount ?? 0n) !== params.initialSupply
       || (params.openFeeAmount !== undefined && BigInt(pending.openFeeAmount) !== params.openFeeAmount)
@@ -166,6 +172,7 @@ export async function runAssetCreationClient<Prepared, Output>(params: AssetCrea
     action: "asset creation",
   });
   const publication = await fixPublication({
+    maxTransactionBytes: paddedPrivateValueByteSize(PRIVATE_VALUE_PROFILES.S.shapeId, params.accountCreation),
     selectedRelayQuote: params.selectedRelayQuote, publication: plan.publication, owner: params.wallet,
     requestedCommitment: 0n, node: params.node, status: witnesses.status, nullifiers,
     shape: PRIVATE_VALUE_PROFILES.S.shapeId, openFeeAmount: plan.openFeeAmount,
@@ -189,6 +196,7 @@ export async function runAssetCreationClient<Prepared, Output>(params: AssetCrea
     receiveKey,
   });
   const build = buildAssetAction({
+    ...(params.accountCreation === undefined ? {} : { accountCreation: params.accountCreation }),
     pcashChainId: params.chainId, snapshot: witnesses.snapshot, owner: witnesses.owner,
     assetDescriptor: asset.descriptor, assetSecret: asset.assetSecret,
     inputs: [{ kind: "creation-marker" }, ...[1, 2, 3].map((slot) => {
@@ -206,7 +214,7 @@ export async function runAssetCreationClient<Prepared, Output>(params: AssetCrea
       amount: publication.privateRelayPayment.amount, ownerCommitment: privateFeeOwner,
     } }),
     dummyInputSeed, validUntilTimestamp, assetDefinition: definition,
-    sender: { outgoingKey: params.wallet.outgoingKey },
+    sender: { outgoingKey: params.wallet.outgoingKey, directSendOpenings: directSendsToRecord(data, params.wallet.address, nativeNotes) },
   });
   const authorization = build.prepareOwnerAuthorization({
     wallet: params.wallet, network: networkConfigFromStatus(witnesses.status),

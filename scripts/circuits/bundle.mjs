@@ -18,7 +18,6 @@ import {
 } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { isBuiltin } from "node:module";
-import ts from "typescript";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { withoutGitIgnoredFiles } from "../repository_files.mjs";
@@ -27,10 +26,13 @@ import { KNOWN_ANSWERS, knownAnswerFiles } from "./known_answers.mjs";
 import { STACK_PINS_PATH } from "./stack_pins.mjs";
 import { applicationPinPaths } from "./application_pins.mjs";
 import { Config } from "../../sdk/src/bcfg/index.ts";
-import { toolRoot } from "../../sdk/src/node/toolchain.ts";
+import { primaryRepositoryRoot, toolRoot } from "../../sdk/src/node/toolchain.ts";
 import { Logger } from "../../sdk/src/blgr/index.ts";
+import { prepareWorktree } from "../dev/worktree.mts";
 
 const REPO_ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
+prepareWorktree(REPO_ROOT);
+const { default: ts } = await import("typescript");
 const logger = new Logger("info");
 await logger.open();
 const MANIFEST_NAME = "bundle-manifest.json";
@@ -266,7 +268,7 @@ export function createCircuitSourceSnapshot(
 export function linkSnapshotDependencies(snapshotRoot) {
   const rootNodeModules = join(REPO_ROOT, "node_modules");
   if (!existsSync(rootNodeModules)) {
-    throw new Error("node_modules is missing; run npm install from the repository root");
+    throw new Error("node_modules is missing; run npm ci from the repository root");
   }
   symlinkSync(rootNodeModules, join(snapshotRoot, "node_modules"), "dir");
 
@@ -417,9 +419,16 @@ export function validateCircuitBundleForInputs(bundleDir, repoRoot = REPO_ROOT, 
   return manifest;
 }
 
-function cacheRoot() {
-  const configured = settings().str("circuit-cache");
-  return configured ? resolve(configured) : join(REPO_ROOT, ".cache", "pcash", "circuit-bundles");
+export function circuitCacheRoot(repoRoot = REPO_ROOT, configured = settings().str("circuit-cache")) {
+  if (configured) return resolve(configured);
+  const localCache = join(repoRoot, ".cache", "pcash", "circuit-bundles");
+  if (existsSync(localCache)) return resolve(localCache);
+  const primaryRoot = primaryRepositoryRoot(repoRoot);
+  if (primaryRoot !== repoRoot) {
+    const primaryCache = join(primaryRoot, ".cache", "pcash", "circuit-bundles");
+    if (existsSync(primaryCache)) return resolve(primaryCache);
+  }
+  return localCache;
 }
 
 function explicitBundle() {
@@ -625,7 +634,7 @@ export function ensureCircuitBundle() {
   }
 
   const fingerprint = circuitInputFingerprint();
-  const root = cacheRoot();
+  const root = circuitCacheRoot();
   const sourceDir = join(root, katSet(), fingerprint);
   const cached = cachedBundle(sourceDir, fingerprint);
   if (cached) return cached;

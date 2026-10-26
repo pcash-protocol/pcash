@@ -107,9 +107,7 @@ export function activityTitle(item: MarketplaceActivityItem): string {
   const asset = listingAssetLabel(item.publication);
   const labels: Record<MarketplaceActivityItem["phase"], string> = {
     "recovery-unavailable": "Waiting for escrow funding",
-    "contract-missing": "Escrow needs contract recovery",
     draft: "Creating listing",
-    "contract-submitted": "Creating listing",
     "funding-submitted": "Creating listing",
     finalizing: "Creating listing",
     funded: "Listing live",

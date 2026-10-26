@@ -18,7 +18,7 @@ import {
 } from "../src/protocol/block.ts";
 import { BLOCK_HEADER_KEY_STATE_ROOT, STATE_KEY_ACCOUNT_STATE_ROOT } from "../src/constants/params.ts";
 import { buildContractBody, functionSelector } from "../src/protocol/contract.ts";
-import { WIRE_PROOF_BYTES, encodeContractAccountCreation, type ContractFundingMode } from "../src/protocol/codec.ts";
+import { WIRE_PROOF_BYTES, encodeContractAccountCreation, encodePrivateValueTransaction } from "../src/protocol/codec.ts";
 import { deliveryCommitment } from "../src/protocol/transfer.ts";
 import { PRIVATE_VALUE_PROFILES } from "../src/constants/privateValueProfiles.ts";
 import { ENVELOPE_VERSION } from "../src/protocol/envelope.ts";
@@ -38,7 +38,7 @@ interface Captured {
 }
 
 /** A transport that answers every call from a scripted queue. */
-/** The fee section carried by sponsored contract creation. */
+/** A private-value section that can carry a contract attachment. */
 function contractCreationSection() {
   const item = new Uint8Array(OUTPUT_DATA_BYTES);
   item[0] = ENVELOPE_VERSION;
@@ -52,7 +52,7 @@ function contractCreationSection() {
       5n, 6n, 7n, 8n, 9n,
       deliveryCommitment(outputData, arena),
       0n, 0n, 0n,
-      1_900_000_000n, 0n, 0n,
+      1_900_000_000n, 0n, 0n, 0n,
     ],
     proof: new Uint8Array(WIRE_PROOF_BYTES),
     outputData,
@@ -97,7 +97,7 @@ const CONFIG_B = 0xd4n;
  * the returned function material matches the decoded body — exactly what the
  * shared `parseContractResult` demands before anything is labeled verified.
  */
-function contractPayload(funding: ContractFundingMode = "sponsored"): { payload: Record<string, unknown>; address: string } {
+function contractPayload(creation: "attached" | "standalone" = "attached"): { payload: Record<string, unknown>; address: string } {
   const build = buildContractBody({
     nullifierKey: { publishesNkRoot: false, nullifierKeyCommitment: 44n },
     functions: [
@@ -178,9 +178,9 @@ function contractPayload(funding: ContractFundingMode = "sponsored"): { payload:
       status: "contract",
       address,
       accountProof,
-      transaction: hex(encodeContractAccountCreation(0x50435348n, build.body, funding === "unfunded"
-        ? { mode: "unfunded", recentPcashBlockHash: 0x4321n, validUntilTimestamp: 1_900_000_000n }
-        : { mode: "sponsored", section: contractCreationSection() })),
+      transaction: hex(creation === "standalone"
+        ? encodeContractAccountCreation(0x50435348n, build.body, { recentPcashBlockHash: 0x4321n, validUntilTimestamp: 1_900_000_000n })
+        : encodePrivateValueTransaction({ ...contractCreationSection(), accountCreation: { kind: "contract", body: build.body } })),
       functions: [
         { selector: "0x1", applicationVkHash: fieldHex(VK_A), configurationCommitment: fieldHex(CONFIG_A) },
         { selector: "0x2", applicationVkHash: fieldHex(VK_B), configurationCommitment: fieldHex(CONFIG_B) },
@@ -286,7 +286,7 @@ const INFO_READY = {
 };
 
 describe("createPscanClient", () => {
-  it.each(["sponsored", "unfunded"] as const)("returns authenticated contract fields for %s creation", (funding) => {
+  it.each(["attached", "standalone"] as const)("returns authenticated contract fields for %s creation", (funding) => {
     const { address, payload } = contractPayload(funding);
     const parser = new PcashNodeClient("http://n");
     const parsed = parser.parseContractResult({
@@ -346,7 +346,7 @@ describe("createPscanClient", () => {
     await expect(respond(true, "null").getContractSource(`0x${"11".repeat(20)}`)).rejects.toThrow(/must be an object/);
   });
 
-  it.each(["sponsored", "unfunded"] as const)("parses a verified contract source view for %s creation", async (funding) => {
+  it.each(["attached", "standalone"] as const)("parses a verified contract source view for %s creation", async (funding) => {
     const { address, payload } = contractPayload(funding);
     const view = {
       address,

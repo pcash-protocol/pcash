@@ -53,37 +53,6 @@ pub enum TransactionKind {
     Unknown,
 }
 
-/// How a `contractAccount` transaction is funded: the funding-mode byte of its
-/// admitted bytes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ContractFundingMode {
-    Unfunded,
-    Sponsored,
-}
-
-pcash_state::codec::codec_enum!(ContractFundingMode: u8 {
-    Unfunded,
-    Sponsored
-});
-
-impl From<pcash_derive::ContractFundingMode> for ContractFundingMode {
-    fn from(mode: pcash_derive::ContractFundingMode) -> Self {
-        match mode {
-            pcash_derive::ContractFundingMode::Unfunded => Self::Unfunded,
-            pcash_derive::ContractFundingMode::Sponsored => Self::Sponsored,
-        }
-    }
-}
-
-impl ContractFundingMode {
-    /// The funding mode of admitted transaction bytes, present exactly for a
-    /// contract-account creation.
-    pub fn of(tx_bytes: &[u8]) -> Option<Self> {
-        pcash_derive::contract_funding_mode(tx_bytes).map(Self::from)
-    }
-}
-
 impl TransactionKind {
     /// Whether this names a kind the mempool can hold.
     ///
@@ -754,7 +723,7 @@ pub enum ResultPosition {
 pub enum ResultLeafDto {
     Transaction {
         tx_type: u8,
-        funding_mode: u8,
+        account_creation: u8,
         #[serde(with = "alloy_serde::quantity")]
         l1_transaction_index: u64,
         #[serde(with = "alloy_serde::quantity")]
@@ -1017,7 +986,7 @@ pub struct ReceiptDto {
     /// The block's `rewardEach` for a successful type `0x00` action, else zero.
     pub settled_issuance_amount: U256,
     pub kind: TransactionKind,
-    pub funding_mode: Option<ContractFundingMode>,
+    pub account_creation: u8,
     #[serde(with = "alloy_serde::quantity::opt")]
     pub output_leaf_start: Option<u64>,
     #[serde(with = "alloy_serde::quantity")]
@@ -1061,7 +1030,7 @@ pub struct TransactionSummaryDto {
     pub declared_issuance_owner_commitment: Option<B256>,
     pub issuance_route: IssuanceRoute,
     pub kind: TransactionKind,
-    pub funding_mode: Option<ContractFundingMode>,
+    pub account_creation: u8,
     pub block: BlockId,
     #[serde(with = "alloy_serde::quantity")]
     pub pcash_transaction_index: u64,
@@ -1177,7 +1146,6 @@ pub struct MempoolTransactionDto {
     pub content_hash: B256,
     pub statement_id: B256,
     pub kind: TransactionKind,
-    pub funding_mode: Option<ContractFundingMode>,
     pub stable_id: String,
     pub conflict_keys: Vec<String>,
     pub open_fee_amount: U256,

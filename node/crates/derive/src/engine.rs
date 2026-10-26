@@ -37,15 +37,15 @@ use std::time::Instant;
 
 use crate::admission::{AdmittedTransaction, ContractBodyCheck};
 use crate::params::{
-    ProtocolRules, ACCOUNT_KIND_CONTRACT, ACCOUNT_KIND_USER, KIND_CONTRACT_ACCOUNT_CREATION,
-    KIND_PRIVATE_VALUE, KIND_USER_ACCOUNT_UPDATE,
+    ProtocolRules, ACCOUNT_KIND_CONTRACT, ACCOUNT_KIND_USER, KIND_PRIVATE_VALUE,
+    KIND_USER_ACCOUNT_UPDATE,
 };
 use crate::prewarm::{
     CarrierFraming, PreparedBatch, PreparedBatchItem, PreparedBlock, PreparedCarrier,
 };
 use crate::transaction::{
-    words_blob, ContractAccountCreation, ContractBody, ContractFunding, PrivateValueSection,
-    ReceiveKeyUpdate, UserAccountCreation, UserAccountUpdate,
+    words_blob, AccountCreationAttachment, ContractAccountCreation, ContractBody,
+    PrivateValueSection, ReceiveKeyUpdate, UserAccountCreation, UserAccountUpdate,
 };
 
 const ACCOUNT_RULE_TREE_DEPTH: usize = 8;
@@ -462,7 +462,7 @@ impl BlockCtx<'_> {
                     transactions.push(ExecutedTransaction {
                         result: TransactionResult {
                             tx_type: transaction.kind(),
-                            funding_mode: transaction.funding_mode(),
+                            account_creation: execution.account_creation,
                             l1_transaction_index: tx.tx_index,
                             batch_item_index,
                             outcome: execution.outcome,
@@ -716,14 +716,15 @@ struct PosterGroup {
 /// One admitted transaction's outcome, its statement hash on success (zero
 /// otherwise), and the effects stored beside its result.
 struct Execution {
+    account_creation: u8,
     outcome: TransactionOutcome,
     statement_hash: B256,
     effects: TransactionEffects,
 }
 
 /// The consensus-relevant values of one private-value section, extracted from
-/// its public inputs. Type `0x00`, a user-account update, and a sponsored
-/// contract-account creation all run the same checks and effects over it.
+/// its public inputs. Private-value transactions and user-account updates
+/// run the same checks and effects over it.
 struct SectionValues {
     profile: PrivateValueProfile,
     recent_pcash_block_hash: CircuitWord,
@@ -808,6 +809,7 @@ impl From<StateError> for Halt {
 /// Everything one successful transaction adds to the block, and the hash of
 /// the statement its result commits.
 struct TransactionDiff {
+    account_creation: u8,
     section: Option<SectionDiff>,
     account: Option<AccountDiff>,
     statement_hash: Fr,
@@ -882,8 +884,7 @@ struct ProofCandidate<'a> {
     section: &'a PrivateValueSection,
     vk: &'a [u8],
     /// The carrying type's verifier input after the section's own: an
-    /// update's account update commitment, or a sponsored creation's derived
-    /// address.
+    /// update's account update commitment.
     appended: Option<CircuitWord>,
 }
 
@@ -935,45 +936,22 @@ impl<'a> ProofCandidate<'a> {
         Ok((candidate, new_rule_set_commitment))
     }
 
-    /// `section` is a sponsored creation's section. Also returns the account
-    /// material its body derives.
-    fn contract_account_creation(
-        rules: &'a ProtocolRules,
-        section: &'a PrivateValueSection,
-        check: &ContractBodyCheck,
-    ) -> Result<(Self, ContractMaterial), Rejection> {
-        // Section canonicality precedes the body's static checks.
-        let material = match contract_material(check) {
-            Ok(material) => material,
-            Err(rejection) => {
-                section_pure_check(section, None)?;
-                return Err(rejection);
-            }
-        };
-        let candidate = Self::new(
-            section,
-            &rules.contract_creation_hiding_kernel_vk,
-            Some(CircuitWord::left_padding_from(material.address.as_slice())),
-        )?;
-        Ok((candidate, material))
-    }
-
     /// The candidate of any admitted transaction, or `None` when it carries
     /// no proof or fails one of the checks above.
     fn of(rules: &'a ProtocolRules, transaction: &'a AdmittedTransaction) -> Option<Self> {
         match transaction {
-            AdmittedTransaction::PrivateValue(section) => Self::private_value(rules, section).ok(),
+            AdmittedTransaction::PrivateValue(section, check) => {
+                if let Some(check) = check {
+                    contract_material(check).ok()?;
+                }
+                Self::private_value(rules, section).ok()
+            }
             AdmittedTransaction::UserAccountUpdate(update) => {
                 Self::user_account_update(rules, update)
                     .ok()
                     .map(|(candidate, _)| candidate)
             }
-            // Only a sponsored creation carries a proof.
-            AdmittedTransaction::ContractAccountCreation(creation, check) => {
-                Self::contract_account_creation(rules, creation.section()?, check)
-                    .ok()
-                    .map(|(candidate, _)| candidate)
-            }
+            AdmittedTransaction::ContractAccountCreation(..) => None,
             AdmittedTransaction::UserAccountCreation(_) => None,
         }
     }
@@ -1281,19 +1259,20 @@ impl<'a> BlockCtx<'a> {
         // unchanged. `account` is the account the transaction bytes address,
         // which a failure records whatever check failed.
         let (account, checked) = match transaction {
-            AdmittedTransaction::PrivateValue(section) => (
-                None,
+            AdmittedTransaction::PrivateValue(section, check) => (
+                check.as_ref().and_then(ContractBodyCheck::address),
                 self.check_private_value(
                     state,
                     verifier,
                     carrier_context_hash,
                     poster_owner,
                     section,
+                    check.as_ref(),
                 ),
             ),
             AdmittedTransaction::UserAccountCreation(creation) => {
                 let (account, checked) =
-                    self.check_user_account_creation(state, creation, l1_sender);
+                    self.check_user_account_creation(state, creation, l1_sender, false);
                 (account, checked)
             }
             AdmittedTransaction::UserAccountUpdate(update) => (
@@ -1322,6 +1301,7 @@ impl<'a> BlockCtx<'a> {
             Ok(diff) => diff,
             Err(Halt::Rejected(rejection)) => {
                 return Ok(Execution {
+                    account_creation: 0,
                     outcome: rejection.outcome,
                     statement_hash: B256::ZERO,
                     effects: TransactionEffects::Rejected(RejectedEffects {
@@ -1354,8 +1334,10 @@ impl<'a> BlockCtx<'a> {
             payout: diff.section.as_ref().map(|section| section.payout.clone()),
         };
         let statement_hash = fr_to_bytes(diff.statement_hash);
+        let account_creation = diff.account_creation;
         self.apply(poster_owner, diff);
         Ok(Execution {
+            account_creation,
             outcome: TransactionOutcome::Succeeded,
             statement_hash,
             effects: TransactionEffects::Accepted(effects),
@@ -1401,6 +1383,10 @@ impl<'a> BlockCtx<'a> {
 
     // ---- private_value --------------------------------------------------
 
+    #[allow(
+        clippy::expect_used,
+        reason = "admission prepares every contract attachment once"
+    )]
     fn check_private_value<S: StateDb, V: Verifier>(
         &self,
         state: &S,
@@ -1408,11 +1394,42 @@ impl<'a> BlockCtx<'a> {
         carrier_context_hash: Option<Fr>,
         poster_owner: Fr,
         pv: &PrivateValueSection,
+        contract_check: Option<&ContractBodyCheck>,
     ) -> Result<TransactionDiff, Halt> {
         let candidate = ProofCandidate::private_value(self.rules, pv)?;
         let values = SectionValues::from_section(pv, KIND_PRIVATE_VALUE);
         let candidate =
             self.section_validity_check(state, &values, candidate, carrier_context_hash)?;
+        let (account, account_creation) = match pv.account_creation() {
+            None => (None, 0),
+            Some(AccountCreationAttachment::User(creation)) => {
+                let (_, checked) = self.check_user_account_creation(state, creation, None, true);
+                let diff = checked?;
+                (diff.account, diff.account_creation)
+            }
+            Some(AccountCreationAttachment::Contract(body)) => {
+                let material = contract_material(
+                    contract_check.expect("admission prepared the attached contract"),
+                )?;
+                if let Some(existing) = self.current_account(state, material.address)? {
+                    if existing.kind != ACCOUNT_KIND_CONTRACT
+                        || existing.revision != 1
+                        || existing.nullifier_key_commitment != material.nk_commitment
+                        || existing.account_rule_set_commitment != material.function_set_commitment
+                        || existing.receive_key_hash != material.receive_key_hash
+                    {
+                        return Err(Rejection::without_detail(
+                            TransactionOutcome::AccountCreationMismatch,
+                        )
+                        .into());
+                    }
+                    (None, 2)
+                } else {
+                    self.account_capacity_check()?;
+                    (Some(self.contract_account_diff(body, material)), 1)
+                }
+            }
+        };
         let section = self.section_diff(state, poster_owner, &values)?;
 
         let (statement, fields) = candidate.statement();
@@ -1420,8 +1437,9 @@ impl<'a> BlockCtx<'a> {
             return Err(Rejection::without_detail(TransactionOutcome::ProofRejected).into());
         }
         Ok(TransactionDiff {
+            account_creation,
             section: Some(section),
-            account: None,
+            account,
             statement_hash: transaction_statement_hash(&fields),
         })
     }
@@ -1558,13 +1576,18 @@ impl<'a> BlockCtx<'a> {
         state: &S,
         re: &UserAccountCreation,
         l1_sender: Option<Address>,
+        ensure: bool,
     ) -> (Option<Address>, Result<TransactionDiff, Halt>) {
         let receive_key_hash = re.receive_key_hash();
         let account = re.account_with_receive_key_hash(l1_sender, &self.source, receive_key_hash);
         let checked = match account {
-            Some(address) => {
-                self.check_resolved_user_account_creation(state, re, address, receive_key_hash)
-            }
+            Some(address) => self.check_resolved_user_account_creation(
+                state,
+                re,
+                address,
+                receive_key_hash,
+                ensure,
+            ),
             None => {
                 Err(Rejection::without_detail(TransactionOutcome::InvalidAccountSignature).into())
             }
@@ -1580,6 +1603,7 @@ impl<'a> BlockCtx<'a> {
         re: &UserAccountCreation,
         address: Address,
         receive_key_hash: CircuitWord,
+        ensure: bool,
     ) -> Result<TransactionDiff, Halt> {
         let nullifier_key_commitment = fr_from_canonical_bytes(re.nullifier_key_commitment);
         let account_rule_set_fr = fr_from_canonical_bytes(re.rule_set_commitment);
@@ -1601,9 +1625,30 @@ impl<'a> BlockCtx<'a> {
             .into());
         };
 
-        // Ethereum creation authorization cannot replace installed account
-        // authority; subsequent changes require the account rules.
+        if ensure {
+            self.account_creation_timing_check(
+                state,
+                re.recent_pcash_block_hash,
+                re.valid_until_timestamp,
+            )?;
+        }
         if let Some(existing) = self.current_account(state, address)? {
+            if ensure {
+                if existing.kind != ACCOUNT_KIND_USER
+                    || existing.nullifier_key_commitment != nullifier_key_commitment
+                {
+                    return Err(Rejection::without_detail(
+                        TransactionOutcome::AccountCreationMismatch,
+                    )
+                    .into());
+                }
+                return Ok(TransactionDiff {
+                    account_creation: 2,
+                    section: None,
+                    account: None,
+                    statement_hash: Fr::from(0u64),
+                });
+            }
             return Err(Rejection::with_detail(
                 TransactionOutcome::AccountAlreadyExists,
                 FailureDetail::AccountAlreadyExists {
@@ -1613,11 +1658,13 @@ impl<'a> BlockCtx<'a> {
             )
             .into());
         }
-        self.account_creation_timing_check(
-            state,
-            re.recent_pcash_block_hash,
-            re.valid_until_timestamp,
-        )?;
+        if !ensure {
+            self.account_creation_timing_check(
+                state,
+                re.recent_pcash_block_hash,
+                re.valid_until_timestamp,
+            )?;
+        }
         self.account_capacity_check()?;
 
         let op = AccountOp {
@@ -1629,6 +1676,7 @@ impl<'a> BlockCtx<'a> {
             published_receive_key: re.receive_key().map(|key| key.to_vec()),
         };
         Ok(TransactionDiff {
+            account_creation: 1,
             section: None,
             statement_hash: account_creation_statement_hash(&op),
             account: Some(AccountDiff {
@@ -1746,6 +1794,7 @@ impl<'a> BlockCtx<'a> {
         }
 
         Ok(TransactionDiff {
+            account_creation: 0,
             section: Some(section),
             statement_hash: transaction_statement_hash(&fields),
             account: Some(AccountDiff {
@@ -1785,63 +1834,30 @@ impl<'a> BlockCtx<'a> {
 
     // ---- contract account creation -------------------------------------
 
-    /// Both funding modes share one order: sponsored section canonicality,
-    /// the body, its address and account capacity, timing and, sponsored
-    /// only, the carrier context, then the sponsor's payment and proof.
+    /// A standalone creation checks its body, address availability, capacity
+    /// and lifetime before writing its account.
     fn check_contract_account_creation<S: StateDb, V: Verifier>(
         &self,
         state: &S,
-        verifier: &V,
-        carrier_context_hash: Option<Fr>,
-        poster_owner: Fr,
+        _verifier: &V,
+        _carrier_context_hash: Option<Fr>,
+        _poster_owner: Fr,
         ce: &ContractAccountCreation,
         check: &ContractBodyCheck,
     ) -> Result<TransactionDiff, Halt> {
-        let (material, section, fields) = match &ce.funding {
-            ContractFunding::Unfunded {
-                recent_pcash_block_hash,
-                valid_until_timestamp,
-            } => {
-                let material = contract_material(check)?;
-                self.contract_account_available(state, material.address)?;
-                self.account_creation_timing_check(
-                    state,
-                    *recent_pcash_block_hash,
-                    *valid_until_timestamp,
-                )?;
-                (material, None, None)
-            }
-            // The sponsor pays through the section: its window, nullifiers,
-            // and outputs are checked and its proof verified against the
-            // derived address before any effect is applied.
-            ContractFunding::Sponsored(section) => {
-                let (candidate, material) =
-                    ProofCandidate::contract_account_creation(self.rules, section, check)?;
-                self.contract_account_available(state, material.address)?;
-                let values = SectionValues::from_section(section, KIND_CONTRACT_ACCOUNT_CREATION);
-                let candidate =
-                    self.section_validity_check(state, &values, candidate, carrier_context_hash)?;
-                let diff = self.section_diff(state, poster_owner, &values)?;
-                let (statement, fields) = candidate.statement();
-                if !verifier.verify(statement.vk, statement.proof, &statement.public_inputs)? {
-                    return Err(Rejection::without_detail(TransactionOutcome::ProofRejected).into());
-                }
-                (material, Some(diff), Some(fields))
-            }
-        };
-
-        // Any fee effects, then the kind-1 leaf and receive material,
-        // atomically. A sponsored creation states its verifier inputs and an
-        // unfunded one the account it writes.
+        let material = contract_material(check)?;
+        self.contract_account_available(state, material.address)?;
+        self.account_creation_timing_check(
+            state,
+            ce.recent_pcash_block_hash,
+            ce.valid_until_timestamp,
+        )?;
         let account = self.contract_account_diff(&ce.body, material);
-        let statement_hash = fields.map_or_else(
-            || account_creation_statement_hash(&account.op),
-            |fields| transaction_statement_hash(&fields),
-        );
         Ok(TransactionDiff {
-            section,
+            account_creation: 1,
+            section: None,
+            statement_hash: account_creation_statement_hash(&account.op),
             account: Some(account),
-            statement_hash,
         })
     }
 
@@ -2387,7 +2403,7 @@ mod test_fixtures {
                 tx_type: effects
                     .accepted()
                     .map_or(KIND_PRIVATE_VALUE, |effects| effects.kind),
-                funding_mode: 0,
+                account_creation: 0,
                 l1_transaction_index,
                 batch_item_index,
                 outcome,
@@ -2833,6 +2849,7 @@ mod payout_capacity_tests {
 
     fn section_only(section: SectionDiff) -> TransactionDiff {
         TransactionDiff {
+            account_creation: 0,
             section: Some(section),
             account: None,
             statement_hash: Fr::from(0u64),
@@ -2840,7 +2857,7 @@ mod payout_capacity_tests {
     }
 
     fn stub_rules() -> ProtocolRules {
-        ProtocolRules::new([vec![], vec![]], vec![], vec![])
+        ProtocolRules::new([vec![], vec![]], vec![])
     }
 
     fn test_source() -> DerivationSource {
@@ -3526,14 +3543,11 @@ mod protocol_vector_tests {
                     let length = statement.len();
                     match (
                         u8::try_from(small(&result["txType"])).unwrap(),
-                        small(&result["fundingMode"]),
+                        small(&result["accountCreation"]),
                     ) {
                         (KIND_PRIVATE_VALUE, _) => private_value_lengths.push(length),
                         (KIND_USER_ACCOUNT_UPDATE, _) => {
                             assert_eq!(length, crate::params::USER_ACCOUNT_UPDATE_PUBLIC_INPUTS);
-                        }
-                        (KIND_CONTRACT_ACCOUNT_CREATION, 1) => {
-                            assert_eq!(length, crate::params::CONTRACT_CREATION_PUBLIC_INPUTS);
                         }
                         // A proofless creation states its account row less kind and revision.
                         _ => assert_eq!(length, 4),
@@ -3547,7 +3561,7 @@ mod protocol_vector_tests {
                 let outcome_code = u16::try_from(small(&result["outcomeCode"])).unwrap();
                 TransactionResult {
                     tx_type: u8::try_from(small(&result["txType"])).unwrap(),
-                    funding_mode: u8::try_from(small(&result["fundingMode"])).unwrap(),
+                    account_creation: u8::try_from(small(&result["accountCreation"])).unwrap(),
                     l1_transaction_index: small(&result["l1TransactionIndex"]),
                     batch_item_index: small(&result["batchItemIndex"]),
                     outcome: <TransactionOutcome as pcash_state::Codec>::decode(
@@ -3564,7 +3578,8 @@ mod protocol_vector_tests {
             private_value_lengths,
             [
                 S.public_inputs,
-                crate::private_value_profiles::L.public_inputs
+                crate::private_value_profiles::L.public_inputs,
+                S.public_inputs,
             ]
         );
         let payouts: Vec<PayoutRecord> = vector["payouts"]
@@ -3719,7 +3734,7 @@ mod unfunded_contract_capacity_tests {
 
     #[test]
     fn unfunded_account_capacity_precedes_timing() {
-        let rules = ProtocolRules::new([vec![], vec![]], vec![], vec![]);
+        let rules = ProtocolRules::new([vec![], vec![]], vec![]);
         let source = DerivationSource {
             pcash_chain_id: 1,
             l1_chain_id: 1,
@@ -3739,10 +3754,8 @@ mod unfunded_contract_capacity_tests {
                     configuration_commitment: B256::from(fr_to_bytes(Fr::from(3u64))),
                 }],
             },
-            funding: ContractFunding::Unfunded {
-                recent_pcash_block_hash: CircuitWord::from([0; 32]),
-                valid_until_timestamp: 0,
-            },
+            recent_pcash_block_hash: CircuitWord::from([0; 32]),
+            valid_until_timestamp: 0,
         };
         let ctx = BlockCtx::new(&rules, source, 12, 0, MAX_LEAVES, false);
         let check = ContractBodyCheck(prepare_contract_body(&creation.body));
@@ -3773,6 +3786,7 @@ mod unfunded_contract_capacity_tests {
         last_slot.apply(
             Fr::from(0u64),
             TransactionDiff {
+                account_creation: 0,
                 section: None,
                 account: Some(account),
                 statement_hash: Fr::from(0u64),

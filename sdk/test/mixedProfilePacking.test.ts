@@ -11,7 +11,7 @@ function entry(shape: PrivateValueShape): Uint8Array {
   const outputData = Array.from({ length: profile.outputs }, () => sizeClassFiller());
   const arena = randomArena(shape);
   const publicInputs = [1n, 2n, ...Array.from({ length: profile.inputs }, (_, i) => BigInt(i + 3)),
-    ...Array(profile.outputs).fill(4n), deliveryCommitment(outputData, arena), 0n, 0n, 0n, 1000n, 0n, 0n];
+    ...Array(profile.outputs).fill(4n), deliveryCommitment(outputData, arena), 0n, 0n, 0n, 1000n, 0n, 0n, 0n];
   // Packing tests exercise exact structural sizes, not proof verification.
   return encodePrivateValueTransaction({ shape, publicInputs, outputData, arena, proof: new Uint8Array(WIRE_PROOF_BYTES) });
 }
@@ -19,10 +19,10 @@ function entry(shape: PrivateValueShape): Uint8Array {
 describe("mixed profile publication budgets", () => {
   const small = entry(0), large = entry(1);
   it("fits one L and one S in one blob using exact framing bytes", () => {
-    expect(small.length).toBe(31647);
-    expect(large.length).toBe(80198);
+    expect(small.length).toBe(31648);
+    expect(large.length).toBe(80199);
     const batch = encodeBatch([large, small], 1n, 0n);
-    expect(batch.length).toBe(111920);
+    expect(batch.length).toBe(111922);
     expect(requiredPcashBlobCount(batch.length)).toBe(1);
     expect(decodeBatch(decodePcashBlobs(encodePcashBlobs(batch))).items).toEqual([large, small]);
   });

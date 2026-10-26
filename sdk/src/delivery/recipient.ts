@@ -4,6 +4,8 @@ export interface RecipientDelivery {
   recipientAddress: bigint;
   recipientReceiveKey?: Uint8Array;
   recipientExtendedCode?: string;
+  /** The address publishes no receive key: the payment is a direct send, delivered by link. */
+  recipientDirectSend?: true;
 }
 
 /** A 20-byte address with or without its 0x prefix, as lowercase 0x hex; otherwise null. */
@@ -50,16 +52,23 @@ export function resolveRecipientAddress(to: string, chainId: bigint): RecipientD
   throw new Error(`recipient ${to} is neither a 20-byte address nor an extended code`);
 }
 
+/**
+ * How a payment reaches `to`: its extended code, or the receive key its
+ * account publishes. With `directSend`, an address that publishes none is paid
+ * a direct send instead of refused.
+ */
 export async function resolveRecipientDelivery(
   to: string,
   chainId: bigint,
   receiveKeyOf: ReceiveKeyLookup,
+  options: { directSend?: boolean } = {},
 ): Promise<RecipientDelivery> {
   const recipient = resolveRecipientAddress(to, chainId);
   if (looksLikeExtendedCode(to)) return { ...recipient, recipientExtendedCode: to };
   const address = recipientAddressHex(to)!;
   const receiveKey = await receiveKeyOf(address);
   if (receiveKey === null) {
+    if (options.directSend === true) return { ...recipient, recipientDirectSend: true };
     throw new Error(
       `recipient ${address} has no published ML-KEM receive key; they must publish an account with one `
         + "or share an extended code before receiving",

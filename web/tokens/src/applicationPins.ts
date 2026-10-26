@@ -2,10 +2,10 @@
 // Inputs: web/tokens/circuits.json, the circuit bundle.
 
 /** Mega VK hash of `claim_link`. */
-export const CLAIM_LINK_APPLICATION_VK_HASH = 0x0c77be6af34f0c357ddfdbdf2275b5a52513060b00fbbdbcc571c1f50a1ed130n;
+export const CLAIM_LINK_APPLICATION_VK_HASH = 0x263e90172ae3eeb6928fc936e7330c13408fe1f5bde174029b508377be2e4d9fn;
 
 /** Mega VK hash of `drop_claim`. */
-export const DROP_CLAIM_APPLICATION_VK_HASH = 0x0ac9a7915b3e4a6569e981fc2ac9de3c8aea70e7e6c0eff7bbfa5f3f4a4bc648n;
+export const DROP_CLAIM_APPLICATION_VK_HASH = 0x0311ac6804cccc3bb03da3768ea914cd5b78d42a0ebc9cd04620862ef948814fn;
 
 /** Mega VK hash of `drop_reclaim`. */
-export const DROP_RECLAIM_APPLICATION_VK_HASH = 0x25c7ba4917359dd8b3df8ddeb703b1978245026f0b62c30ec843978c5597333dn;
+export const DROP_RECLAIM_APPLICATION_VK_HASH = 0x26d731150e2d5ffe5459e399784a3d5fffdd764d4d4ad2921626914a01d53450n;

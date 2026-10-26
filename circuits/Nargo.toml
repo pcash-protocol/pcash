@@ -11,8 +11,6 @@ members = [
     "fixtures/multisig",
     "fixtures/sender_authentication",
     "fixtures/shared_asset_claim",
-    "protocol/contract_creation/hiding_kernel",
-    "protocol/contract_creation/kernel",
     "protocol/lib",
     "protocol/no_op_event_application",
     "protocol/private_value/l/asset_creation_kernel",

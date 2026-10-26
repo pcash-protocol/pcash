@@ -1,7 +1,7 @@
 import { sizeClassFiller } from "../src/protocol/envelope.ts";
 import { deliveryCommitment, randomArena } from "../src/protocol/transfer.ts";
 import { expect, it, vi } from "vitest";
-import { WIRE_PROOF_BYTES, encodePrivateValueTransaction, encodeContractAccountCreation, decodeBatch, transactionOpenFee } from "../src/protocol/codec.ts";
+import { WIRE_PROOF_BYTES, encodePrivateValueTransaction, decodeBatch, transactionOpenFee } from "../src/protocol/codec.ts";
 import { buildUnfundedContractCreation } from "../src/builders/contractCreation.ts";
 import { functionSelector } from "../src/protocol/contract.ts";
 import { prepareTransactionForL1, submitTransactionToL1, submitPreparedTransactionToL1 } from "../src/relay/direct.ts";
@@ -17,7 +17,7 @@ it.each([undefined, "calldata", "blobs"] as const)("posts an exact zero-fee batc
   const data = sizeClassFiller();
   const arena = randomArena(0);
   const outputData = [data, data, data, data, data];
-  const entry = encodePrivateValueTransaction({ publicInputs: [1n, ...Array(10).fill(0n), deliveryCommitment(outputData, arena), 0n, 0n, 0n, 1n, 0n, 0n], proof: new Uint8Array(WIRE_PROOF_BYTES), outputData, arena });
+  const entry = encodePrivateValueTransaction({ publicInputs: [1n, ...Array(10).fill(0n), deliveryCommitment(outputData, arena), 0n, 0n, 0n, 1n, 0n, 0n, 0n], proof: new Uint8Array(WIRE_PROOF_BYTES), outputData, arena });
   const status = { pcashChainId: 1, genesisHash: `0x${"11".repeat(32)}`, l1ChainId: 1n, inboxAddress: `0x${"22".repeat(20)}`, genesisL1Block: 0n, genesisL1BlockHash: `0x${"33".repeat(32)}`, acceptedTransactionTypes: [0], acceptedBatchVersions: [1], latestBlock: 5n, latestBlockHash: `0x${"11".repeat(32)}` };
   const node = { status: async () => status } as unknown as PcashNodeClient;
   const quote = { carrier: "calldata", balanceWei: 100n, maximumCostWei: 1n };
@@ -40,7 +40,7 @@ it("carries companion mempool entries after the caller's entry and reports what 
   const data = sizeClassFiller();
   const arena = randomArena(0);
   const outputData = [data, data, data, data, data];
-  const entryWith = (nonce: bigint) => encodePrivateValueTransaction({ publicInputs: [1n, nonce, ...Array(9).fill(0n), deliveryCommitment(outputData, arena), 0n, 0n, 0n, 1n, 0n, 0n], proof: new Uint8Array(WIRE_PROOF_BYTES), outputData, arena });
+  const entryWith = (nonce: bigint) => encodePrivateValueTransaction({ publicInputs: [1n, nonce, ...Array(9).fill(0n), deliveryCommitment(outputData, arena), 0n, 0n, 0n, 1n, 0n, 0n, 0n], proof: new Uint8Array(WIRE_PROOF_BYTES), outputData, arena });
   const [entry, first, second] = [entryWith(1n), entryWith(2n), entryWith(3n)];
   const status = { pcashChainId: 1, genesisHash: `0x${"11".repeat(32)}`, l1ChainId: 1n, inboxAddress: `0x${"22".repeat(20)}`, genesisL1Block: 0n, genesisL1BlockHash: `0x${"33".repeat(32)}`, acceptedTransactionTypes: [0], acceptedBatchVersions: [1], latestBlock: 5n, latestBlockHash: `0x${"11".repeat(32)}` };
   const node = { status: async () => status } as unknown as PcashNodeClient;
@@ -68,13 +68,13 @@ function independentEntry(nonce: bigint, nullifierNonce = nonce, contract = fals
   const section = {
     publicInputs: [1n, 0n, ...Array.from({ length: 4 }, (_, index) => nullifierNonce * 10n + BigInt(index)),
       ...Array.from({ length: 5 }, (_, index) => nonce * 100n + BigInt(index)),
-      deliveryCommitment(outputData, arena), 1n, 0n, 0n, 100n, 0n, 0n],
+      deliveryCommitment(outputData, arena), 1n, 0n, 0n, 100n, 0n, 0n, 0n],
     outputData,
     arena,
   };
   // publishesNkRoot ‖ material ‖ receive-key mode ‖ function count.
   return contract
-    ? encodeContractAccountCreation(1n, new Uint8Array(1 + 32 + 1 + 1), { mode: "sponsored", section: { ...section, proof: new Uint8Array(WIRE_PROOF_BYTES) } })
+    ? encodePrivateValueTransaction({ ...section, proof: new Uint8Array(WIRE_PROOF_BYTES), accountCreation: { kind: "contract", body: new Uint8Array(35) } })
     : encodePrivateValueTransaction({ ...section, proof: new Uint8Array(WIRE_PROOF_BYTES) });
 }
 function directHarness() {
@@ -263,7 +263,7 @@ it("takes only private-value transactions from the node's optional items", async
 it("takes only private-value companions after dependent required transactions", async () => {
   const { status, submitter } = directHarness();
   const accepting = { ...status, acceptedTransactionTypes: [0, 1, 2, 3] };
-  const [entry, contract, companion] = [independentEntry(1n), independentEntry(2n, 2n, true), independentEntry(3n)];
+  const [entry, contract, companion] = [independentEntry(1n), unfundedEntry().transactionBytes, independentEntry(3n)];
   const prepared = await prepareTransactionForL1(entry, accepting as never, submitter as unknown as RelaySubmitter, 1n, 0n, "auto", {
     required: [contract],
     companions: { transactions: [directCreation(), companion], collectibleOpenFee: 6n, collectibleOpenFees: [5n, 1n] },

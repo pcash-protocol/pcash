@@ -1,3 +1,4 @@
+import type { AccountCreationAttachment } from "@pcash/sdk/protocol";
 // Token escrow release. A token escrow pays out in full and never funds a
 // network fee. Its transfer role carries no native value: self-publication or a
 // zero-fee open route. Its sponsored role has the claimant's or seller's own
@@ -86,6 +87,7 @@ export function buildUnsponsoredTokenEscrowRelease(release: TokenEscrowRelease &
   validUntilTimestamp: bigint;
   /** The carrier context the release requires; a claim names the router's payment event. */
   carrierContextHash?: bigint;
+  accountCreation?: AccountCreationAttachment;
   dummyInputSeed: bigint;
 }): AssetActionBuild {
   const side = tokenEscrowReleaseSide(release);
@@ -110,6 +112,7 @@ export function buildUnsponsoredTokenEscrowRelease(release: TokenEscrowRelease &
     ...(release.notBeforeTimestamp === undefined ? {} : { notBeforeTimestamp: release.notBeforeTimestamp }),
     validUntilTimestamp: release.validUntilTimestamp,
     ...(release.carrierContextHash === undefined ? {} : { carrierContextHash: release.carrierContextHash }),
+    ...(release.accountCreation === undefined ? {} : { accountCreation: release.accountCreation }),
     dummyInputSeed: release.dummyInputSeed,
   });
 }

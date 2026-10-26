@@ -10,25 +10,21 @@ import {
 describe("Marketplace recovery presentation", () => {
   it("names submitted trades waiting on the network Pending, never checking or confirming", () => {
     const item = (role: string, phase: string) => ({ role, phase, status: "pending", publication: {} }) as MarketplaceActivityItem;
-    expect(marketplaceActivityStatus(item("seller", "contract-submitted"), "checking")).toBe("Pending");
-    expect(marketplaceActivityStatus(item("seller", "contract-submitted"), "unavailable")).toBe("Pending");
+    expect(marketplaceActivityStatus(item("seller", "funding-submitted"), "checking")).toBe("Pending");
+    expect(marketplaceActivityStatus(item("seller", "funding-submitted"), "unavailable")).toBe("Pending");
     expect(marketplaceActivityStatus(item("buyer", "payment-pending"))).toBe("Pending");
     expect(marketplaceActivityStatus(item("buyer", "claim-accepted"))).toBe("Pending");
     expect(marketplaceActivityStatus(item("seller", "reclaim-prepared"), "confirmed")).toBe("Pending");
     expect(marketplaceActivityStatus(item("seller", "reclaim-accepted"))).toBe("Pending");
-    expect(marketplaceActivityStatus(item("seller", "contract-submitted"), "mempool")).toBe("Not posted yet");
-    expect(marketplaceActivityStatus(item("seller", "contract-submitted"), "ethereum")).toBe("Posted, waiting for inclusion");
+    expect(marketplaceActivityStatus(item("seller", "funding-submitted"), "mempool")).toBe("Not posted yet");
+    expect(marketplaceActivityStatus(item("seller", "funding-submitted"), "ethereum")).toBe("Posted, waiting for inclusion");
   });
 
-  it("recovers a missing contract without offering publication or another funding", () => {
-    const item = { role: "seller", phase: "contract-missing", status: "action-required" } as MarketplaceActivityItem;
-    expect(marketplaceActivityAction(item)).toBe("restore-contract");
-    expect(marketplaceActionLabel(item, "restore-contract")).toBe("Recover escrow contract");
-    expect(marketplaceNeedsYou(item, new Map())).toBe(true);
-    expect(marketplaceActivityAction({ ...item, phase: "recovery-unavailable" })).toBe("refresh");
-    expect(marketplaceNeedsYou({ ...item, phase: "recovery-unavailable" }, new Map())).toBe(false);
+  it("waits for a restored escrow to reappear without funding it again", () => {
+    const item = { role: "seller", phase: "recovery-unavailable", status: "pending" } as MarketplaceActivityItem;
+    expect(marketplaceActivityAction(item)).toBe("refresh");
+    expect(marketplaceNeedsYou(item, new Map())).toBe(false);
   });
-
   it("checks an ambiguous payment instead of offering another payment", () => {
     const item = {
       role: "buyer",
@@ -73,7 +69,7 @@ describe("Marketplace recovery presentation", () => {
     const open = { terms: { id: "1", deadlineT: String(2n ** 40n) }, escrow: { amount: "0x1", leafIndex: 1, noteSecret: "0x2" } };
     const item = (fields: Partial<MarketplaceActivityItem>) => ({ role: "seller", publication: open, ...fields }) as MarketplaceActivityItem;
     const none = new Map();
-    for (const phase of ["draft", "contract-submitted", "funding-submitted", "finalizing", "publication-failed", "reclaim-prepared", "reclaim-failed"] as const)
+    for (const phase of ["draft", "funding-submitted", "finalizing", "publication-failed", "reclaim-prepared", "reclaim-failed"] as const)
       expect(marketplaceNeedsYou(item({ phase, status: "pending" }), none), phase).toBe(true);
     for (const phase of ["selected", "payment-pending", "payment-ambiguous", "paid"] as const)
       expect(marketplaceNeedsYou(item({ role: "buyer", phase, status: "pending" }), none), phase).toBe(true);

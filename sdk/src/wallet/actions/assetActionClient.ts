@@ -291,13 +291,10 @@ export async function submitPreparedAssetAction<Prepared, Output>(params: Settle
   callbacks?: DurableSubmissionCallbacks;
   /** Bulk manifests retain exact retry state even after a definite non-broadcast. */
   retainForRetry?: boolean;
-  /** The receipt kind the transaction settles as; a sponsored contract creation journals through this path too. */
-  receiptKind?: "privateValue" | "contractAccount";
   /** Creation material, journaled in the same write as the action so it is durable before any broadcast. */
   createdAsset?: { assetId: bigint; definition: AssetDefinition; assetSecret: bigint };
 }): Promise<AssetActionSubmissionResult<Output>> {
   const pending = params.preparedAction.pending;
-  const receiptKind = params.receiptKind ?? "privateValue";
   assertPendingAssetActionBelongsToWallet(params.data, pending);
   const existing = params.data.pendingAssetActions?.find(
     (action) => action.contentHash.toLowerCase() === pending.contentHash.toLowerCase(),
@@ -310,7 +307,6 @@ export async function submitPreparedAssetAction<Prepared, Output>(params: Settle
       status: params.status,
       pending: existing,
       submission: params.submission,
-      receiptKind,
       ...(params.callbacks === undefined ? {} : { callbacks: params.callbacks }),
       ...settlePollOptions(params),
     });
@@ -323,7 +319,7 @@ export async function submitPreparedAssetAction<Prepared, Output>(params: Settle
   const outcome = await submitDurableAction({
     ...params,
     reservation,
-    action: { contentHash: pending.contentHash, transactionHex: pending.transactionHex, kind: "assetAction", mempoolKind: receiptKind },
+    action: { contentHash: pending.contentHash, transactionHex: pending.transactionHex, kind: "assetAction" },
     state: {
       retry: false,
       prepared: params.preparedSubmission,
@@ -342,7 +338,7 @@ export async function submitPreparedAssetAction<Prepared, Output>(params: Settle
         if (insertedAsset) removeWalletAsset(params.data, params.createdAsset!.assetId);
       },
     },
-    isAccepted: () => acceptedReceiptOfKind(params.node, pending.contentHash, receiptKind, "pending asset action"),
+    isAccepted: () => acceptedReceiptOfKind(params.node, pending.contentHash, "privateValue", "pending asset action"),
     isPending: (current) => (current.pendingAssetActions ?? [])
       .some((action) => action.contentHash.toLowerCase() === pending.contentHash.toLowerCase()),
   });
@@ -359,10 +355,8 @@ export async function submitPendingAssetAction<Prepared, Output>(params: {
   pending: PendingAssetAction;
   submission: DurableSubmissionAdapter<Prepared, Output>;
   callbacks?: DurableSubmissionCallbacks;
-  receiptKind?: "privateValue" | "contractAccount";
 }): Promise<AssetActionSubmissionResult<Output>> {
   assertPendingAssetActionBelongsToWallet(params.data, params.pending);
-  const receiptKind = params.receiptKind ?? "privateValue";
   let canonicalMiss: unknown;
   try {
     await validateCurrentAssetInputs(params.store, params.pending);
@@ -380,7 +374,6 @@ export async function submitPendingAssetAction<Prepared, Output>(params: {
       contentHash: params.pending.contentHash,
       transactionHex: params.pending.transactionHex,
       kind: "assetAction",
-      mempoolKind: receiptKind,
     },
     state: {
       retry: true,
@@ -390,7 +383,7 @@ export async function submitPendingAssetAction<Prepared, Output>(params: {
         },
       }),
     },
-    isAccepted: () => acceptedReceiptOfKind(params.node, params.pending.contentHash, receiptKind, "pending asset action"),
+    isAccepted: () => acceptedReceiptOfKind(params.node, params.pending.contentHash, "privateValue", "pending asset action"),
     isPending: (current) => (current.pendingAssetActions ?? [])
       .some((action) => action.contentHash.toLowerCase() === params.pending.contentHash.toLowerCase()),
   });

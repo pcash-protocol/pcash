@@ -34,7 +34,6 @@ fn release_proofs_have_each_layout_pinned_size() {
             SectionLayout::PrivateValue(PrivateValueShape::L),
         ),
         ("user_account_update", SectionLayout::UserAccountUpdate),
-        ("contract_creation", SectionLayout::ContractAccountCreation),
     ] {
         let proof = fs::read(bundle.join("known-answers").join(known_name).join("proof")).unwrap();
         assert_eq!(proof.len(), layout.proof_bytes(), "{known_name}");
@@ -72,6 +71,7 @@ fn check_private_value_proof(shape: PrivateValueShape) {
         // A proof states the carrier context it requires; no other one
         // verifies.
         profile.carrier_context_hash_offset,
+        profile.public_inputs - 1, // accountCreationCommitment
     ] {
         let mut changed = inputs.clone();
         changed[destination * 32..(destination + 1) * 32].fill(0);
@@ -136,8 +136,10 @@ fn real_event_proof_binds_the_public_event_commitment() {
     let verifier = BbProcessVerifier::from_env().unwrap();
     assert!(verifier.verify(&vk, &proof, &inputs).unwrap());
     let mut changed = inputs.clone();
-    // The event commitment is the final private-value public input.
-    let last = changed.len() - 1;
-    changed[last] ^= 1;
+    let event_word = PrivateValueShape::S
+        .profile()
+        .account_creation_commitment_offset
+        - 1;
+    changed[event_word * 32 + 31] ^= 1;
     assert!(!verifier.verify(&vk, &proof, &changed).unwrap());
 }

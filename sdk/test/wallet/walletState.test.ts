@@ -71,6 +71,7 @@ describe("wallet inventory", () => {
     const pending = {
       contentHash: hash(0xaa),
       transactionHex: "0x0201",
+      publication: "self" as const,
       address: `0x${"12".repeat(20)}`,
       pcashChainId: PCASH_CHAIN_ID.toString(),
       pcashGenesisHash: NETWORK.genesisHash,

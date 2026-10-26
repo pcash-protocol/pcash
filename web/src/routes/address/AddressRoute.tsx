@@ -1,5 +1,4 @@
 import { RelativeTime } from "../../components/RelativeTime.tsx";
-import { useCachedAccountHistory } from "../../lib/useCachedAccountHistory.ts";
 import { PcashAmount } from "../../components/PcashAmount.tsx";
 import { useWallet } from "../../lib/WalletProvider.tsx";
 import { NAMES_OFF_MESSAGE } from "../../names/NameResolutionSession.ts";
@@ -100,17 +99,14 @@ function AddressPage(props: AddressIdentity) {
 
 function UserAddressPage({ address, identityName, avatar, accountPathname, accountRead }: AddressIdentity & { accountRead: { value: AccountSnapshot | undefined; error: string | undefined } }) {
   const { status } = useReadyExplorer();
-  const history = useCachedAccountHistory(address);
-  const { profile, connectedAccount, phase, signIn } = useWallet();
-  const signedIn = profile?.address === BigInt(address);
-  const connected = connectedAccount?.toLowerCase() === address.toLowerCase();
+  const { profile, funds, connectedAccount, phase, signIn } = useWallet();
+  const owner = connectedAccount?.toLowerCase() === address.toLowerCase();
+  const signedIn = owner && profile !== undefined;
   const location = useLocation();
   const panel = useWalletPanel();
   const account = accountRead.value?.account;
   // Canonical account state; the derived index's copy of the key may lag.
   const receivable = account != null && BigInt(account.receiveKeyHash) !== 0n;
-  // A saved sign-in shows the owner's private balance without a connection.
-  const owner = connected || history.phase === "ready";
   // A name is resolved again when the payment is reviewed; the page's lookup may come from cache.
   const payee = isAddressPath(accountPathname) ? address : identityName ?? address;
 
@@ -122,9 +118,14 @@ function UserAddressPage({ address, identityName, avatar, accountPathname, accou
       {account !== undefined && <span className={styles.registration}><span className={styles.statusDot} aria-hidden="true" />{account === null ? "Not registered" : "Account registered"}</span>}
     </header>
     <section aria-label="PCASH balance" className={styles.balanceLine}>
-      <div><p className={styles.balanceLabel}>Balance</p><div className={styles.balance} data-testid="wallet-balance">{history.phase === "locked" ? <span className={styles.hidden} aria-label="Private">*****</span> : history.funds === undefined ? "—" : <PcashAmount value={history.funds.total} rounding="down" />}</div></div>
-      {account !== undefined && <div className={styles.actions}>{!receivable ? account === null && connected
+      <div><p className={styles.balanceLabel}>Balance</p><div className={styles.balance} data-testid="wallet-balance">{!signedIn ? <span className={styles.hidden} aria-label="Private">*****</span> : funds === undefined ? "—" : <PcashAmount value={funds.total} rounding="down" />}</div></div>
+      {account !== undefined && <div className={styles.actions}>{!receivable ? account === null && owner
         ? <button type="button" className="button primary" onClick={() => panel.openOverview()}>Set up PCASH</button>
+        : account === null ? <>
+          <p className={styles.notReceivable}>This address hasn't set up PCASH yet.</p>
+          {/* A payment to it is a direct send, delivered by a link the sender shares. */}
+          <button type="button" className="button primary" onClick={() => panel.openSendTo(payee)}>Send</button>
+        </>
         : <p className={styles.notReceivable}>This address hasn't set up PCASH yet.</p>
         : owner ? <button type="button" className="button primary" onClick={() => panel.openReceive(address)}>Receive</button>
         // The wallet opens Send once it is ready, after any connect, sign-in, or setup the visitor still needs.
@@ -135,7 +136,7 @@ function UserAddressPage({ address, identityName, avatar, accountPathname, accou
       <section className="panel"><Activity /></section>
     </> : <>
       <h2 className={styles.sectionHeading}>Account history</h2>
-      {connected && <p className={styles.signIn}>Sign in to see your activity. {phase === "sign-in-required"
+      {owner && <p className={styles.signIn}>Sign in to see your activity. {phase === "sign-in-required"
         ? <button type="button" className="button" onClick={() => void signIn().catch(() => undefined)}>Sign in</button>
         : <Link to={{ pathname: location.pathname, search: location.search, hash: "#wallet" }} preventScrollReset>Open your wallet</Link>}</p>}
       <AccountHistory key={address} address={address} />

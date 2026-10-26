@@ -537,58 +537,6 @@
       ]
     },
     {
-      "package": "contract_creation_kernel",
-      "path": "protocol/contract_creation/kernel",
-      "role": "kernel",
-      "publicInputs": 0,
-      "provingRuntimes": [
-        "native",
-        "browser"
-      ],
-      "srsPoints": 262144,
-      "dependencies": [
-        "pcash_protocol"
-      ],
-      "pin": "CONTRACT_CREATION_KERNEL_VK_HASH",
-      "links": [
-        {
-          "callData": 1,
-          "folds": "application"
-        },
-        {
-          "callData": 2,
-          "folds": "application"
-        }
-      ]
-    },
-    {
-      "package": "contract_creation_hiding_kernel",
-      "path": "protocol/contract_creation/hiding_kernel",
-      "role": "hiding",
-      "publicInputs": {
-        "profile": "S",
-        "extra": 1
-      },
-      "provingRuntimes": [
-        "native",
-        "browser"
-      ],
-      "srsPoints": 262144,
-      "dependencies": [
-        "pcash_protocol"
-      ],
-      "profile": "S",
-      "wrapper": "contract_creation_hiding_kernel",
-      "links": [
-        {
-          "callData": 0,
-          "folds": [
-            "contract_creation_kernel"
-          ]
-        }
-      ]
-    },
-    {
       "package": "event_sender_authentication",
       "path": "fixtures/sender_authentication",
       "role": "application",

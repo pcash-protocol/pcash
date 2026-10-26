@@ -81,6 +81,10 @@ export function AccountSetupPanel() {
     <button type="button" className="button primary" disabled={working} onClick={() => void action().catch(() => undefined)}>
       {working ? pending ? "Checking status…" : setup ? "Setting up…" : "Signing in…" : label}
     </button>
+    {previewing && !pending && !working && <>
+      <button type="button" className="button" onClick={() => void wallet.setupAccountWithoutEth().catch(() => undefined)}>Set up without ETH</button>
+      <p className={styles.custody}>A relayer receives the mining reward for publishing your setup. Publication may take time.</p>
+    </>}
     {confirming && <ConfirmInWallet />}
     {/* Once the user acts, progress replaces the explanation. */}
     {!pending && !reconnect && !working && <details className={styles.details}>

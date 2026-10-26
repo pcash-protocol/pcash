@@ -10,12 +10,13 @@ import { privateKeyPcashActionSigner } from "@pcash/sdk/eip712";
 import { defaultUserAccountRuleSet } from "@pcash/sdk/rules";
 import {
   assetDefinitionSchema,
+  buildContractBody,
+  functionSelector,
   assetDefinitionAssetId,
   decodePayload,
   decryptEnvelope,
   generateMlKemKeyPair,
   type MlKemKeyPair,
-  encodePrivateValueTransaction,
   fullOutputCommitment,
   WIRE_PROOF_BYTES,
   type AssetDefinition,
@@ -78,8 +79,7 @@ function fixture(notes: { assetId: bigint; amount: bigint }[], options: {
   const prover = { shapes: [0] as const, proveAndEncode: async (build: AssetActionBuild, authorization: { packageName: string }) => {
     proofs.push({ build, packageName: authorization.packageName });
     await options.beforeProve?.();
-    return encodePrivateValueTransaction({ shape: build.shape, publicInputs: build.publicInputs, outputData: build.outputData, arena: build.arena,
-      proof: new Uint8Array(WIRE_PROOF_BYTES) });
+    return build.encodeTransaction(new Uint8Array(WIRE_PROOF_BYTES));
   } };
   const entries: Uint8Array[] = [];
   const submission = { mode: "mempool" as const, preflight: async () => null,
@@ -87,7 +87,7 @@ function fixture(notes: { assetId: bigint; amount: bigint }[], options: {
       entries.push(entry);
       return { accepted: false, queued: true, output: null };
     } };
-  const run = (intent: Pick<AssetTransferIntent, "outputs" | "burnAmount" | "retryContentHash" | "data"> & { submission?: DurableSubmissionAdapter<null, null> }) => runAssetTransferClient({
+  const run = (intent: Pick<AssetTransferIntent, "outputs" | "burnAmount" | "retryContentHash" | "data" | "accountCreation"> & { submission?: DurableSubmissionAdapter<null, null> }) => runAssetTransferClient({
     assetId, openFeeAmount: 3n, node, store, wallet,
     signer: { address: signer.address, signTypedData: async request => {
       await options.beforeSign?.();
@@ -175,6 +175,7 @@ describe("asset transfer client", () => {
     expect(senderRegionOf(build, network.pcashChainId, wallet.outgoingKey)).toEqual({
       sentEnvelopes: [],
       sentOpenings: [{ slot: 0, recipientAddress: wallet.address, assetId, amount: 40n, noteSecret: 123n }],
+      directSendOpenings: [],
       records: orderedRecords([...senderRecords, assetDefinitionSchema.encode(definition)]),
     });
     await f.run({ outputs, data: { self: senderRecords }, retryContentHash: first.contentHash });
@@ -280,6 +281,20 @@ describe("asset transfer client", () => {
     expect(build.outputNoteSecrets[1]).toBe(0x77n);
     expect(build.outputAmounts[1]).toBe(90n);
     expect(delivered(build, 1)).toBeNull();
+  });
+
+  it("matches an attached token payment from its retained bytes", async () => {
+    const f = fixture([{ assetId, amount: 100n }, { assetId: 0n, amount: 10n }]);
+    const body = (nkRoot: bigint) => buildContractBody({ nullifierKey: { publishesNkRoot: true, nkRoot },
+      functions: [{ selector: functionSelector(0), applicationVkHash: 71n, configurationCommitment: 81n }] }).body;
+    const accountCreation = { kind: "contract" as const, body: body(51n) };
+    const outputs = [{ to: code, amount: 40n }];
+    const first = await f.run({ outputs, accountCreation });
+    const retry = await f.run({ outputs, accountCreation: { ...accountCreation, body: accountCreation.body.slice() }, retryContentHash: first.contentHash });
+    expect(retry.transactionHex).toBe(first.transactionHex);
+    expect(f.proofs).toHaveLength(1);
+    await expect(f.run({ outputs, retryContentHash: first.contentHash })).rejects.toThrow(/reviewed terms/);
+    await expect(f.run({ outputs, accountCreation: { kind: "contract", body: body(52n) }, retryContentHash: first.contentHash })).rejects.toThrow(/reviewed terms/);
   });
 
   it("resumes the exact journaled bytes by retryContentHash and refuses different terms", async () => {

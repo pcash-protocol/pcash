@@ -8,6 +8,9 @@ import { derivePcashProfileFromPrivateKey } from "../../src/wallet/externalIdent
 import { defaultUserAccountRuleSet } from "@pcash/sdk/rules";
 import {
   encodeRecords,
+  buildContractBody,
+  functionSelector,
+  decodeTransaction,
   assetDefinitionSchema,
   sentOpeningsSchema,
   sentEnvelopesSchema,
@@ -20,7 +23,6 @@ import {
   controlledIssuanceOpening,
   decryptEnvelope,
   type AssetDefinition,
-  encodePrivateValueTransaction,
   fullOutputCommitment,
   WIRE_PROOF_BYTES,
   noteBodyCommitment,
@@ -267,8 +269,7 @@ function fixture(amounts: bigint[] = [100n, 100n], assetId = 0n, nativeAmounts: 
   const prover = { shapes: [0, 1] as const, proveAndEncode: async (build: import("@pcash/sdk/builders").AssetActionBuild) => {
     proofs++;
     builds.push(build);
-    return encodePrivateValueTransaction({ shape: build.shape, publicInputs: build.publicInputs, outputData: build.outputData, arena: build.arena,
-      proof: new Uint8Array(build.shape === 1 ? WIRE_PROOF_BYTES : WIRE_PROOF_BYTES) });
+    return build.encodeTransaction(new Uint8Array(WIRE_PROOF_BYTES));
   } };
   const setReceiveKey = async (pair: MlKemKeyPair | null) => {
     await store.transaction(current => {
@@ -283,6 +284,36 @@ function fixture(amounts: bigint[] = [100n, 100n], assetId = 0n, nativeAmounts: 
   };
   return { store, node, prover, status, chain, boundary: recent.boundary, proofs: () => proofs, builds, setReceiveKey };
 }
+
+describe("bulk account creation attachments", () => {
+  it("retains the body in every independent chunk and exact retry", async () => {
+    const f = fixture([100n, 100n]);
+    const contract = buildContractBody({ nullifierKey: { publishesNkRoot: true, nkRoot: 71n },
+      functions: [{ selector: functionSelector(0), applicationVkHash: 72n, configurationCommitment: 73n }] });
+    const accountCreation = { kind: "contract" as const, body: contract.body };
+    const job = await startBulkJob({ ...f, wallet, chainId: network.pcashChainId, kind: "payment", shape: 0,
+      accountCreation, recipients: Array.from({ length: 6 }, (_, i) => ({ to: addressHex(contract.address), amount: 1n, noteSecret: BigInt(i + 1) })),
+      openFeeAmount: 0n, maxTransactions: 2 });
+    const entries: Uint8Array[] = [];
+    const submission = { mode: "mempool" as const, preflight: async () => null,
+      submit: async ({ transactionBytes }: { transactionBytes: Uint8Array }) => {
+        entries.push(transactionBytes); return { accepted: false, queued: true, output: null };
+      } };
+    const params = { ...f, jobId: job.jobId, wallet, signer, chainId: network.pcashChainId, submission };
+    await runBulkJobStep(params);
+    await runBulkJobStep({ ...params, chunkIndex: 1 });
+    await runBulkJobStep({ ...params, chunkIndex: 0 });
+    expect(f.proofs()).toBe(2);
+    expect(entries[2]).toEqual(entries[0]);
+    for (const entry of entries) {
+      const decoded = decodeTransaction(entry);
+      expect(decoded.kind).toBe(0);
+      if (decoded.kind !== 0) throw new Error("expected a value transaction");
+      expect(decoded.accountCreation).toEqual(accountCreation);
+    }
+    expect((await f.store.load())!.bulkJobs![0]!.accountCreation).toEqual({ kind: "contract", body: toHex(contract.body) });
+  });
+});
 
 describe("bulk job self delivery", () => {
   it("refreshes a later bare-address self chunk after rotation while preserving journaled bytes after CLEAR", async () => {
@@ -1045,7 +1076,7 @@ describe("durable bulk job execution (mock proofs)", () => {
     const params = { ...f, jobId: job.jobId, wallet, signer, chainId: network.pcashChainId, submission };
     await runBulkJobStep(params);
     const pending = (await f.store.load())!.bulkJobs![0]!.chunks[0]!.action;
-    const receipt: ReceiptResult = { contentHash: pending.contentHash, transactionId: bytes32Hex(500n), outcome: "succeeded", kind: "privateValue", fundingMode: null,
+    const receipt: ReceiptResult = { contentHash: pending.contentHash, transactionId: bytes32Hex(500n), outcome: "succeeded", kind: "privateValue", accountCreation: 0 as const,
       failureDetail: null, l1Sender: `0x${"11".repeat(20)}`, issuanceOwnerCommitment: null, settledOpenFeeAmount: 0n, settledIssuanceAmount: 0n, outputsAdded: 5n, account: null,
       inclusion: { l1BlockNumber: 1n, l1BlockHash: bytes32Hex(1n), l1TransactionIndex: 0n, l1TransactionHash: bytes32Hex(2n), batchItemIndex: 0n }, outputLeafStart: 2n,
       nullifiers: pending.inputs.map(input => input.nullifier) };

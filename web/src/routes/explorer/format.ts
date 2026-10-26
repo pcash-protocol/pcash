@@ -4,7 +4,6 @@ import type {
   ReceiptResult,
   TransactionOutcome,
 } from "@pcash/sdk/clients";
-import type { ContractFundingMode } from "@pcash/sdk/protocol";
 
 /** Truncated hex for a table cell. Full values live on detail pages. */
 export function shortHex(value: string, head = 10, tail = 8): string {
@@ -57,11 +56,6 @@ export function formatKind(kind: string): string {
   }
 }
 
-/** How a contract creation was funded. */
-export function formatFundingMode(mode: ContractFundingMode): string {
-  return mode === "sponsored" ? "Sponsored" : "Unfunded";
-}
-
 /** Lists name only whether a transaction failed; the reason is on its page. */
 export function outcomeLabel(outcome: TransactionOutcome): "Succeeded" | "Failed" {
   return outcome === "succeeded" ? "Succeeded" : "Failed";
@@ -80,6 +74,7 @@ const FAILURE_REASONS: Record<Exclude<TransactionOutcome, "succeeded">, string> 
   accountCapacity: "The chain had no room left for a new account.",
   invalidAccountSignature: "The account signature was malformed or did not recover a signer.",
   accountNotFound: "The account this transaction updates does not exist.",
+  accountCreationMismatch: "The attached creation does not match the existing account.",
   accountAlreadyExists: "An account already exists at this address.",
   accountRevisionExhausted: "The account cannot be updated any further.",
   wrongAccountKind: "This transaction updates a contract as if it were a user account.",

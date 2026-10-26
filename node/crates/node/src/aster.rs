@@ -23,7 +23,3 @@ pub(crate) const ASTER_USER_ACCOUNT_UPDATE_HIDING_KERNEL_VK: &[u8] = include_byt
     env!("PCASH_CIRCUIT_BUNDLE"),
     "/vks/user_account_update_hiding_kernel.chonk.vk"
 ));
-pub(crate) const ASTER_CONTRACT_CREATION_HIDING_KERNEL_VK: &[u8] = include_bytes!(concat!(
-    env!("PCASH_CIRCUIT_BUNDLE"),
-    "/vks/contract_creation_hiding_kernel.chonk.vk"
-));

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { ReceiptResult, TransactionSummaryResult } from "@pcash/sdk/clients";
-import type { WalletNativeActivityEntry, WalletReceivedMessage } from "@pcash/sdk/wallet";
+import type { WalletDirectSend, WalletNativeActivityEntry, WalletReceivedMessage } from "@pcash/sdk/wallet";
 import { addressHex } from "@pcash/sdk/utils";
 import { marketplaceBuyerKey, publicationIdentity, type OfferPublication, type StoredOffer } from "@pcash/marketplace/app";
 import { EthereumAddress } from "../../components/EthereumAddress.tsx";
@@ -59,6 +59,8 @@ export interface ActivityRow {
   state: ActivityState;
   href: string;
   payment?: WalletPaymentActivity;
+  /** A direct send: its link, and whether its recipient has set up PCASH, from the public account set. */
+  directSend?: { contentHash: string; recipientSetUp: boolean };
 }
 
 export interface ActivitySources {
@@ -79,6 +81,8 @@ export interface ActivitySources {
   receipts: ReadonlyMap<string, ReceiptResult | null>;
   /** Content hashes the wallet still tracks as pending. */
   pendingContentHashes: ReadonlySet<string>;
+  /** Direct sends this wallet paid, by funding content hash. */
+  directSends: ReadonlyMap<string, WalletDirectSend>;
 }
 
 /** Content hashes whose receipts the feed needs: web-recorded actions and failed payments. */
@@ -90,7 +94,7 @@ export function activityReceiptHashes(sources: Pick<ActivitySources, "owner" | "
     ...sources.offers.flatMap((offer) => {
       const buy = offer.buys?.[buyer];
       return [
-        ...ownListing(offer, sources.owner) ? [offer.publish?.l2ContractContentHash, offer.publish?.fundingContentHash, offer.reclaim?.contentHash] : [],
+        ...ownListing(offer, sources.owner) ? [offer.publish?.fundingContentHash, offer.reclaim?.contentHash] : [],
         buy?.txHash === undefined ? undefined : buy.claimContentHash,
       ];
     }),
@@ -172,6 +176,10 @@ export function activityRows(sources: ActivitySources, nowSeconds = BigInt(Math.
     claimed.add(key);
     return canonical.get(key);
   };
+  const directSend = (contentHash: string | null | undefined): Pick<ActivityRow, "directSend"> => {
+    const found = contentHash == null ? undefined : sources.directSends.get(contentHash.toLowerCase());
+    return found === undefined ? {} : { directSend: { contentHash: found.opening.contentHash, recipientSetUp: found.recipientSetUp } };
+  };
   const rejected = (hash: string | undefined) => {
     const found = receipt(hash);
     return found !== undefined && found !== null && found.outcome !== "succeeded";
@@ -207,18 +215,20 @@ export function activityRows(sources: ActivitySources, nowSeconds = BigInt(Math.
         ? state.state !== "complete" ? "Mining" : <>Mined {mined === undefined ? "PCASH" : <PcashAmount value={mined} />}</>
         : sentTitle(payment.amount, payment.recipientAddress),
       ...(note === undefined ? {} : { note }),
+      ...payment.kind === "payment" ? directSend(payment.contentHash) : {},
       state,
       href: transactionPath(transactionReference),
     });
   }
 
   for (const event of sources.accountEvents) {
-    if (event.kind !== "userAccountCreation" && event.kind !== "userAccountUpdate") continue;
+    const created = event.kind === "userAccountCreation" || event.kind === "privateValue" && event.accountCreation === 1;
+    if (!created && event.kind !== "userAccountUpdate") continue;
     claimed.add(event.transactionId.toLowerCase());
     const at = Number(event.timestamp) * 1_000;
     rows.push({
       id: `account:${event.transactionId}`, kind: "setup", at, order: at,
-      title: event.kind === "userAccountCreation" ? "Set up account" : "Updated account",
+      title: created ? "Set up account" : "Updated account",
       state: event.outcome === "succeeded" ? { state: "complete" } : { state: "failed", reason: describeFailure(event.outcome) },
       href: transactionPath(event.transactionId),
     });
@@ -228,28 +238,14 @@ export function activityRows(sources: ActivitySources, nowSeconds = BigInt(Math.
     const own = ownListing(offer, sources.owner);
     const href = (publication: OfferPublication) => offerPath(publication);
     const publish = own ? offer.publish : undefined;
-    if (publish?.l2ContractContentHash !== undefined) {
-      const created = publish.l2ContractAcceptedBlock !== undefined || acceptedTxId(publish.l2ContractContentHash) !== undefined
-        || ["funding-submitted", "finalizing", "funded"].includes(publish.phase);
-      const at = canonicalTime(publish.l2ContractContentHash) ?? offer.savedAt;
-      rows.push({
-        id: `${offer.key}:listed`, kind: "listed", at, order: at, title: <>Listed {listingTerms(offer.pub)}</>,
-        // A created listing whose funding never started is unfinished: its page continues it.
-        state: created && publish.fundingContentHash === undefined && publish.phase !== "funded" ? { state: "pending", detail: "Not funded yet" }
-          : created ? publish.catalogError === undefined ? { state: "complete" } : { state: "failed" }
-          : publish.phase === "failed" || rejected(publish.l2ContractContentHash) ? failure(receipt(publish.l2ContractContentHash))
-            : { state: "pending", contentHash: publish.l2ContractContentHash, submissionUnknown: true },
-        href: href(offer.pub),
-      });
-    }
     if (publish?.fundingContentHash !== undefined) {
       const at = canonicalTime(publish.fundingContentHash) ?? publish.fundingFinalizedAt ?? publish.updatedAt;
       const funded = publish.fundingAcceptedBlock !== undefined || publish.phase === "funded" || acceptedTxId(publish.fundingContentHash) !== undefined;
-      // Funding completes once the funded listing is published for buyers; a failed publication is the listing row's.
-      const published = publish.catalogPublicationId === publicationIdentity(offer.pub) || publish.catalogError !== undefined;
+      const published = publish.catalogPublicationId === publicationIdentity(offer.pub);
       rows.push({
-        id: `${offer.key}:escrow`, kind: "escrow", at, order: at, title: "Funded escrow",
-        state: funded ? published ? { state: "complete" } : { state: "pending", detail: "Not published yet" }
+        id: `${offer.key}:listed`, kind: "listed", at, order: at, title: <>Listed {listingTerms(offer.pub)}</>,
+        state: funded ? publish.catalogError !== undefined ? { state: "failed" }
+          : published ? { state: "complete" } : { state: "pending", detail: "Not published yet" }
           : publish.phase === "failed" || rejected(publish.fundingContentHash) ? failure(receipt(publish.fundingContentHash))
             : { state: "pending", contentHash: publish.fundingContentHash, submissionUnknown: true },
         href: href(offer.pub),
@@ -326,6 +322,7 @@ export function activityRows(sources: ActivitySources, nowSeconds = BigInt(Math.
         : sent.length > 1 ? <>Sent <PcashAmount value={sent.reduce((total, output) => total + output.amount, 0n)} /></>
         : <>{kind === "sent" ? "Sent" : kind === "mined" ? "Mined" : "Received"} <PcashAmount value={entry.amount} /></>,
       ...(note === undefined ? {} : { note }),
+      ...directSend(entry.contentHash),
       state: { state: "complete" },
       href: entry.transactionId === null ? blockPath(entry.blockNumber) : transactionPath(entry.transactionId),
     });

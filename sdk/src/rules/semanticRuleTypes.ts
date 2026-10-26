@@ -7,7 +7,7 @@ const outputFields = (outputs: number): string =>
   Array.from({ length: outputs }, (_, i) => `address out${i}Recipient,uint256 out${i}Amount,uint256 out${i}AssetId`).join(",");
 
 const AUTHORIZATION_FIELDS =
-  ",uint256 openFeeAmount,address issuanceRecipient,uint256 issuanceOwnerCommitment,uint256 relayFeeAmount,uint256 relayFeeOwnerCommitment,uint256 transactionContext,uint64 notBefore,uint64 validUntil)";
+  ",uint256 openFeeAmount,address issuanceRecipient,uint256 issuanceOwnerCommitment,uint256 relayFeeAmount,uint256 relayFeeOwnerCommitment,uint256 accountCreationCommitment,uint256 transactionContext,uint64 notBefore,uint64 validUntil)";
 
 export function batchTransferEip712TypeFor(outputs: number): string {
   return "PcashBatchTransfer(uint256 pcashChainId,uint256 assetId,uint256 assetBurnAmount,"

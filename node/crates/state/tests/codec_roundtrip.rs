@@ -63,7 +63,7 @@ fn assert_frozen<T: Codec + PartialEq + Debug>(value: &T, expected: &[u8]) {
 fn result() -> TransactionResult {
     TransactionResult {
         tx_type: 2,
-        funding_mode: 1,
+        account_creation: 1,
         l1_transaction_index: 3,
         batch_item_index: 2,
         outcome: TransactionOutcome::NullifierAlreadySpent,
@@ -226,11 +226,12 @@ fn transaction_outcomes_encode_their_protocol_discriminant() {
         (TransactionOutcome::EmptyContractFunctionSet, 22),
         (TransactionOutcome::SelectorsNotStrictlyIncreasing, 23),
         (TransactionOutcome::CarrierContextMismatch, 24),
+        (TransactionOutcome::AccountCreationMismatch, 25),
     ] {
         assert_frozen(&outcome, &discriminant.to_be_bytes());
     }
     assert_eq!(
-        TransactionOutcome::decode(&25u16.to_be_bytes()),
+        TransactionOutcome::decode(&26u16.to_be_bytes()),
         Err(DecodeError::Invalid("TransactionOutcome"))
     );
 }
@@ -448,7 +449,7 @@ fn enum_tags_are_frozen() {
         (ItemExclusionReason::UnknownKind, 2),
         (ItemExclusionReason::UnknownPrivateValueShape, 3),
         (ItemExclusionReason::UnknownAuthorizationMode, 4),
-        (ItemExclusionReason::UnknownFundingMode, 5),
+        (ItemExclusionReason::UnknownAccountCreationTag, 5),
         (ItemExclusionReason::UnknownReceiveKeyMode, 6),
         (ItemExclusionReason::UnknownPublishesNkRootFlag, 7),
         (ItemExclusionReason::UnknownYParity, 8),
@@ -456,10 +457,11 @@ fn enum_tags_are_frozen() {
         (ItemExclusionReason::TrailingBytes, 10),
         (ItemExclusionReason::WrongChainId, 11),
         (ItemExclusionReason::DirectModeOutsideInbox, 12),
+        (ItemExclusionReason::DirectCreationAttachment, 13),
     ] {
         assert_frozen(&reason, &[tag]);
     }
-    assert!(ItemExclusionReason::decode(&[13]).is_err());
+    assert!(ItemExclusionReason::decode(&[14]).is_err());
 
     assert_frozen(&AccountField::NullifierKeyCommitment, &[0]);
     assert_frozen(&AccountField::RuleSetCommitment, &[1]);

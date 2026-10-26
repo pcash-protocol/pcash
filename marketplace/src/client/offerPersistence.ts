@@ -37,19 +37,13 @@ export interface BuyRecord {
   claimedAt?: number;
 }
 
-export type PublishPhase = "draft" | "l2-contract-submitted" | "funding-submitted" | "finalizing" | "funded" | "failed";
+export type PublishPhase = "draft" | "funding-submitted" | "finalizing" | "funded" | "failed";
 
 export interface PublishRecord {
   submissionMode?: "fast" | "slow" | "selected";
   phase: PublishPhase;
-  creationOpenFeeBaseUnits?: string;
   fundingOpenFeeBaseUnits?: string;
   privateRelayFeeBaseUnits?: string;
-  l2ContractContentHash?: string;
-  l2ContractTransactionHex?: string;
-  l2ContractAcceptedBlock?: string;
-  l2ContractAcceptedBlockHash?: string;
-  l2ContractFinalizedAt?: number;
   fundingContentHash?: string;
   fundingTransactionHex?: string;
   fundingAcceptedBlock?: string;
@@ -83,8 +77,8 @@ export interface ReclaimRecord {
 }
 
 export interface StoredOffer {
-  /** A recovered escrow was funded before its contract creation landed. */
-  missingContract?: boolean;
+  /** Rebuilt from the seller sender records during wallet sync. */
+  recovered?: true;
   /** The previously recovered funding is absent from the latest completed scan. */
   recoveryUnavailable?: boolean;
   key: string;
@@ -99,7 +93,7 @@ export interface StoredOffer {
 }
 
 export type PublishTxFinality =
-  | { phase: "missing" | "skipped" | "conflicted" }
+  | { phase: "missing" | "skipped" }
   | { phase: "accepted" | "finalized"; acceptedBlock: string; acceptedBlockHash: string };
 
 /** A purchase's claim as the escrow spender shows it: absent, or included and possibly final. */
@@ -241,28 +235,34 @@ export function checkpointFailedPayment(buy: BuyRecord, ...hashes: string[]): Bu
   return next;
 }
 
+/** Clear the exact funding checkpoint the wallet permitted rebuilding. */
+export function resetPublishCheckpoint(current: StoredOffer | null, contentHash: string, now: number): StoredOffer {
+  if (current?.publish?.fundingContentHash !== contentHash || current.publish.fundingFinalizedAt !== undefined) {
+    throw new Error("The saved listing changed. Refresh before continuing.");
+  }
+  const publish = { ...current.publish, phase: "draft" as const, updatedAt: now };
+  delete publish.fundingContentHash;
+  delete publish.fundingTransactionHex;
+  delete publish.fundingAcceptedBlock;
+  delete publish.fundingAcceptedBlockHash;
+  return { ...current, publish };
+}
+
 function reconcilePublishTx(
   publish: PublishRecord,
-  prefix: "l2Contract" | "funding",
   finality: PublishTxFinality | undefined,
   now: number,
 ): void {
   if (finality === undefined) return;
-  const contentHash = `${prefix}ContentHash` as "l2ContractContentHash" | "fundingContentHash";
-  const acceptedBlock = `${prefix}AcceptedBlock` as "l2ContractAcceptedBlock" | "fundingAcceptedBlock";
-  const acceptedBlockHash = `${prefix}AcceptedBlockHash` as "l2ContractAcceptedBlockHash" | "fundingAcceptedBlockHash";
-  const transactionHex = `${prefix}TransactionHex` as "l2ContractTransactionHex" | "fundingTransactionHex";
-  const finalizedAt = `${prefix}FinalizedAt` as "l2ContractFinalizedAt" | "fundingFinalizedAt";
+  const acceptedBlock = "fundingAcceptedBlock";
+  const acceptedBlockHash = "fundingAcceptedBlockHash";
+  const transactionHex = "fundingTransactionHex";
+  const finalizedAt = "fundingFinalizedAt";
 
   if (publish[finalizedAt] !== undefined) return;
   if (!("acceptedBlock" in finality)) {
     delete publish[acceptedBlock];
     delete publish[acceptedBlockHash];
-    // These bytes can never be accepted, so resuming prepares the transaction again.
-    if (finality.phase === "conflicted") {
-      delete publish[contentHash];
-      delete publish[transactionHex];
-    }
     return;
   }
 
@@ -276,25 +276,22 @@ function reconcilePublishTx(
 
 /**
  * Reconcile accepted publication receipts while retaining exact bytes until
- * finality, and forget a transaction whose input another transaction spent at finality.
+ * finality. Only the wallet's rebuild decision permits clearing a failed attempt.
  */
 export function checkpointPublishFinality(
   publish: PublishRecord,
-  finality: { l2Contract?: PublishTxFinality; funding?: PublishTxFinality },
+  finality: { funding?: PublishTxFinality },
   now = Date.now(),
 ): PublishRecord {
   const next = { ...publish };
-  reconcilePublishTx(next, "l2Contract", finality.l2Contract, now);
-  reconcilePublishTx(next, "funding", finality.funding, now);
-  next.phase = next.l2ContractFinalizedAt !== undefined && next.fundingFinalizedAt !== undefined
+  reconcilePublishTx(next, finality.funding, now);
+  next.phase = next.fundingFinalizedAt !== undefined
     ? "funded"
     : next.fundingAcceptedBlock !== undefined
       ? "finalizing"
       : next.fundingContentHash !== undefined
         ? "funding-submitted"
-        : next.l2ContractContentHash !== undefined
-          ? "l2-contract-submitted"
-          : "draft";
+        : "draft";
   if (JSON.stringify(next) === JSON.stringify(publish)) return publish;
   next.updatedAt = now;
   return next;

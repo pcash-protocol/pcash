@@ -56,6 +56,7 @@ import {
   type PendingUserAccountUpdate,
   type WalletNote,
 } from "../noteStore.ts";
+import { directSendsToRecord } from "../directSends.ts";
 import {
   receiveKeyHashHex,
   receiveKeyPairForHash,
@@ -493,7 +494,10 @@ export async function runUserAccountUpdateClient<Prepared, Output>(
           })),
           ...(feeReceiveKey === undefined ? {} : { receiveKey: feeReceiveKey }),
       },
-      ...(params.wallet === undefined ? {} : { sender: { outgoingKey: params.wallet.outgoingKey } }),
+      ...(params.wallet === undefined ? {} : { sender: {
+        outgoingKey: params.wallet.outgoingKey,
+        directSendOpenings: directSendsToRecord(data, params.wallet.address, feeInputNotes),
+      } }),
     };
     let build: UserAccountUpdateBuild;
     if (params.authorizeBuild !== undefined) {

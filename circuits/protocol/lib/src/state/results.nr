@@ -25,7 +25,7 @@ pub struct ResultOpening {
 
 pub struct TransactionResult {
     pub tx_type: Field,
-    pub funding_mode: Field,
+    pub account_creation: Field,
     pub l1_transaction_index: Field,
     pub batch_item_index: Field,
     pub outcome: Field,
@@ -54,7 +54,7 @@ pub fn transaction_result_leaf(result: TransactionResult) -> Field {
     pcash_hash([
         TRANSACTION_RESULT_DOMAIN,
         result.tx_type,
-        result.funding_mode,
+        result.account_creation,
         result.l1_transaction_index,
         result.batch_item_index,
         result.outcome,

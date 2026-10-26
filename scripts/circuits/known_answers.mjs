@@ -8,7 +8,6 @@ export const KNOWN_ANSWERS = [
   { name: "private_value", hidingKernel: "private_value_hiding_kernel", runtime: true },
   { name: "private_value_large", hidingKernel: "private_value_large_hiding_kernel", runtime: true },
   { name: "user_account_update", hidingKernel: "user_account_update_hiding_kernel", runtime: true },
-  { name: "contract_creation", hidingKernel: "contract_creation_hiding_kernel", runtime: true },
   { name: "real_event", hidingKernel: "private_value_hiding_kernel", runtime: false },
   { name: "shared_claim_s", hidingKernel: "private_value_hiding_kernel", runtime: false, transaction: true },
   { name: "shared_claim_l", hidingKernel: "private_value_large_hiding_kernel", runtime: false, transaction: true },

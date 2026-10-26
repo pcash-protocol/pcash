@@ -20,8 +20,8 @@ use crate::params::{
     KIND_USER_ACCOUNT_UPDATE, MAX_TX_BYTES,
 };
 use crate::transaction::{
-    AccountCreationAuthorization, ContractAccountCreation, ParseError, PrivateValueSection,
-    Transaction, UserAccountCreation, UserAccountUpdate,
+    AccountCreationAttachment, AccountCreationAuthorization, ContractAccountCreation, ParseError,
+    PrivateValueSection, Transaction, UserAccountCreation, UserAccountUpdate,
 };
 
 /// Why one item is not admitted.
@@ -52,7 +52,12 @@ impl AdmissionError {
                 ParseError::UnknownAuthorizationMode(_) => {
                     ItemExclusionReason::UnknownAuthorizationMode
                 }
-                ParseError::UnknownFundingMode(_) => ItemExclusionReason::UnknownFundingMode,
+                ParseError::UnknownAccountCreationTag(_) => {
+                    ItemExclusionReason::UnknownAccountCreationTag
+                }
+                ParseError::DirectCreationAttachment => {
+                    ItemExclusionReason::DirectCreationAttachment
+                }
                 ParseError::UnknownReceiveKeyMode(_) => ItemExclusionReason::UnknownReceiveKeyMode,
                 ParseError::UnknownPublishesNkRootFlag(_) => {
                     ItemExclusionReason::UnknownPublishesNkRootFlag
@@ -89,7 +94,7 @@ impl ContractBodyCheck {
 /// reuses: a contract creation carries its body's static validation.
 #[derive(Clone, Debug)]
 pub enum AdmittedTransaction {
-    PrivateValue(PrivateValueSection),
+    PrivateValue(PrivateValueSection, Option<ContractBodyCheck>),
     UserAccountCreation(UserAccountCreation),
     UserAccountUpdate(UserAccountUpdate),
     ContractAccountCreation(ContractAccountCreation, ContractBodyCheck),
@@ -108,7 +113,15 @@ impl AdmittedTransaction {
     /// Attach the static work execution reuses to a decoded transaction.
     fn new(transaction: Transaction) -> Self {
         match transaction {
-            Transaction::PrivateValue(section) => Self::PrivateValue(section),
+            Transaction::PrivateValue(section) => {
+                let check = match section.account_creation() {
+                    Some(AccountCreationAttachment::Contract(body)) => {
+                        Some(ContractBodyCheck(prepare_contract_body(body)))
+                    }
+                    _ => None,
+                };
+                Self::PrivateValue(section, check)
+            }
             Transaction::UserAccountCreation(creation) => Self::UserAccountCreation(creation),
             Transaction::UserAccountUpdate(update) => Self::UserAccountUpdate(update),
             Transaction::ContractAccountCreation(creation) => {
@@ -121,7 +134,7 @@ impl AdmittedTransaction {
     /// The transaction type byte.
     pub fn kind(&self) -> u8 {
         match self {
-            Self::PrivateValue(_) => KIND_PRIVATE_VALUE,
+            Self::PrivateValue(..) => KIND_PRIVATE_VALUE,
             Self::UserAccountCreation(_) => KIND_USER_ACCOUNT_CREATION,
             Self::UserAccountUpdate(_) => KIND_USER_ACCOUNT_UPDATE,
             Self::ContractAccountCreation(..) => KIND_CONTRACT_ACCOUNT_CREATION,
@@ -131,19 +144,10 @@ impl AdmittedTransaction {
     /// The private-value section the transaction carries, if any.
     pub fn section(&self) -> Option<&PrivateValueSection> {
         match self {
-            Self::PrivateValue(section) => Some(section),
+            Self::PrivateValue(section, _) => Some(section),
             Self::UserAccountUpdate(update) => Some(&update.section),
-            Self::ContractAccountCreation(creation, _) => creation.section(),
+            Self::ContractAccountCreation(..) => None,
             Self::UserAccountCreation(_) => None,
-        }
-    }
-
-    /// A contract-account creation's funding-mode byte; zero for every
-    /// other type.
-    pub fn funding_mode(&self) -> u8 {
-        match self {
-            Self::ContractAccountCreation(creation, _) => creation.funding.mode() as u8,
-            _ => 0,
         }
     }
 }
@@ -189,7 +193,7 @@ pub fn admit(
 mod tests {
     use super::*;
     use crate::params::{ForkActivation, BASE_BATCH_VERSIONS};
-    use crate::transaction::{ContractBody, ContractFunction, ContractFunding};
+    use crate::transaction::{ContractBody, ContractFunction};
     use pcash_state::{fr_from_canonical_bytes, CircuitWord};
 
     const CHAIN: u32 = 7;
@@ -198,7 +202,7 @@ mod tests {
     /// Launch rules plus a fork at [`RETIRED_AT`] that retires contract
     /// creation.
     fn rules() -> ProtocolRules {
-        ProtocolRules::new([vec![], vec![]], vec![], vec![]).with_fork(ForkActivation {
+        ProtocolRules::new([vec![], vec![]], vec![]).with_fork(ForkActivation {
             name: "retire contract creation",
             activation_timestamp: RETIRED_AT,
             accepted_transaction_types: vec![
@@ -214,10 +218,8 @@ mod tests {
     fn unfunded(functions: Vec<ContractFunction>) -> Vec<u8> {
         Transaction::ContractAccountCreation(ContractAccountCreation {
             body: ContractBody::new(false, CircuitWord::repeat_byte(1), None, functions).unwrap(),
-            funding: ContractFunding::Unfunded {
-                recent_pcash_block_hash: CircuitWord::repeat_byte(2),
-                valid_until_timestamp: 3,
-            },
+            recent_pcash_block_hash: CircuitWord::repeat_byte(2),
+            valid_until_timestamp: 3,
         })
         .encode(CHAIN)
         .unwrap()
@@ -283,7 +285,7 @@ mod tests {
                     CHAIN,
                     0
                 ),
-                Some(ItemExclusionReason::UnknownFundingMode)
+                Some(ItemExclusionReason::Truncated)
             );
         }
         for mode in [0, 1] {
@@ -303,7 +305,7 @@ mod tests {
                 CHAIN,
                 RETIRED_AT
             ),
-            Some(ItemExclusionReason::UnknownFundingMode)
+            Some(ItemExclusionReason::Truncated)
         );
 
         let raw = unfunded(Vec::new());

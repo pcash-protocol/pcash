@@ -3,14 +3,14 @@
 export const LINEAGE_CIRCUIT_PROFILES = {
   "/prover/event_lineage.json": {
     "srsPoints": 262144,
-    "circuitSha256": "d478adf0f02037b31b2f3febe49f3b83a3865b3a0231b228244b3537acd8fc7d",
+    "circuitSha256": "318098755ca52d0e6f2dcbe4cf95bf93d3b178e7042b0c6f21404bff23875012",
     "vkUrl": "/chonk-vks/event_lineage.vk",
-    "vkSha256": "1a4020dc99ef00458d4146a6471ef309b16b841d2a420494562df5e1836419e4"
+    "vkSha256": "5440db3de99ce92afcc57a577b470ea33f0364ed860ab505066044c3e96ea31d"
   },
   "/prover/lineage_gated.json": {
     "srsPoints": 262144,
-    "circuitSha256": "66c3e70d081887a3003f4362dde3572db394965ca5775a60e8d34e84f601bb77",
+    "circuitSha256": "e719129b0fa8d3c46bfe1e27d0a50b0a2c0840d5f9b1857590ea1a3a2b40107e",
     "vkUrl": "/chonk-vks/lineage_gated.vk",
-    "vkSha256": "f131a5a0d81cfa233e1d43bf53d725c575977eab1799edee0888aed77eedde85"
+    "vkSha256": "9d8b0b69869fd2c2b5e6061b31183ea8d967b452d3a9c08433c01fbea80f47fd"
   }
 } as const;

@@ -7,7 +7,8 @@ import { usePaymentIssuance, type DisplayIssuanceInputs } from "../../lib/usePay
 import { FastPaymentResult, usePaymentConfirmation, type PaymentConfirmation } from "./FastPaymentResult.tsx";
 import { NAMES_OFF_MESSAGE } from "../../names/NameResolutionSession.ts";
 import { FittedCode } from "../../components/EthereumAddress.tsx";
-import { NO_RECEIVE_KEY_MESSAGE, useRecipientInput, useRecipientReceiveKey } from "./useRecipient.ts";
+import { recipientReach, useL1AddressReader, useRecipientInput, useRecipientReach } from "./useRecipient.ts";
+import { directSendLinkOf } from "./directSends.ts";
 import { etherscanTransactionUrl } from "../explorer/format.ts";
 import { transactionPath } from "../explorer/paths.ts";
 import { useEthereumNetwork } from "../../lib/EthereumProvider.tsx";
@@ -49,7 +50,12 @@ import {
   shortValue,
   withoutRetrySelection,
   recipientFromScan,
+  NEVER_USED_RECIPIENT_NOTE,
+  REGULAR_RECIPIENT_NOTE,
+  SMART_CONTRACT_RECIPIENT_NOTE,
+  UNCHECKED_RECIPIENT_MESSAGE,
   ZERO_PAYMENT_MESSAGE,
+  type RecipientReach,
   type ResolvedRecipient,
   type SendIntent,
   type SendSpeed,
@@ -75,6 +81,8 @@ export interface SentPayment {
   contentHash: string | undefined;
   publication: WalletSendOutcome["publication"];
   l1Hash?: string;
+  /** A direct send: the name or address it paid, which has not set up PCASH. */
+  directSendTo?: string;
 }
 
 interface SendController {
@@ -106,8 +114,8 @@ interface SendController {
   displayIssuanceInputs: DisplayIssuanceInputs | undefined;
   speed: SendSpeed;
   recipient: ResolvedRecipient | undefined;
-  /** Whether the typed address has published a receive key; undefined for unresolved input. */
-  recipientReceiveKey: "checking" | "present" | "missing" | "unknown" | undefined;
+  /** How a payment reaches the typed address; undefined for unresolved input. */
+  recipientReceiveKey: RecipientReach | "checking" | undefined;
   resolvingRecipient: boolean;
   review: ReviewedPayment | undefined;
   /** When the reviewed payment's proof started, so progress survives hiding the panel. */
@@ -289,7 +297,8 @@ function useSendControllerState(): SendController {
   }, [connectedAccount, status?.genesisHash]);
   const [reviewingName, setReviewingName] = useState(false);
   const { name, nameResolver, recipient, resolvingName } = useRecipientInput(to);
-  const recipientReceiveKey = useRecipientReceiveKey(recipient?.kind === "address" ? recipient.address : undefined);
+  const recipientReceiveKey = useRecipientReach(recipient?.kind === "address" ? recipient.address : undefined);
+  const readL1 = useL1AddressReader();
   const resolvingRecipient = reviewingName || resolvingName;
 
   useEffect(() => {
@@ -336,7 +345,7 @@ function useSendControllerState(): SendController {
       setPaymentError(recipient.message);
       return;
     }
-    if (recipientReceiveKey === "missing") { setPaymentError(NO_RECEIVE_KEY_MESSAGE); return; }
+    if (recipientReceiveKey === "smart-contract") { setPaymentError(SMART_CONTRACT_RECIPIENT_NOTE); return; }
     const request = ++reviewRequestRef.current;
     // The submitted amount stays on screen; Max stops following the balance.
     if (amountIsMax) setAmount(amount);
@@ -348,11 +357,17 @@ function useSendControllerState(): SendController {
       const fresh = name === undefined ? undefined : (await nameResolver?.resolveName(name) ?? null);
       if (reviewRequestRef.current !== request) return;
       if (fresh === null) throw new Error("This name does not resolve to an Ethereum address. Check the name and retry.");
-      if (fresh !== undefined && wallet !== undefined && !await wallet.hasReceiveKey(fresh.address)) throw new Error(NO_RECEIVE_KEY_MESSAGE);
-      if (reviewRequestRef.current !== request) return;
       const resolved = fresh === undefined ? recipient : { kind: "address" as const, address: fresh.address };
+      // Checked again for the address actually paid: a recipient without PCASH gets a direct send.
+      const reach = wallet === undefined || resolved?.kind !== "address" ? undefined : await recipientReach(wallet, readL1, resolved.address);
+      if (reviewRequestRef.current !== request) return;
+      if (reach === "smart-contract") throw new Error(SMART_CONTRACT_RECIPIENT_NOTE);
+      if (reach === "unchecked") throw new Error(UNCHECKED_RECIPIENT_MESSAGE);
       // The fee on screen is the fee submitted.
-      const intent = sendIntent({ to: fresh?.address ?? to, amount, fee, speed, memo, includeSender });
+      const intent: SendIntent = {
+        ...sendIntent({ to: fresh?.address ?? to, amount, fee, speed, memo, includeSender }),
+        ...(reach === "regular" || reach === "never-used" ? { directSend: true as const } : {}),
+      };
       const preflight = await preflightPrivateSend(intent);
       if (reviewRequestRef.current !== request) return;
       const prepared = {
@@ -382,7 +397,10 @@ function useSendControllerState(): SendController {
       clearPanelHash();
       setPaymentError(undefined);
       setReview(undefined);
-      setSent({ contentHash: outcome.contentHash, publication: outcome.publication, ...(outcome.l1Hash === undefined ? {} : { l1Hash: outcome.l1Hash }) });
+      setSent({
+        contentHash: outcome.contentHash, publication: outcome.publication, ...(outcome.l1Hash === undefined ? {} : { l1Hash: outcome.l1Hash }),
+        ...(reviewed.directSend === true ? { directSendTo: prepared.displayName ?? prepared.displayRecipient ?? reviewed.to } : {}),
+      });
       if (panelViewRef.current === "closed") setUnseenOutcome(true);
     }).catch((cause) => {
       if (reviewRequestRef.current !== request) return;
@@ -519,21 +537,29 @@ function useSendControllerState(): SendController {
     // does not record how the old one was posted; the default speed posts this one.
     const mode = getDefaultSubmissionMode();
     setSpeed(mode);
-    const { openFeeAmount, ...paid } = loadSavedPayment(payment);
-    // Self-publication pays Ethereum gas and no relayer fee.
-    const intent: SendIntent = mode === "fast" ? { ...paid, publication: "self", newAction: true } : { ...paid, openFeeAmount, newAction: true };
+    const { openFeeAmount, ...saved } = loadSavedPayment(payment);
     const request = ++reviewRequestRef.current;
     setReviewingName(false);
     setSent(undefined);
     setMessage(undefined);
     setPaymentError(undefined);
-    void preflightPrivateSend(intent).then((preflight) => {
+    void (async () => {
+      // A recipient that still has not set up PCASH is paid a direct send again.
+      const reach = wallet === undefined || !/^0x[0-9a-fA-F]{40}$/.test(payment.deliveryTarget) ? undefined
+        : await recipientReach(wallet, readL1, payment.recipientAddress);
+      if (reviewRequestRef.current !== request) return;
+      if (reach === "smart-contract") throw new Error(SMART_CONTRACT_RECIPIENT_NOTE);
+      if (reach === "unchecked") throw new Error(UNCHECKED_RECIPIENT_MESSAGE);
+      const paid = reach === "regular" || reach === "never-used" ? { ...saved, directSend: true as const } : saved;
+      // Self-publication pays Ethereum gas and no relayer fee.
+      const intent: SendIntent = mode === "fast" ? { ...paid, publication: "self", newAction: true } : { ...paid, openFeeAmount, newAction: true };
+      const preflight = await preflightPrivateSend(intent);
       if (reviewRequestRef.current !== request) return;
       const prepared = { intent, preflight, displayRecipient: payment.recipientAddress };
       resetPrivateSend();
       setReview(prepared);
       if (!preflight.retry) preparePayment(prepared, request);
-    }).catch((cause) => {
+    })().catch((cause) => {
       if (reviewRequestRef.current === request) setPaymentError(errorMessage(cause));
     });
   };
@@ -748,16 +774,23 @@ export function SendCard({ onClose }: { onClose?: () => void } = {}) {
   const amountInput = pcashInput(amount, "Amount", true);
   const feeInput: ReturnType<typeof pcashInput> = fast ? { amount: 0n } : pcashInput(fee, "Relayer fee", true);
   const feeAmount = feeInput.amount;
-  const missingReceiveKey = recipient?.kind === "address" && recipientReceiveKey === "missing";
+  const contractRecipient = recipient?.kind === "address" && recipientReceiveKey === "smart-contract";
+  // A direct send's message is read with its link, so the link's holder reads it.
+  const directSend = recipient?.kind === "address" && (recipientReceiveKey === "regular" || recipientReceiveKey === "never-used");
+  const recipientNote = recipient?.kind !== "address" ? undefined
+    : recipientReceiveKey === "smart-contract" ? SMART_CONTRACT_RECIPIENT_NOTE
+    : recipientReceiveKey === "regular" ? REGULAR_RECIPIENT_NOTE
+    : recipientReceiveKey === "never-used" ? NEVER_USED_RECIPIENT_NOTE : undefined;
   // Counted as sent: the intent carries the trimmed memo.
   const memoBytes = utf8(memo.trim()).length;
   // The S arena bounds both profiles: an L payment's records fit it too.
-  const memoLimit = paymentMaxMemoBytes({ shape: PRIVATE_VALUE_PROFILES.S.shapeId, includeSender });
+  const memoLimit = paymentMaxMemoBytes({ shape: PRIVATE_VALUE_PROFILES.S.shapeId, includeSender, directSend });
   const memoTooLong = memoBytes > memoLimit;
   const sendBlocked = resolvingRecipient ? "Resolving the recipient…"
     : to.trim() === "" ? "Enter a recipient to continue."
-    : missingReceiveKey ? NO_RECEIVE_KEY_MESSAGE
+    : contractRecipient ? SMART_CONTRACT_RECIPIENT_NOTE
     : recipient?.kind === "address" && recipientReceiveKey === "checking" ? "Checking the recipient…"
+    : recipient?.kind === "address" && recipientReceiveKey === "unchecked" ? UNCHECKED_RECIPIENT_MESSAGE
     : amount.trim() === "" ? "Enter an amount to continue."
     : amountInput.problem !== undefined ? amountInput.problem
     : feeInput.problem !== undefined ? feeInput.problem
@@ -794,7 +827,7 @@ export function SendCard({ onClose }: { onClose?: () => void } = {}) {
           {/* The form stays on screen with its values while the payment is prepared and after it is sent; its fields lock until a failure. */}
           <fieldset className={styles.sendFields} disabled={!editable}>
             <div className={styles.recipientField}>
-              <label>Recipient<input className={recipient?.kind === "invalid" || missingReceiveKey ? `${styles.recipientInput} ${styles.fieldInvalid}` : styles.recipientInput} value={to} onChange={(event) => updateDraft("to", event.target.value)} placeholder="Address or ENS, .gwei or .wei name" autoComplete="off" required /></label>
+              <label>Recipient<input className={recipient?.kind === "invalid" ? `${styles.recipientInput} ${styles.fieldInvalid}` : styles.recipientInput} value={to} onChange={(event) => updateDraft("to", event.target.value)} placeholder="Address or ENS, .gwei or .wei name" autoComplete="off" required /></label>
               <button type="button" className={styles.scanButton} aria-label="Scan a QR code" aria-pressed={scanning} title="Scan a QR code" onClick={() => setScanning((value) => !value)}>
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M3 3h7v7H3zm2 2v3h3V5zm9-2h7v7h-7zm2 2v3h3V5zM3 14h7v7H3zm2 2v3h3v-3zm8-2h2v2h-2zm2 2h2v2h-2zm2-2h2v2h-2zm2 2h2v2h-2zm-6 2h2v2h-2zm4 0h2v2h-2zm2 2h2v2h-2zm-4 0h2v2h-2z" /></svg>
               </button>
@@ -802,7 +835,7 @@ export function SendCard({ onClose }: { onClose?: () => void } = {}) {
             {scanning && editable && <QrScanner onClose={() => setScanning(false)} onScan={(text) => { setScanning(false); updateDraft("to", recipientFromScan(text)); }} />}
             {resolvingRecipient && <p className={styles.fieldResolved} role="status">Resolving recipient…</p>}
             {recipient?.kind === "invalid" && <p className={styles.fieldError}>{recipient.message}</p>}
-            {missingReceiveKey && <p className={styles.fieldError}>{NO_RECEIVE_KEY_MESSAGE}</p>}
+            {recipientNote !== undefined && editable && <p className={styles.recipientNote} data-recipient-reach={recipientReceiveKey}>{recipientNote}</p>}
             {namedAddress !== undefined && !resolvingRecipient && <p className={styles.fieldResolved}>Pays <FittedCode text={namedAddress} /></p>}
             <div className={styles.amountField}>
               <div className={styles.amountBox}>
@@ -814,7 +847,7 @@ export function SendCard({ onClose }: { onClose?: () => void } = {}) {
             </div>
             <div className={styles.memoField}>
               <label>Message (optional)<textarea className={memoTooLong ? `${styles.memoInput} ${styles.fieldInvalid}` : styles.memoInput} value={memo} onChange={(event) => updateDraft("memo", event.target.value)} rows={2} aria-describedby="send-memo-hint" /></label>
-              <p id="send-memo-hint" className={`${styles.formHint} ${styles.memoHint}`}><span>Encrypted: only you and the recipient can read it.</span><span>{memoBytes} / {memoLimit} bytes</span></p>
+              <p id="send-memo-hint" className={`${styles.formHint} ${styles.memoHint}`}><span>{directSend ? "Encrypted: only you and whoever has the payment link can read it." : "Encrypted: only you and the recipient can read it."}</span><span>{memoBytes} / {memoLimit} bytes</span></p>
               {memoTooLong && <p className={styles.fieldError}>Shorten the message to {memoLimit} bytes or fewer.</p>}
               <label className={styles.senderChoice}><input type="checkbox" checked={includeSender} onChange={(event) => chooseIncludeSender(event.target.checked)} aria-describedby="send-sender-hint" />Include my address</label>
               <p id="send-sender-hint" className={styles.formHint}>Shows the recipient who paid. It is not proof of identity: any payer can name any address.</p>
@@ -839,7 +872,7 @@ export function SendCard({ onClose }: { onClose?: () => void } = {}) {
             && <p className={styles.formHint}>Posting it earns you about <PcashAmount value={fastEstimate.collectibleOpenFee + fastEstimate.expectedIssuance} />.</p>}
           {(drafting || rejected) && <>
             <div className={styles.sendActions}>{onClose !== undefined && <button className="button" type="button" onClick={onClose}>Cancel</button>}<button className="button primary" disabled={sendBlocked !== undefined} aria-describedby={sendBlocked === undefined ? undefined : "send-blocked"} type="submit">{busy ? "Checking balance…" : rejected ? "Try again" : "Send"}</button></div>
-            {sendBlocked !== undefined && !resolvingRecipient && !missingReceiveKey && !memoTooLong && <p id="send-blocked" className={styles.formHint}>{sendBlocked}</p>}
+            {sendBlocked !== undefined && !resolvingRecipient && !contractRecipient && !memoTooLong && <p id="send-blocked" className={styles.formHint}>{sendBlocked}</p>}
           </>}
           {preparing && <>
             <div className={styles.sendActions}>
@@ -867,9 +900,29 @@ export function SendCard({ onClose }: { onClose?: () => void } = {}) {
           {message && <Notice tone="warning">{message}</Notice>}
           {paymentError && l1Hash === undefined && <div className={styles.noticeRow}><Notice tone="error">{paymentError}</Notice><button type="button" className={styles.dismiss} onClick={clearPaymentError}>Dismiss</button></div>}
         </form>
+    {sent?.directSendTo !== undefined && sent.contentHash !== undefined && <DirectSendLink contentHash={sent.contentHash} recipient={sent.directSendTo} />}
     {l1Hash !== undefined ? <FastPaymentResult key={l1Hash} hash={l1Hash} confirmation={confirmation} onDone={done} onSendAnother={sendAnother} />
       : sent !== undefined && <SentPaymentResult sent={sent} onDone={done} onSendAnother={sendAnother} />}
   </article>;
+}
+
+/** The link a direct send's recipient opens to receive it, once the wallet lists the payment as one. */
+function DirectSendLink({ contentHash, recipient }: { contentHash: string; recipient: string }) {
+  const { wallet } = useWallet();
+  const [listed, setListed] = useState(false);
+  useEffect(() => {
+    let current = true;
+    void wallet?.directSends().then((sends) => {
+      if (current) setListed(sends.some((send) => send.opening.contentHash === contentHash.toLowerCase()));
+    }, () => undefined);
+    return () => { current = false; };
+  }, [wallet, contentHash]);
+  if (!listed) return null;
+  const shown = /^0x[0-9a-fA-F]{40}$/.test(recipient) ? shortValue(recipient, 8, 6) : recipient;
+  return <div className={styles.directSend} data-testid="direct-send-link">
+    <p role="status">Sent. {shown} hasn't set up PCASH yet. Send them this link so they can receive it.</p>
+    <CopyButton label="Copy link" showLabel disabled={wallet === undefined} load={() => directSendLinkOf(wallet!, contentHash)} />
+  </div>;
 }
 
 /** Where a submitted payment went, linked to the explorer that shows it. */

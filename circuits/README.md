@@ -21,7 +21,6 @@ protocol/                  Consensus: everything the node's pinned keys cover
   no_op_event_application/       Reference no-op event application; its VK is not pinned by consensus
   private_value/{s,l}/     Type 0x00: three protocol kernels and the hiding kernel per profile
   user_account_update/     Type 0x03: protocol kernel and hiding kernel
-  contract_creation/       Type 0x02: protocol kernel and hiding kernel
 rules/                     The reference wallet's account rules: not consensus, replaceable per account
   lib/                     reference_rule_common: relations shared by the rules
 signature/                 signature_common: secp256k1 and EIP-712 for applications
@@ -55,7 +54,7 @@ Two facts are specific to this directory. The verification-key pins each layer c
 
 ## Protocol stacks
 
-Each entry point under `protocol/` is one Noir package named `<family>[_large]_<directory>`: `private_value_transfer_kernel` is the S transfer kernel, `private_value_large_transfer_kernel` its L counterpart, and `contract_creation_kernel` the contract-creation kernel.
+Each entry point under `protocol/` is one Noir package named `<family>[_large]_<directory>`: `private_value_transfer_kernel` is the S transfer kernel, `private_value_large_transfer_kernel` its L counterpart.
 
 ### Private value (`protocol/private_value/{s,l}/`)
 
@@ -70,11 +69,7 @@ Transaction type `0x00` ([spec §11](../docs/protocol-spec.md#11-private-value-t
 
 Transaction type `0x03` ([spec §12.3](../docs/protocol-spec.md#123-user-account-update-txtype-0x03)). The kernel checks a compare-and-swap of the account's state, with the account's own native notes paying the fee, and links the account's administration rule. Its hiding kernel adds the account update commitment as a public input, which the node recomputes from the live account row; the rule approves the update's action commitment, which binds that commitment and the fee payment.
 
-### Contract creation (`protocol/contract_creation/`)
-
-Transaction type `0x02` ([spec §12.4](../docs/protocol-spec.md#124-contract-account-creation-txtype-0x02)). A contract has nothing to spend before it exists, so the kernel authenticates a sponsoring user account, has it pay the fee, and links that sponsor's rule over a sponsorship action bound to the address being created. Its hiding kernel adds the contract address as a public input.
-
-Both account-action families are compiled at S dimensions and share `fee_payment.nr` for the fee relation.
+User-account updates are compiled at S dimensions and use `fee_payment.nr` for the fee relation. Contract creation is proof-free; a private-value transaction can attach its body or a signed user creation.
 
 ## Reference rules (`rules/`)
 
@@ -86,7 +81,7 @@ The authorization applications the reference wallet installs. The protocol does 
 - `asset_burn` — a burn of one asset.
 - `batch_transfer/{s,l}` — multiple recipients, native and asset, with an optional burn.
 - `asset_creation/{s,l}` — one-shot creation of an asset. It shares its name with `asset_creation_kernel` because it authorizes exactly the action that kernel proves.
-- `contract_fee_sponsorship/{s,l}` — a user account paying the fee for a named contract's action or creation.
+- `contract_fee_sponsorship/{s,l}` — a user account paying the fee for a named contract's action.
 - `admin` — a user-account update.
 
 The reference rules pass their private `eventEntry` witness through as the fourth return word; they do not constrain which event accompanies the approved action.

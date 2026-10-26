@@ -97,14 +97,6 @@ export const CIRCUIT_PROVING_RUNTIMES: Readonly<Record<string, readonly string[]
     "native",
     "browser"
   ],
-  "contract_creation_kernel": [
-    "native",
-    "browser"
-  ],
-  "contract_creation_hiding_kernel": [
-    "native",
-    "browser"
-  ],
   "event_sender_authentication": [
     "native",
     "browser"
@@ -167,8 +159,6 @@ export const CIRCUIT_SRS_POINTS: Readonly<Record<string, number>> = {
   "private_value_large_hiding_kernel": 262144,
   "user_account_update_kernel": 262144,
   "user_account_update_hiding_kernel": 262144,
-  "contract_creation_kernel": 262144,
-  "contract_creation_hiding_kernel": 262144,
   "event_sender_authentication": 262144,
   "event_large_sender_authentication": 262144,
   "account_rule_event_gate": 262144,

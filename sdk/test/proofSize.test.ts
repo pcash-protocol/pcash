@@ -23,7 +23,6 @@ import {
 } from "../src/protocol/codec.ts";
 import { OUTPUT_DATA_BYTES } from "../src/constants/params.ts";
 import { PRIVATE_VALUE_PROFILES } from "../src/constants/privateValueProfiles.ts";
-import { deliveryCommitment } from "../src/protocol/transfer.ts";
 import {
   encodeContractBody,
   functionSelector,
@@ -31,11 +30,11 @@ import {
 } from "../src/protocol/contract.ts";
 
 const entrySize = (wireWords: number, proofBytes: number, nOutputData: number, arenaBytes: number): number =>
-  6 + wireWords * 32 + proofBytes + nOutputData * OUTPUT_DATA_BYTES + arenaBytes;
+  7 + wireWords * 32 + proofBytes + nOutputData * OUTPUT_DATA_BYTES + arenaBytes;
 
 describe("txBytes sizing maxima and the fixed parsing bound", () => {
   it("uses the canonical statement sizes and the measured wire-proof sizes", () => {
-    expect(PRIVATE_VALUE_PUBLIC_INPUTS).toBe(18);
+    expect(PRIVATE_VALUE_PUBLIC_INPUTS).toBe(19);
     expect(PRIVATE_VALUE_WIRE_PUBLIC_INPUTS).toBe(16);
     expect(WIRE_PROOF_BYTES).toBe(22_432);
     expect(OUTPUT_DATA_BYTES).toBe(1213);
@@ -46,10 +45,10 @@ describe("txBytes sizing maxima and the fixed parsing bound", () => {
 
   it("derives every per-kind sizing maximum from the release-pinned proof sizes", () => {
     expect(privateValueTransactionSize(0)).toBe(entrySize(16, WIRE_PROOF_BYTES, 5, 2632));
-    expect(privateValueTransactionSize(0)).toBe(31_647);
+    expect(privateValueTransactionSize(0)).toBe(31_648);
     expect(privateValueTransactionSize(1)).toBe(entrySize(71, WIRE_PROOF_BYTES, 32, 16_672));
-    expect(PRIVATE_VALUE_MAX_TX_BYTES).toBe(privateValueTransactionSize(1));
-    expect(PRIVATE_VALUE_MAX_TX_BYTES).toBe(80_198);
+    expect(PRIVATE_VALUE_MAX_TX_BYTES).toBe(privateValueTransactionSize(1) + CONTRACT_MAX_BODY_BYTES);
+    expect(PRIVATE_VALUE_MAX_TX_BYTES).toBe(97_993);
     // Signed creation with a receive key: envelope, mode, two words, key mode and key, recent block, deadline, signature.
     expect(USER_ACCOUNT_CREATION_MAX_TX_BYTES).toBe(5 + 1 + 64 + 1 + 1184 + 32 + 8 + 65);
     expect(USER_ACCOUNT_CREATION_MAX_TX_BYTES).toBe(1360);
@@ -58,9 +57,9 @@ describe("txBytes sizing maxima and the fixed parsing bound", () => {
     expect(CONTRACT_MAX_BODY_BYTES).toBe(17_794);
     // Account sections omit the zero issuance word and use the shared proof body size.
     expect(privateValueSectionBytes(WIRE_PROOF_BYTES, { kind: "userAccountUpdate" })).toBe(15 * 32 + 22_432 + 5 * 1213 + 2632);
-    // Sponsored creation, the larger funding mode, carries a full private-value section.
-    expect(CONTRACT_MAX_TX_BYTES).toBe(5 + 1 + privateValueSectionBytes(WIRE_PROOF_BYTES, { kind: "userAccountUpdate" }) + 17_794);
-    expect(CONTRACT_MAX_TX_BYTES).toBe(49_409);
+    // Standalone contract creation has only inclusion bounds and its body.
+    expect(CONTRACT_MAX_TX_BYTES).toBe(5 + 40 + 17_794);
+    expect(CONTRACT_MAX_TX_BYTES).toBe(17_839);
     expect(USER_ACCOUNT_UPDATE_MAX_TX_BYTES).toBe(
       5 + 53 + 1184 + 32 + privateValueSectionBytes(WIRE_PROOF_BYTES, { kind: "userAccountUpdate" }),
     );
@@ -94,18 +93,8 @@ describe("txBytes sizing maxima and the fixed parsing bound", () => {
       functions,
     });
     expect(body).toHaveLength(CONTRACT_MAX_BODY_BYTES);
-    const data = new Uint8Array(OUTPUT_DATA_BYTES).fill(0xcd);
-    data[0] = 1;
-    const outputData = [data, data, data, data, data] as const;
-    const arena = new Uint8Array(PRIVATE_VALUE_PROFILES.S.arenaBytes).fill(0xab);
-    const { offsets } = PRIVATE_VALUE_PROFILES.S;
-    const publicInputs = Array.from({ length: PRIVATE_VALUE_PUBLIC_INPUTS }, (_, index) => BigInt(index + 1));
-    publicInputs[offsets.chainId] = 0x50435348n;
-    publicInputs[offsets.issuanceOwner] = 0n;
-    publicInputs[offsets.deliveryCommitment] = deliveryCommitment(outputData, arena);
     expect(encodeContractAccountCreation(0x50435348n, body, {
-      mode: "sponsored",
-      section: { publicInputs, proof: new Uint8Array(WIRE_PROOF_BYTES), outputData, arena },
+      recentPcashBlockHash: 1n, validUntilTimestamp: 100n,
     })).toHaveLength(CONTRACT_MAX_TX_BYTES);
   });
 });

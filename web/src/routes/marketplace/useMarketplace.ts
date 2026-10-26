@@ -760,7 +760,6 @@ export function useMarketplaceController() {
           amount,
           ethPriceWei: quote.buyerGrossWei,
           purchaseMinutes: asBigint(purchaseMinutes, "purchase minutes"),
-          creationOpenFeeAmount: 0n,
           fundingOpenFeeAmount: 0n,
         }, await fastOptions());
         if (currentOwner.current !== profile.address) return undefined;
@@ -805,7 +804,7 @@ export function useMarketplaceController() {
       setListingInputs(undefined);
       setCreated(undefined);
       setPendingPublication(publication);
-      setProgress({ action: "publish", phase: "preparing", message: "Checking your saved listing and transactions…", elapsedMs: 0, publication: { step: "contract" } });
+      setProgress({ action: "publish", phase: "preparing", message: "Checking your saved listing and transactions…", elapsedMs: 0, publication: { step: "funding" } });
       // A listing whose escrow funding is canonical has only its catalog publication left.
       const saved = localOffers.find((offer) => publicationIdentity(offer.pub) === identity);
       const ethereum = saved?.pub.escrow === undefined || !hasCanonicalFunding(saved.publish);
@@ -854,13 +853,9 @@ export function useMarketplaceController() {
       finalize(item.publication);
       return;
     }
-    if (action === "reclaim" || action === "restore-contract") {
+    if (action === "reclaim") {
       runMarketplaceAction(
         async () => {
-          if (action === "restore-contract") {
-            await controller.restoreContract(item.publication, 0n, await fastOptions());
-            return "Contract recovery submitted. Reclaim the escrow after its deadline once recovery is confirmed.";
-          }
           await controller.reclaim(item.publication, 0n, await fastOptions());
           return `Reclaim submitted. Your ${listingAssetLabel(item.publication)} returns once it is confirmed.`;
         },
@@ -1008,7 +1003,7 @@ export function useMarketplaceController() {
     todos,
     /** The signed-in owner's saved trades. */
     activity,
-    /** Whether the action in flight works on this saved trade; a new listing is named once its creation reports its contract. */
+    /** Whether the action in flight works on this saved trade; a new listing is named once its funding transaction is prepared. */
     running: (item: MarketplaceActivityItem): boolean => tradePending && activeTrade !== undefined
       && (activeTrade.identity === undefined
         ? activeTrade.action === "publish" && item.role === "seller" && progress?.publication?.offerAddress === publicationContractAddress(item.publication)

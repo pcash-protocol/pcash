@@ -143,7 +143,7 @@ export class FasterGasError extends Error {
   }
 }
 
-/** The batch a Faster action posts: one private-value action, or account setup's creation followed by its mine. */
+/** The batch a Faster action posts: one private-value action, with a signed creation attached for setup. */
 export type FasterBatch = "action" | "setup";
 
 /** Full-size stand-ins for a batch's transactions before they exist: all-nonzero bytes bound the calldata cost. */
@@ -152,7 +152,7 @@ export async function fasterStandIns(batch: FasterBatch): Promise<Uint8Array[]> 
     import("@pcash/sdk/wallet/actions"), import("@pcash/sdk/protocol"),
   ]);
   const action = new Uint8Array(Number(PADDED_PRIVATE_VALUE_BYTE_SIZE)).fill(255);
-  return batch === "setup" ? [new Uint8Array(USER_ACCOUNT_CREATION_MAX_TX_BYTES).fill(255), action] : [action];
+  return batch === "setup" ? [new Uint8Array(action.length + USER_ACCOUNT_CREATION_MAX_TX_BYTES - 5).fill(255)] : [action];
 }
 
 export class WalletPaymentCanceledError extends Error {
@@ -234,7 +234,8 @@ interface WalletContextValue {
   beginOnboarding(): void;
   cancelOnboarding(): void;
   setupAccount(): Promise<void>;
-  retryAccountSetup(contentHash: string): Promise<void>;
+  setupAccountWithoutEth(): Promise<void>;
+  retryAccountSetup(contentHash: string, publication?: "self" | "open"): Promise<void>;
   setupStep?: "ethereum" | "waiting";
   disconnect(): Promise<void>;
   checkAccountActivation(): Promise<void>;
@@ -1303,7 +1304,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return attempt.promise;
   }, [applyAdvance, node, readActivationState, readStatus, reconcileRecovery, synchronizeOpened]);
 
-  const setupAccount = useCallback(async (retryContentHash?: string) => {
+  const setupAccount = useCallback(async (retryContentHash?: string, publication: "self" | "open" = "self") => {
     const session = sessionRef.current;
     if (setupRunningRef.current?.session === session) return;
     const attempt = { session };
@@ -1328,7 +1329,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (sessionRef.current !== session || walletRef.current !== opened) return;
-      if (retryContentHash !== undefined) {
+      if (retryContentHash !== undefined && publication === "self") {
         const { releaseExpiredAccountActivation } = await import("@pcash/sdk/wallet/web");
         const recovery = activationRecoveryRef.current;
         if (recovery === undefined) throw new Error("Ethereum submission recovery is unavailable.");
@@ -1343,6 +1344,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
       if (state === undefined || state.blocker) return;
       let pending = state.pending;
+      publication = pending?.publication ?? publication;
       if (pending?.state === "broadcast-requested" || pending?.state === "l1-submitted") {
         setSetupStep("waiting");
         await checkAccountActivation();
@@ -1352,11 +1354,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setPhase("activating");
       setSetupStep(undefined);
       setConnectionStep("Preparing your account creation transaction");
-      await assertFasterGas("setup");
+      if (publication === "self") await assertFasterGas("setup");
       if (sessionRef.current !== session || walletRef.current !== opened) return;
       const preparingWallet = opened;
       pending = await traceWalletOperation("setup: prepare account and mining proof", () =>
-        preparingWallet.prepareAccountActivation({ authorizationMode: "direct", mine: true }));
+        preparingWallet.prepareAccountActivation({ authorizationMode: "signed", mine: true, publication }));
       if (sessionRef.current !== session || walletRef.current !== opened) return;
       setActivation(pending);
       setActivationContentHash(pending.contentHash);
@@ -1364,8 +1366,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setPhase(pending.state === "broadcast-requested" ? "activation-ambiguous" : "activation-mining");
         return;
       }
-      setSetupStep("ethereum");
-      setConnectionStep("Confirm the Ethereum transaction in your wallet");
+      setSetupStep(publication === "self" ? "ethereum" : "waiting");
+      setConnectionStep(publication === "self" ? "Confirm the Ethereum transaction in your wallet" : "Submitting account setup to relayers");
       const submittingWallet = opened;
       await traceWalletOperation("setup: Ethereum approval and submission", () => submittingWallet.submitAccountActivation((submitted) => {
         if (sessionRef.current !== session || walletRef.current !== submittingWallet) return;
@@ -1670,47 +1672,59 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return () => { stopped = true; clearTimeout(timer); };
   }, [locked]);
 
+  const viewerAccount = ethereumConnection.status === "connected" ? ethereumConnection.address : undefined;
+  // Connector changes arrive before the effect disposes the previous session.
+  const currentSession = viewerAccount !== undefined
+    && viewerAccount.toLowerCase() === connectedAccount?.toLowerCase()
+    && ethereumConnection.chainId === l1ChainId;
+  const changingSession = connectedAccount !== undefined && !currentSession;
+  const visiblePhase = changingSession
+    ? viewerAccount === undefined ? "disconnected"
+      : ethereumConnection.chainId !== l1ChainId ? "wrong-network" : "connecting"
+    : phase;
+
   return <WalletContext.Provider value={{
     node,
     readStatus,
     ...(status === undefined ? {} : { status }),
-    ...(followedStatus === undefined ? {} : { followedStatus }),
-    ...(profile === undefined ? {} : { profile }),
-    ...(walletClient === undefined ? {} : { walletClient }),
-    ...(wallet === undefined ? {} : { wallet }),
-    ...(selfPublication === undefined ? {} : { selfPublication }),
-    ...(snapshot === undefined ? {} : { snapshot }),
-    paymentActivity,
-    awaitingConfirmation,
-    ...(funds === undefined ? {} : { funds }),
-    ...(connectedAccount === undefined ? {} : { connectedAccount }),
-    ...(l1Balance === undefined ? {} : { l1Balance }),
-    accountRecord,
+    ...(!currentSession || followedStatus === undefined ? {} : { followedStatus }),
+    ...(!currentSession || profile === undefined ? {} : { profile }),
+    ...(!currentSession || walletClient === undefined ? {} : { walletClient }),
+    ...(!currentSession || wallet === undefined ? {} : { wallet }),
+    ...(!currentSession || selfPublication === undefined ? {} : { selfPublication }),
+    ...(!currentSession || snapshot === undefined ? {} : { snapshot }),
+    paymentActivity: currentSession ? paymentActivity : [],
+    awaitingConfirmation: currentSession ? awaitingConfirmation : new Map(),
+    ...(!currentSession || funds === undefined ? {} : { funds }),
+    ...(viewerAccount === undefined ? {} : { connectedAccount: viewerAccount }),
+    ...(!currentSession || l1Balance === undefined ? {} : { l1Balance }),
+    accountRecord: currentSession ? accountRecord : "unknown",
     switchNetwork,
-    phase,
-    ...(connectionStep === undefined ? {} : { connectionStep }),
-    syncState,
-    ...(activationContentHash === undefined ? {} : { activationContentHash }),
-    ...(activation === undefined ? {} : { activation }),
-    ...(activationBlocker === undefined ? {} : { activationBlocker }),
-    ...(activationTransaction === undefined ? {} : { activationTransaction }),
-    ...(submissionLock === undefined ? {} : { submissionLock }),
+    phase: visiblePhase,
+    ...(changingSession || connectionStep === undefined ? {} : { connectionStep }),
+    syncState: currentSession ? syncState : { state: "idle" },
+    ...(!currentSession || activationContentHash === undefined ? {} : { activationContentHash }),
+    ...(!currentSession || activation === undefined ? {} : { activation }),
+    ...(!currentSession || activationBlocker === undefined ? {} : { activationBlocker }),
+    ...(!currentSession || activationTransaction === undefined ? {} : { activationTransaction }),
+    ...(!currentSession || submissionLock === undefined ? {} : { submissionLock }),
     refreshSubmissionLock: refreshLock,
-    walletPromptOpen,
+    walletPromptOpen: currentSession && walletPromptOpen,
     assertFasterGas,
-    ...(progress === undefined ? {} : { progress }),
-    ...(actionProgress === undefined ? {} : { actionProgress }),
-    awaitingSignature,
-    paymentStage,
-    busy,
-    ...(error === undefined ? {} : { error }),
+    ...(!currentSession || progress === undefined ? {} : { progress }),
+    ...(!currentSession || actionProgress === undefined ? {} : { actionProgress }),
+    awaitingSignature: currentSession && awaitingSignature,
+    paymentStage: currentSession ? paymentStage : { state: "idle" },
+    busy: changingSession ? viewerAccount !== undefined : busy,
+    ...(changingSession || error === undefined ? {} : { error }),
     connect,
     signIn,
     beginOnboarding,
     cancelOnboarding,
     setupAccount,
+    setupAccountWithoutEth: () => setupAccount(undefined, "open"),
     retryAccountSetup: setupAccount,
-    ...(setupStep === undefined ? {} : { setupStep }),
+    ...(!currentSession || setupStep === undefined ? {} : { setupStep }),
     disconnect,
     checkAccountActivation,
     synchronize,

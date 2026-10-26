@@ -1,7 +1,7 @@
 import { privateValueProfile } from "../constants/privateValueProfiles.ts";
 import type { StatusResult } from "../clients/nodeClient.ts";
 import { decodeTransactionForChain, sectionPublicInput,
-  TX_KIND_PRIVATE_VALUE, TX_KIND_CONTRACT_ACCOUNT_CREATION, TX_KIND_USER_ACCOUNT_UPDATE,
+  TX_KIND_PRIVATE_VALUE, TX_KIND_USER_ACCOUNT_UPDATE,
   transactionPublication } from "../protocol/codec.ts";
 import { decodePayload, decryptEnvelope } from "../protocol/envelope.ts";
 import { noteBodyCommitment, ownerCommitment } from "../protocol/notes.ts";
@@ -19,8 +19,7 @@ export function inspectPrivateRelayValue(params: {
 }): { nativeAmount: bigint; issuanceOwnerCommitment: bigint | null; nativeOutputSlots: number[] } {
   const decoded = decodeTransactionForChain(params.transactionBytes, params.status.pcashChainId);
   const section = decoded.kind === TX_KIND_PRIVATE_VALUE ? decoded
-    : decoded.kind === TX_KIND_CONTRACT_ACCOUNT_CREATION && decoded.funding.mode === "sponsored" ? decoded.funding.section
-      : decoded.kind === TX_KIND_USER_ACCOUNT_UPDATE ? decoded.section : null;
+    : decoded.kind === TX_KIND_USER_ACCOUNT_UPDATE ? decoded.section : null;
   if (section === null) return { nativeAmount: 0n, issuanceOwnerCommitment: null, nativeOutputSlots: [] };
   const terms = transactionPublication(decoded)!;
   const profile = privateValueProfile(terms.shape);

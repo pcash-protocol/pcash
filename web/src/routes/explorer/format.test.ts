@@ -4,7 +4,6 @@ import {
   etherscanTransactionUrl,
   failureOperands,
   formatBytes,
-  formatFundingMode,
   formatKind,
   describeFailure,
   outcomeLabel,
@@ -153,7 +152,6 @@ describe("etherscanTransactionUrl", () => {
 
 it("labels the node contract transaction kind", () => { expect(formatKind("contractAccount")).toBe("Contract creation"); });
 
-it("labels both contract funding modes", () => {
-  expect(formatFundingMode("unfunded")).toBe("Unfunded");
-  expect(formatFundingMode("sponsored")).toBe("Sponsored");
+it("explains an incompatible creation attachment", () => {
+  expect(describeFailure("accountCreationMismatch")).toContain("does not match");
 });

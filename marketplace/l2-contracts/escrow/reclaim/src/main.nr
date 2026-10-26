@@ -56,8 +56,8 @@ pub struct EscrowNoteOpening {
 // keccak256 of MARKETPLACE_RECLAIM_EIP712_TYPE in marketplace/src/client/reclaimWitness.ts,
 // written by scripts/circuits/gen_reference_message_types.mjs.
 global MARKETPLACE_RECLAIM_TYPE_HASH: [u8; 32] = [
-    0xec, 0x66, 0x95, 0xe1, 0xea, 0xfc, 0xbd, 0x71, 0x4a, 0x9c, 0x8d, 0xd8, 0x90, 0x06, 0xad, 0xcd,
-    0x58, 0x3a, 0x0a, 0xba, 0xb6, 0x76, 0xc3, 0x96, 0xe1, 0x7d, 0x98, 0xb0, 0x5d, 0x3a, 0x64, 0x41,
+    0xbc, 0xf6, 0x71, 0xa2, 0x3c, 0xb8, 0x41, 0x93, 0xb5, 0x60, 0x61, 0x93, 0xb8, 0x63, 0x2c, 0x16,
+    0x78, 0xfc, 0x47, 0x81, 0x94, 0x2a, 0xbc, 0x36, 0x6c, 0xea, 0x86, 0x8f, 0x18, 0x0a, 0xa8, 0xdb,
 ];
 
 // RECLAIM_PAYOUT_OPENING_DOMAIN: the domain tag of context "escrow_reclaim_payout_opening"
@@ -102,7 +102,7 @@ fn reclaim_message(
     payout_opening: Field,
     relay_fee_amount: Field,
     relay_fee_owner_commitment: Field,
-) -> [Field; 15] {
+) -> [Field; 16] {
     assert_issuance_opening(private_value, issuance_recipient, issuance_note_secret);
     [
         pcash_chain_id,
@@ -116,6 +116,7 @@ fn reclaim_message(
         private_value.issuance_owner_commitment,
         relay_fee_amount,
         relay_fee_owner_commitment,
+        private_value.account_creation_commitment,
         transaction_context::<S_INPUTS, S_OUTPUTS, S_SHAPE_ID>(
             pcash_chain_id,
             private_value.nullifiers,
@@ -255,7 +256,7 @@ mod tests {
         tx: PrivateValue,
         issuance_recipient: Field,
         issuance_note_secret: Field,
-    ) -> [Field; 15] {
+    ) -> [Field; 16] {
         reclaim_message(
             pcash_chain_id,
             0x2222,
@@ -276,7 +277,7 @@ mod tests {
         tx: PrivateValue,
         issuance_recipient: Field,
         issuance_note_secret: Field,
-    ) -> [Field; 15] {
+    ) -> [Field; 16] {
         message_on(7, tx, issuance_recipient, issuance_note_secret)
     }
 

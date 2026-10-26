@@ -35,6 +35,8 @@ export interface SendIntent {
   /** A fresh payment, never a resubmission of a pending one that pays the same recipient and amount. */
   newAction?: true;
   retryContentHash?: string;
+  /** The recipient has not set up PCASH: pay a direct send, which the sender delivers by link. */
+  directSend?: true;
 }
 
 export interface SendOutcome {
@@ -131,6 +133,33 @@ export function recipientFromScan(text: string): string {
   return trimmed;
 }
 
+/**
+ * How a payment reaches an address. "present": it publishes a receive key.
+ * Otherwise the payment is a direct send, judged from what Ethereum shows:
+ * "regular" has sent a transaction and has no contract code, "never-used" has
+ * neither, and "smart-contract" has code, which cannot set up PCASH. A contract
+ * deployed with empty code or an exchange deposit address looks regular, so
+ * no copy claims certainty. "unknown" and "unchecked": the wallet's directory
+ * or Ethereum could not answer.
+ */
+export type RecipientReach = "present" | "regular" | "never-used" | "smart-contract" | "unknown" | "unchecked";
+
+/** An EIP-7702 delegation designator: the account delegates its code and still signs as itself. */
+const DELEGATION_PREFIX = "0xef0100";
+const DELEGATION_BYTES = 23;
+
+export function classifyUnregisteredAddress(code: string | undefined, nonce: number): "regular" | "never-used" | "smart-contract" {
+  const bytecode = (code ?? "0x").toLowerCase();
+  const delegated = bytecode.startsWith(DELEGATION_PREFIX) && bytecode.length === 2 + 2 * DELEGATION_BYTES;
+  if (bytecode !== "0x" && !delegated) return "smart-contract";
+  return nonce === 0 ? "never-used" : "regular";
+}
+
+export const SMART_CONTRACT_RECIPIENT_NOTE = "Smart-contract wallets can't receive PCASH yet. Ask for a regular wallet address.";
+export const REGULAR_RECIPIENT_NOTE = "Make sure this is a wallet they can sign with, not an exchange deposit address.";
+export const NEVER_USED_RECIPIENT_NOTE = "This address has never been used. If it is a smart-contract wallet, it can't receive PCASH.";
+export const UNCHECKED_RECIPIENT_MESSAGE = "Couldn't check this address on Ethereum. Try again in a moment.";
+
 export function describeRecipient(to: string): ResolvedRecipient {
   const trimmed = to.trim();
   if (/^0x[0-9a-fA-F]{40}$/.test(trimmed)) return { kind: "address", address: trimmed.toLowerCase() };
@@ -151,6 +180,7 @@ export function withoutRetrySelection(intent: SendIntent): SendIntent {
     ...(intent.publication === undefined ? {} : { publication: intent.publication }),
     ...(intent.memo === undefined ? {} : { memo: intent.memo }),
     ...(intent.includeSender === undefined ? {} : { includeSender: intent.includeSender }),
+    ...(intent.directSend === undefined ? {} : { directSend: intent.directSend }),
     newAction: true,
   };
 }

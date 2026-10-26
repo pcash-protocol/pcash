@@ -204,7 +204,6 @@ const KERNELS = {
 // The account stacks publish one field after the private-value statement.
 const ACCOUNT_ACTION_FIELDS = {
   user_account_update: "account_update_commitment",
-  contract_creation: "contract_address",
 };
 
 const transactionStatement = (actionField) =>

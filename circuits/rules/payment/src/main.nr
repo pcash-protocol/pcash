@@ -26,8 +26,8 @@ use signature_common::secp256k1::{Secp256k1PubKey, Signature};
 
 // keccak256 of the SDK PAYMENT_EIP712_TYPE, written by scripts/circuits/gen_reference_message_types.mjs.
 global PAYMENT_TYPE_HASH: [u8; 32] = [
-    0xcd, 0xf6, 0x90, 0x16, 0x64, 0x20, 0xe8, 0x24, 0xe2, 0x91, 0xe1, 0xd4, 0x2c, 0xc1, 0x04, 0xd9,
-    0x0e, 0x74, 0x2b, 0xbe, 0x57, 0x7f, 0xff, 0x1e, 0xd8, 0xc1, 0xb6, 0x5e, 0x23, 0xe4, 0x14, 0x97,
+    0x0e, 0x77, 0x26, 0x28, 0xa7, 0xe0, 0x2a, 0xcf, 0x10, 0x48, 0x96, 0x1e, 0x22, 0x11, 0x0b, 0x77,
+    0x22, 0x9b, 0xd6, 0xf0, 0xe5, 0xeb, 0x1b, 0x59, 0x6a, 0x80, 0x61, 0x0e, 0xca, 0xb1, 0x7f, 0x94,
 ];
 
 // The signature-free relation core, shared by `main` and the negative tests:
@@ -219,6 +219,7 @@ mod tests {
             carrier_context_hash: 0,
             asset_burn_amount: 0,
             delivery_commitment: 0x61,
+            account_creation_commitment: 0,
             input_slot_classes: [
                 SLOT_CLASS_NATIVE,
                 SLOT_CLASS_DUMMY,
@@ -276,6 +277,7 @@ mod tests {
             carrier_context_hash: base.carrier_context_hash,
             asset_burn_amount: 0,
             delivery_commitment: 0,
+            account_creation_commitment: 0,
             input_slot_classes: [SLOT_CLASS_DUMMY; N_IN],
             input_commitments: [0; N_IN],
             nullifiers: [0; N_IN],
@@ -306,6 +308,7 @@ mod tests {
             carrier_context_hash: 0,
             asset_burn_amount: 0,
             delivery_commitment: 0,
+            account_creation_commitment: 0,
             input_slot_classes: [SLOT_CLASS_DUMMY; 4],
             input_commitments: [0; 4],
             nullifiers: TEST_NULLIFIERS,
@@ -462,18 +465,20 @@ mod tests {
     // TEST_SIGNING_KEY's signature over the payment `run_signed_payment` proves
     // on TEST_PCASH_CHAIN_ID.
     global SIGNED_PAYMENT_SIGNATURE: [u8; 64] = [
-        0x0f, 0x49, 0x57, 0xd2, 0xc7, 0x12, 0xc8, 0x32, 0x6b, 0xda, 0xbb, 0xeb, 0x37, 0xf3, 0x4f,
-        0x66, 0x34, 0x93, 0xa8, 0xae, 0x3c, 0x5c, 0xbe, 0xb0, 0xe4, 0xbf, 0xc9, 0xa0, 0xf5, 0x35,
-        0x02, 0x51, 0x45, 0xa1, 0x30, 0x48, 0xbc, 0x9b, 0x71, 0x3a, 0xdd, 0xea, 0x56, 0xe4, 0xb9,
-        0xdc, 0x95, 0x09, 0x26, 0x6a, 0x53, 0xcc, 0xe3, 0x9a, 0x08, 0x27, 0x31, 0x8c, 0x1d, 0x27,
-        0xa7, 0x67, 0xe7, 0x3e,
+        0x96, 0xfe, 0x5e, 0x28, 0x3c, 0x17, 0x52, 0xf9, 0xe6, 0x4a, 0x27, 0x10, 0xe4, 0x74, 0xb8,
+        0x07, 0x39, 0x8b, 0x80, 0xc0, 0x44, 0x5d, 0xd2, 0xad, 0x1c, 0xc8, 0x2d, 0x87, 0xc7, 0x21,
+        0x2e, 0x98, 0x15, 0x06, 0x66, 0xb2, 0xca, 0x1e, 0x96, 0x43, 0x2d, 0xe1, 0x25, 0xd2, 0x0f,
+        0x09, 0xc4, 0xd6, 0x52, 0x40, 0x35, 0xfc, 0xec, 0x3c, 0x83, 0x89, 0x1b, 0x1e, 0x05, 0x6b,
+        0xf3, 0xe7, 0x2b, 0xb6,
     ];
 
     fn run_signed_payment(
         pcash_chain_id: Field,
         event_entry: Field,
+        account_creation_commitment: Field,
     ) -> [Field; RULE_STATEMENT_LENGTH] {
-        let (tx, recipient_secret) = profile_transaction::<S_INPUTS, S_OUTPUTS>();
+        let (mut tx, recipient_secret) = profile_transaction::<S_INPUTS, S_OUTPUTS>();
+        tx.account_creation_commitment = account_creation_commitment;
         main(
             pcash_chain_id,
             TEST_RECENT_BLOCK,
@@ -496,13 +501,18 @@ mod tests {
 
     #[test]
     fn test_payment_accepts_the_owner_signature() {
-        let _ = run_signed_payment(TEST_PCASH_CHAIN_ID, 0);
+        let _ = run_signed_payment(TEST_PCASH_CHAIN_ID, 0, 0);
     }
 
     // The message signs the chain ID the action commitment binds, so a payment
     // signed for one chain cannot be proved on another.
     #[test(should_fail_with = "signature must be valid")]
     fn test_payment_rejects_a_signature_for_another_chain() {
-        let _ = run_signed_payment(TEST_PCASH_CHAIN_ID + 1, 0);
+        let _ = run_signed_payment(TEST_PCASH_CHAIN_ID + 1, 0, 0);
     }
+    #[test(should_fail_with = "signature must be valid")]
+    fn test_payment_rejects_an_unsigned_attachment() {
+        let _ = run_signed_payment(TEST_PCASH_CHAIN_ID, 0, 1);
+    }
+
 }

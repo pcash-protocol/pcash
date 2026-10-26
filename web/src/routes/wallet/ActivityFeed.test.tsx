@@ -12,9 +12,9 @@ const state = vi.hoisted(() => ({
   wallet: {
     phase: "ready", busy: false, paymentStage: { state: "idle" }, status: { pcashChainId: 1n, l1ChainId: 1n, genesisHash: "0xgenesis" }, connectedAccount: "0xme",
     profile: { address: 1n }, snapshot: { address: "0xme", syncedThrough: { pcashHash: "head", pcashNumber: 9n }, pendingContentHashes: [] as string[] }, paymentActivity: [] as WalletPaymentActivity[],
-    awaitingConfirmation: new Map<string, string>(), activation: undefined as { miningTransactionHex?: string } | undefined,
+    awaitingConfirmation: new Map<string, string>(), activation: undefined as { contentHash: string } | undefined,
     node: { getAccountHistory: vi.fn(async () => ({ items: [] })) },
-    wallet: { mine: vi.fn(), preflightMine: vi.fn(), hasReceiveKey: async () => true }, selfPublication: { mode: "l1" }, runAction: (action: () => Promise<unknown>) => action(),
+    wallet: { mine: vi.fn(), preflightMine: vi.fn(), hasReceiveKey: async () => true, directSends: async (): Promise<unknown[]> => [] }, selfPublication: { mode: "l1" }, runAction: (action: () => Promise<unknown>) => action(),
     synchronize: vi.fn().mockResolvedValue(undefined), preflightPrivateSend: vi.fn(), resolvePendingPaymentFate: () => undefined, sendPrivate: vi.fn(),
     cancelPrivateSend: () => undefined, resetPrivateSend: () => undefined,
     submissionLock: undefined as { kind: "batch"; selected: string[]; transactionHash: string | null } | { kind: "call"; transactionHash: string | null } | undefined,
@@ -28,6 +28,7 @@ const state = vi.hoisted(() => ({
   post: { pendingCount: 0, ethereumTransactions: 0, busy: false, post: vi.fn(async () => undefined) } as { pendingCount: number; ethereumTransactions: number; busy: boolean; progress?: { current: number; total: number }; error?: string; post: () => Promise<void> },
 }));
 vi.mock("../../lib/WalletProvider.tsx", () => ({ errorMessage: String, useWallet: () => state.wallet }));
+vi.mock("wagmi/actions", () => ({ getPublicClient: () => ({ getCode: async () => undefined, getTransactionCount: async () => 2 }) }));
 vi.mock("../../lib/usePaymentIssuance.ts", () => ({ usePaymentIssuance: () => ({ issuance: undefined, inputs: undefined }) }));
 vi.mock("../../lib/EthereumProvider.tsx", () => ({ useEthereumNetwork: () => ({ ethereumConfig: {}, l1ChainId: 1, l1Chain: state.l1Chain }) }));
 vi.mock("../../lib/MarketplaceStore.ts", () => ({ marketplaceStoreName: () => "offers", openMarketplaceStore: async () => ({ list: async () => state.offers, close: () => undefined }) }));
@@ -134,6 +135,35 @@ describe("activity feed", () => {
     }
   });
 
+  it("marks a direct send Waiting for setup, then Set up, and copies its link", async () => {
+    const contentHash = `0x${"ab".repeat(32)}`;
+    const opening = { chainId: 1n, contentHash, slot: 0, owner: BigInt(`0x${"12".repeat(20)}`), amount: 100n * PCASH, noteSecret: 9n };
+    let send = { opening, included: true, recipientSetUp: false };
+    const previous = { directSends: state.wallet.wallet.directSends, payments: state.wallet.paymentActivity, synced: state.wallet.snapshot.syncedThrough };
+    state.wallet.wallet.directSends = async () => [send];
+    state.wallet.paymentActivity = [payment({ contentHash })];
+    const writeText = vi.fn(async (_text: string) => undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    try {
+      await withMounted(async (element, rerender) => {
+        const row = () => element.querySelector(`[data-payment-id="${contentHash}"]`)!;
+        expect(row().querySelector("[data-direct-send]")?.textContent).toBe("Waiting for setup");
+        send = { ...send, recipientSetUp: true };
+        state.wallet.snapshot.syncedThrough = { pcashHash: "after-setup", pcashNumber: 10n };
+        await rerender();
+        expect(row().querySelector("[data-direct-send]")?.textContent).toBe("Set up");
+        await act(async () => { [...row().querySelectorAll("button")].find((node) => node.textContent?.startsWith("Copy link"))!.click(); });
+        const { parseDirectSendLink } = await import("@pcash/sdk/delivery");
+        expect(parseDirectSendLink(writeText.mock.calls[0]![0])).toEqual(opening);
+      });
+    } finally {
+      state.wallet.wallet.directSends = previous.directSends;
+      state.wallet.paymentActivity = previous.payments;
+      state.wallet.snapshot.syncedThrough = previous.synced;
+      Reflect.deleteProperty(navigator, "clipboard");
+    }
+  });
+
   it("names the recipient of a sent payment", () => {
     withState({ activity: { state: "ready", pcashHash: "head", pcashNumber: 9n, entries: [] }, payments: [payment({ privateRelayFeeAmount: 8n * PCASH / 10n, privateRelayRecipient: `0x${"34".repeat(20)}` })] }, () => {
       const text = plain(html());
@@ -190,7 +220,7 @@ describe("activity feed", () => {
     const setup = transactionIdentity(fromHex("0x0abc")).contentHash.toLowerCase();
     const unclear = `0x${"06".repeat(32)}`;
     state.wallet.awaitingConfirmation = new Map([[inFlight, "1"]]);
-    state.wallet.activation = { miningTransactionHex: "0x0abc" };
+    state.wallet.activation = { contentHash: transactionIdentity(fromHex("0x0abc")).contentHash };
     try {
       withState({ activity: undefined, payments: [
         payment({ kind: "mine", contentHash: inFlight, status: "unknown" }), payment({ kind: "mine", contentHash: dropped, status: "unknown" }),
@@ -504,6 +534,33 @@ describe("expired transactions", () => {
     } finally {
       await act(async () => root.unmount());
       element.remove();
+      state.wallet.paymentActivity = [];
+      localStorage.clear();
+    }
+  });
+
+  it("resends to an address that still has not set up PCASH as a direct send, with its message", async () => {
+    state.wallet.preflightPrivateSend.mockReset().mockResolvedValue(preflight);
+    state.wallet.sendPrivate.mockReset().mockReturnValue(new Promise(() => undefined));
+    const previous = state.wallet.wallet.hasReceiveKey;
+    state.wallet.wallet.hasReceiveKey = async () => false;
+    state.wallet.paymentActivity = [expired];
+    state.activity = undefined;
+    const settings = new WebsiteSettingsStore(() => localStorage);
+    settings.setDefaultSubmissionMode("slow");
+    const element = document.createElement("div");
+    document.body.append(element);
+    const root = createRoot(element);
+    try {
+      await act(async () => { root.render(<WebsiteSettingsContext.Provider value={settings}>{tree(<Activity />)}</WebsiteSettingsContext.Provider>); });
+      await act(async () => { button(element, "Resend")!.click(); });
+      expect(state.wallet.preflightPrivateSend.mock.calls).toStrictEqual([[
+        { to: expired.deliveryTarget, amount: expired.amount, memo: "Lunch", includeSender: true, directSend: true, openFeeAmount: 3n * PCASH, newAction: true },
+      ]]);
+    } finally {
+      await act(async () => root.unmount());
+      element.remove();
+      state.wallet.wallet.hasReceiveKey = previous;
       state.wallet.paymentActivity = [];
       localStorage.clear();
     }

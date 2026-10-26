@@ -40,8 +40,10 @@ pub enum ParseError {
     UnknownPrivateValueShape(u8),
     #[error("unknown account authorization mode {0}")]
     UnknownAuthorizationMode(u8),
-    #[error("unknown contract funding mode {0}")]
-    UnknownFundingMode(u8),
+    #[error("unknown account-creation attachment tag {0}")]
+    UnknownAccountCreationTag(u8),
+    #[error("an attached user creation must use signed authorization")]
+    DirectCreationAttachment,
     #[error("unknown receive-key mode {0}")]
     UnknownReceiveKeyMode(u8),
     #[error("unknown publishesNkRoot flag {0}")]
@@ -58,6 +60,8 @@ pub enum ParseError {
 /// it.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum EncodeError {
+    #[error("an attached user creation must use signed authorization")]
+    DirectCreationAttachment,
     /// A private-value profile fixes how many words and output slots a section
     /// has; any other count would shift every later field.
     #[error("{field} has {actual} items but the profile fixes {expected}")]
@@ -121,25 +125,17 @@ fn require_prefix(field: &'static str, max: usize, actual: usize) -> Result<(), 
 
 const U8_PREFIX_MAX: usize = u8::MAX as usize;
 
-/// The private-value section: its verifier words, a hiding-kernel proof,
-/// slot-ordered output data, and the arena. A section holds every verifier
-/// word except the delivery commitment: the network's chain-ID word, which
-/// `txBytes` does not repeat, then the serialized words, with an account
-/// section's issuance word as zero. The delivery commitment is computed from
-/// the output data and the arena on first use
-/// ([`Self::delivery_commitment`]), once per section, for the verifier
-/// statement ([`Self::public_inputs`]). A type-`0x00` transaction prefixes
-/// this section with its shape; a user-account update and a sponsored
-/// contract-account creation carry it as their fee payment, with one further
-/// public input appended for verification. The enclosing type's
-/// [`SectionLayout`] fixes the proof size, every output-data item is
-/// [`OUTPUT_DATA_BYTES`] long, and the arena is the profile's `arena_bytes`
-/// long.
+/// A private-value section's held verifier words, proof, output data and arena.
+/// Delivery and account-creation commitments are derived from their exact
+/// bytes on first use. The network supplies the chain ID; account-update
+/// sections supply zero for issuance and account creation. Type `0x00`
+/// prefixes the section with its shape and appends the tagged attachment.
+/// [`SectionLayout`] fixes the serialized dimensions.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PrivateValueSection {
     shape: PrivateValueShape,
-    /// Raw big-endian verifier words in verifier order, without the delivery
-    /// commitment; field canonicality is checked during ordered execution.
+    /// Raw verifier words without the two derived commitments. Ordered
+    /// execution checks field canonicality.
     words: Vec<CircuitWord>,
     pub proof: Vec<u8>,
     /// Opaque output data in slot order.
@@ -147,6 +143,8 @@ pub struct PrivateValueSection {
     /// Opaque delivery data shared by the section's outputs.
     arena: Vec<u8>,
     delivery_commitment: Cached<CircuitWord>,
+    account_creation: Option<AccountCreationAttachment>,
+    account_creation_commitment: Cached<CircuitWord>,
 }
 
 /// A hash computed on first use from private fields of its owner, which
@@ -164,10 +162,12 @@ impl<T> PartialEq for Cached<T> {
 
 impl<T> Eq for Cached<T> {}
 
-/// Where verifier input `offset` sits in a section's words, or `None` for the
-/// delivery commitment.
+/// Where verifier input `offset` sits in the held words; derived commitments
+/// have no held word.
 const fn word_index(profile: PrivateValueProfile, offset: usize) -> Option<usize> {
-    if offset < profile.delivery_commitment_offset {
+    if offset == profile.public_inputs - 1 {
+        None
+    } else if offset < profile.delivery_commitment_offset {
         Some(offset)
     } else if offset == profile.delivery_commitment_offset {
         None
@@ -231,6 +231,8 @@ impl PrivateValueSection {
             output_data,
             arena,
             delivery_commitment: Cached::default(),
+            account_creation: None,
+            account_creation_commitment: Cached::default(),
         }
     }
 
@@ -239,17 +241,18 @@ impl PrivateValueSection {
         self.shape
     }
 
-    /// Verifier input `offset`. The delivery commitment is computed on first
-    /// use; every other input is a held word.
+    /// Verifier input `offset`, deriving each commitment on first use.
     pub fn public_input(&self, offset: usize) -> CircuitWord {
         match word_index(self.shape.profile(), offset) {
             Some(index) => self.words[index],
+            None if offset == self.shape.profile().public_inputs - 1 => {
+                self.account_creation_commitment()
+            }
             None => self.delivery_commitment(),
         }
     }
 
-    /// The held word of verifier input `offset`, or `None` for the delivery
-    /// commitment, which is derived from the output data and the arena.
+    /// The held verifier word, or `None` for a derived commitment.
     pub fn public_input_mut(&mut self, offset: usize) -> Option<&mut CircuitWord> {
         word_index(self.shape.profile(), offset).map(|index| &mut self.words[index])
     }
@@ -266,6 +269,46 @@ impl PrivateValueSection {
         (0..self.shape.profile().public_inputs)
             .map(|offset| self.public_input(offset))
             .collect()
+    }
+
+    pub fn account_creation(&self) -> Option<&AccountCreationAttachment> {
+        self.account_creation.as_ref()
+    }
+
+    pub fn with_account_creation(
+        mut self,
+        attachment: AccountCreationAttachment,
+    ) -> Result<Self, EncodeError> {
+        match &attachment {
+            AccountCreationAttachment::User(creation)
+                if matches!(
+                    creation.authorization,
+                    AccountCreationAuthorization::DirectL1
+                ) =>
+            {
+                return Err(EncodeError::DirectCreationAttachment)
+            }
+            AccountCreationAttachment::Contract(body) => {
+                require_prefix("function count", U8_PREFIX_MAX, body.functions.len())?;
+            }
+            _ => {}
+        }
+        self.account_creation = Some(attachment);
+        self.account_creation_commitment = Cached::default();
+        Ok(self)
+    }
+
+    pub fn account_creation_commitment(&self) -> CircuitWord {
+        *self.account_creation_commitment.0.get_or_init(|| {
+            self.account_creation
+                .as_ref()
+                .map_or(CircuitWord::ZERO, |attachment| {
+                    fr_to_bytes(poseidon_bytes(
+                        domain_tags::ACCOUNT_CREATION_ATTACHMENT_DOMAIN,
+                        &attachment.canonical_bytes(),
+                    ))
+                })
+        })
     }
 
     /// Opaque output data in slot order.
@@ -396,7 +439,7 @@ pub struct ContractFunction {
     pub configuration_commitment: B256,
 }
 
-/// The public body of a contract-account creation in either funding mode.
+/// The public body of a standalone or attached contract-account creation.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ContractBody {
     /// False: `nullifier_key_material` is the account's `nullifierKeyCommitment`.
@@ -431,80 +474,42 @@ impl ContractBody {
     }
 }
 
-/// The funding mode of a kind-2 contract-account creation, the byte at
-/// [`FUNDING_MODE_OFFSET`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ContractFundingMode {
-    Unfunded = 0,
-    Sponsored = 1,
-}
-
-/// Byte offset of a contract-account creation's funding mode, directly after
-/// the envelope, so a policy can classify a candidate without decoding it.
-pub const FUNDING_MODE_OFFSET: usize = ENVELOPE_BYTES;
-
-impl ContractFundingMode {
-    pub const fn from_wire_byte(value: u8) -> Option<Self> {
-        match value {
-            0 => Some(Self::Unfunded),
-            1 => Some(Self::Sponsored),
-            _ => None,
-        }
-    }
-}
-
-/// The funding mode an item's bytes state when they are a contract-account
-/// creation with an assigned mode byte, or `None`. It reads one byte and
-/// decodes nothing else.
-pub fn contract_funding_mode(tx_bytes: &[u8]) -> Option<ContractFundingMode> {
-    if tx_bytes.first() != Some(&KIND_CONTRACT_ACCOUNT_CREATION) {
-        return None;
-    }
-    tx_bytes
-        .get(FUNDING_MODE_OFFSET)
-        .copied()
-        .and_then(ContractFundingMode::from_wire_byte)
-}
-
-/// How a contract-account creation is funded. Neither mode authorizes the
-/// creation or changes the address the body derives.
+/// The account whose existence a private-value transaction ensures.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ContractFunding {
-    /// No payment and no proof; a bounded public lifetime.
-    Unfunded {
-        recent_pcash_block_hash: CircuitWord,
-        valid_until_timestamp: u64,
-    },
-    /// A sponsor's fee payment. The derived contract address is the public
-    /// input after the section's own, supplied by the node exactly as the
-    /// chain ID is.
-    Sponsored(PrivateValueSection),
+pub enum AccountCreationAttachment {
+    User(UserAccountCreation),
+    Contract(ContractBody),
 }
 
-impl ContractFunding {
-    pub const fn mode(&self) -> ContractFundingMode {
+impl AccountCreationAttachment {
+    #[allow(
+        clippy::expect_used,
+        reason = "attachment construction bounds the contract function count"
+    )]
+    fn canonical_bytes(&self) -> Vec<u8> {
+        let mut writer = Writer::default();
         match self {
-            Self::Unfunded { .. } => ContractFundingMode::Unfunded,
-            Self::Sponsored(_) => ContractFundingMode::Sponsored,
+            Self::User(creation) => {
+                writer.u8(1);
+                encode_user_account_creation(&mut writer, creation);
+            }
+            Self::Contract(body) => {
+                writer.u8(2);
+                // A decoded body's function count fits its u8 prefix.
+                encode_contract_body(&mut writer, body)
+                    .expect("contract body count fits its prefix");
+            }
         }
+        writer.into_bytes()
     }
 }
 
-/// A kind-2 contract-account creation.
+/// A proof-free kind-2 contract-account creation.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ContractAccountCreation {
     pub body: ContractBody,
-    pub funding: ContractFunding,
-}
-
-impl ContractAccountCreation {
-    /// The sponsor's private-value section, or `None` when unfunded.
-    pub const fn section(&self) -> Option<&PrivateValueSection> {
-        match &self.funding {
-            ContractFunding::Sponsored(section) => Some(section),
-            ContractFunding::Unfunded { .. } => None,
-        }
-    }
+    pub recent_pcash_block_hash: CircuitWord,
+    pub valid_until_timestamp: u64,
 }
 
 /// A decoded transaction: one type's payload. The chain ID its envelope
@@ -531,6 +536,10 @@ impl Transaction {
     pub fn contract_body(&self) -> Option<&ContractBody> {
         match self {
             Self::ContractAccountCreation(creation) => Some(&creation.body),
+            Self::PrivateValue(section) => match section.account_creation() {
+                Some(AccountCreationAttachment::Contract(body)) => Some(body),
+                _ => None,
+            },
             _ => None,
         }
     }
@@ -542,7 +551,7 @@ impl Transaction {
             Self::PrivateValue(section) => Some(section),
             Self::UserAccountCreation(_) => None,
             Self::UserAccountUpdate(update) => Some(&update.section),
-            Self::ContractAccountCreation(creation) => creation.section(),
+            Self::ContractAccountCreation(_) => None,
         }
     }
 
@@ -587,11 +596,29 @@ impl Transaction {
                 let selector = r.take_u8()?;
                 let shape = PrivateValueShape::from_wire_byte(selector)
                     .ok_or(ParseError::UnknownPrivateValueShape(selector))?;
-                Self::PrivateValue(decode_private_value_section(
+                let mut section = decode_private_value_section(
                     &mut r,
                     pcash_chain_id,
                     SectionLayout::PrivateValue(shape),
-                )?)
+                )?;
+                section.account_creation = match r.take_u8()? {
+                    0 => None,
+                    1 => {
+                        let creation = decode_user_account_creation(&mut r)?;
+                        if matches!(
+                            creation.authorization,
+                            AccountCreationAuthorization::DirectL1
+                        ) {
+                            return Err(ParseError::DirectCreationAttachment);
+                        }
+                        Some(AccountCreationAttachment::User(creation))
+                    }
+                    2 => Some(AccountCreationAttachment::Contract(decode_contract_body(
+                        &mut r,
+                    )?)),
+                    tag => return Err(ParseError::UnknownAccountCreationTag(tag)),
+                };
+                Self::PrivateValue(section)
             }
             KIND_USER_ACCOUNT_CREATION => {
                 Self::UserAccountCreation(decode_user_account_creation(&mut r)?)
@@ -599,9 +626,9 @@ impl Transaction {
             KIND_USER_ACCOUNT_UPDATE => {
                 Self::UserAccountUpdate(decode_user_account_update(&mut r, pcash_chain_id)?)
             }
-            KIND_CONTRACT_ACCOUNT_CREATION => Self::ContractAccountCreation(
-                decode_contract_account_creation(&mut r, pcash_chain_id)?,
-            ),
+            KIND_CONTRACT_ACCOUNT_CREATION => {
+                Self::ContractAccountCreation(decode_contract_account_creation(&mut r)?)
+            }
             other => return Err(ParseError::UnknownKind(other)),
         };
         r.finish()?;
@@ -631,6 +658,10 @@ impl Transaction {
                     section,
                     SectionLayout::PrivateValue(section.shape),
                 );
+                match section.account_creation() {
+                    None => w.u8(0),
+                    Some(attachment) => w.bytes(&attachment.canonical_bytes()),
+                }
             }
             Self::UserAccountCreation(creation) => {
                 encode_user_account_creation(&mut w, creation);
@@ -890,47 +921,26 @@ fn encode_contract_body(w: &mut Writer, body: &ContractBody) -> Result<(), Encod
     Ok(())
 }
 
-/// `fundingMode ‖ fundingPayload ‖ body`: the payload is fixed-size for its
-/// mode, so the body starts at a fixed offset.
+/// A bounded lifetime followed by the unsigned body.
 fn decode_contract_account_creation(
     r: &mut Reader<'_>,
-    pcash_chain_id: u32,
 ) -> Result<ContractAccountCreation, ParseError> {
-    let selector = r.take_u8()?;
-    let funding = match ContractFundingMode::from_wire_byte(selector)
-        .ok_or(ParseError::UnknownFundingMode(selector))?
-    {
-        ContractFundingMode::Unfunded => ContractFunding::Unfunded {
-            recent_pcash_block_hash: CircuitWord::from(r.take_array::<32>()?),
-            valid_until_timestamp: r.take_u64()?,
-        },
-        ContractFundingMode::Sponsored => ContractFunding::Sponsored(decode_private_value_section(
-            r,
-            pcash_chain_id,
-            SectionLayout::ContractAccountCreation,
-        )?),
-    };
+    let recent_pcash_block_hash = CircuitWord::from(r.take_array::<32>()?);
+    let valid_until_timestamp = r.take_u64()?;
     let body = decode_contract_body(r)?;
-    Ok(ContractAccountCreation { body, funding })
+    Ok(ContractAccountCreation {
+        body,
+        recent_pcash_block_hash,
+        valid_until_timestamp,
+    })
 }
 
 fn encode_contract_account_creation(
     w: &mut Writer,
     creation: &ContractAccountCreation,
 ) -> Result<(), EncodeError> {
-    w.u8(creation.funding.mode() as u8);
-    match &creation.funding {
-        ContractFunding::Unfunded {
-            recent_pcash_block_hash,
-            valid_until_timestamp,
-        } => {
-            w.bytes(recent_pcash_block_hash.as_slice());
-            w.u64(*valid_until_timestamp);
-        }
-        ContractFunding::Sponsored(section) => {
-            encode_private_value_section(w, section, SectionLayout::ContractAccountCreation);
-        }
-    }
+    w.bytes(creation.recent_pcash_block_hash.as_slice());
+    w.u64(creation.valid_until_timestamp);
     encode_contract_body(w, &creation.body)
 }
 

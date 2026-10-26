@@ -34,7 +34,7 @@ fn input(source: DerivationSource, number: u64, timestamp: u64) -> BlockInput {
     let transaction = vec![number as u8, timestamp as u8];
     let result = TransactionResult {
         tx_type: 0,
-        funding_mode: 0,
+        account_creation: 0,
         l1_transaction_index: 0,
         batch_item_index: 0,
         outcome: TransactionOutcome::Succeeded,
@@ -369,7 +369,7 @@ fn transaction_results_root_changes_only_block_identity() {
     let mut input_b = input_a.clone();
     input_b.transaction_results.push(TransactionResult {
         tx_type: 0,
-        funding_mode: 0,
+        account_creation: 0,
         l1_transaction_index: 0,
         batch_item_index: 1,
         outcome: TransactionOutcome::ProofRejected,

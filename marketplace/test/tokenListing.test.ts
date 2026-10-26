@@ -163,7 +163,8 @@ test("token escrow funding is one wallet asset send opening output slot 0 to the
   const wallet = {
     sendAsset: async (intent: Record<string, unknown>) => {
       intents.push(intent);
-      await (intent.beforeJournal as () => Promise<void>)();
+      assert.equal(intent.settlePollMaxAttempts, 1);
+      await (intent.beforeJournal as (contentHash: string, transactionHex: string) => Promise<void>)(`0x${"12".repeat(32)}`, "0x34");
       await (intent.onPrepared as (contentHash: string, transactionHex: string) => Promise<void>)(`0x${"12".repeat(32)}`, "0x34");
       return { contentHash: `0x${"12".repeat(32)}`, queued: true, submission: intents.length === 3 ? { l1Hash: "0x56" } : null };
     },

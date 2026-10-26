@@ -39,24 +39,24 @@ Native PCASH is the network's own money and its fee currency. It starts at zero:
 **Accounts.** An account is the control point for spending. It is identified by a 160-bit address and stored as one `AccountState` row in the account tree (§5, §6.3). The row commits the account's address, its **nullifier-key commitment** (a commitment to the account's note key root, `nkRoot`, normally secret and fixed forever at creation), its **rule set**, its kind, a revision counter, and an optional **receive key** that senders can use to encrypt note openings to it. There are two kinds:
 
 * A **user account** (`USER`, kind `0`) belongs to an Ethereum address. The ECDSA key for that address authorizes its creation (§12.2), because no rules exist before it. After creation, only the account's installed rules can authorize its spending and its updates (§12.3). There is one user account per address.
-* A **contract account** (`CONTRACT`, kind `1`) has no key. Its address is derived from its contents, its rules are fixed at creation, and it can never be updated (§12.4). Anyone can publish its creation without a proof, or a user account can sponsor its creation through a private-value section; both funding modes create the same account (§12.4). Afterwards a contract can hold native and asset notes, pay native fees, and pay out directly, without any user account initiating its actions.
+* A **contract account** (`CONTRACT`, kind `1`) has no key. Its address is derived from its contents, its rules are fixed at creation, and it can never be updated (§12.4). Anyone can publish its body without a proof (§12.4), or attach it to a private-value transaction (§11.2). Afterwards a contract can hold native and asset notes, pay native fees, and pay out directly, without any user account initiating its actions.
 
 A note's owner is an account address. Spending existing value requires authorization from the owning account's installed rules, so it requires a registered account. One case needs no registered account: a transaction whose inputs are all padding spends nothing and exercises no account's authority (§11.4).
 
-**Actions.** An **action** is the complete content that one transaction asks account rules to authorize. It has two parts. The **private value** is the value the transaction moves: its inputs, outputs, fee, issuance destination, validity conditions, and burn, committed as one private-value commitment (§11.3). The **extra data** is what the action needs beyond the private value: the account change of an account update (§12.3), the contract whose fee a sponsor pays (§11.7, §12.4), and otherwise nothing. Every proof-bearing transaction carries exactly one action, so this document counts qualifying actions and qualifying transactions interchangeably.
+**Actions.** An **action** is the complete content that one transaction asks account rules to authorize. It has two parts. The **private value** is the value the transaction moves: its inputs, outputs, fee, issuance destination, validity conditions, burn, and optional creation attachment, committed as one private-value commitment (§11.3). The **extra data** is what the action needs beyond the private value: the account change of an account update (§12.3), the contract whose fee a sponsor pays (§11.7), and otherwise nothing. Every proof-bearing transaction carries exactly one action, so this document counts qualifying actions and qualifying transactions interchangeably.
 
 **Account rules and applications.** An account's rule set is a sparse Merkle tree of up to 256 **entries** (§5.2). An entry commits the hash of one circuit's verification key, called an **application**, plus a configuration commitment that the application interprets. A user account's entries are called **rules**; a contract account's entries are called **functions**. An application decides whether to authorize an action. It returns four values to the protocol, the permanent rule statement (§8.2): a commitment to the account it acts for and the configuration it applied, a commitment to the exact action it approves on this chain, the recent block whose state it read, and the transaction's event entry. PCASH attaches no meaning to an entry beyond that statement: there are no capability flags. Anyone can write an application, and a weak one endangers only the accounts that install it.
 
-**Proofs.** Types `0x00` and `0x03`, and type `0x02` in sponsored mode, carry one CHONK zero-knowledge proof (§8.1); user-account creation and unfunded contract-account creation carry none. The proof folds two applications, or three for a sponsored transfer, then a **protocol kernel** that enforces the ledger rules (note membership and ownership, nullifier derivation, output construction, value conservation, asset rules) and checks that each account rule approved the exact action, then a **hiding kernel** that accepts only the type's protocol kernels and exposes the transaction's public inputs. A kernel that consumes one rule folds an event application second (§8.6). Nodes verify only the final proof, against a hiding-kernel verification key pinned for the transaction type (and, for type `0x00`, for its profile). A type `0x00` proof uses one of three private kernels: the **transfer** kernel, where one account owns every real input; the **sponsored-transfer** kernel, where a user account pays the native fee of a contract account's asset action; and the **asset-creation** kernel, which creates a new asset (§11.5). Types `0x02` and `0x03` each have their own kernel. CHONK is the client-side proof-folding scheme of the Barretenberg proving system, and MegaApp, MegaKernel, and MegaZK are its circuit and verification-key formats. A node verifies proofs by calling the pinned Barretenberg release (§8.1, §16); it does not implement the scheme itself. Which account acted, which rule approved, which notes were spent, and what amounts moved stay private.
+**Proofs.** Types `0x00` and `0x03` carry one CHONK zero-knowledge proof (§8.1); standalone user-account and contract-account creations carry none. The proof folds two applications, or three for a sponsored transfer, then a **protocol kernel** that enforces the ledger rules (note membership and ownership, nullifier derivation, output construction, value conservation, asset rules) and checks that each account rule approved the exact action, then a **hiding kernel** that accepts only the type's protocol kernels and exposes the transaction's public inputs. A kernel that consumes one rule folds an event application second (§8.6). Nodes verify only the final proof, against a hiding-kernel verification key pinned for the transaction type (and, for type `0x00`, for its profile). A type `0x00` proof uses one of three private kernels: the **transfer** kernel, where one account owns every real input; the **sponsored-transfer** kernel, where a user account pays the native fee of a contract account's asset action; and the **asset-creation** kernel, which creates a new asset (§11.5). Type `0x03` has its own kernel. CHONK is the client-side proof-folding scheme of the Barretenberg proving system, and MegaApp, MegaKernel, and MegaZK are its circuit and verification-key formats. A node verifies proofs by calling the pinned Barretenberg release (§8.1, §16); it does not implement the scheme itself. Which account acted, which rule approved, which notes were spent, and what amounts moved stay private.
 
 **Transactions.** A transaction is one byte string, `txBytes`, with a common envelope naming its type and its PCASH chain ID (§10.1). There are four types:
 
 * `0x00`, a **private-value transaction** (§11): spends and creates notes of native PCASH, of one private asset, or both. It uses one of two fixed **profiles**: S, with 4 input slots and 5 output slots, or L, with 32 of each.
 * `0x01`, **user-account creation** (§12.2): registers a user account. It carries no proof and pays no PCASH fee.
-* `0x02`, **contract-account creation** (§12.4): publishes a contract account in one of two funding modes: unfunded, with no proof, sponsor or PCASH fee; or sponsored, paid for by a user account.
+* `0x02`, **contract-account creation** (§12.4): publishes a contract body without a proof, signature, or PCASH fee.
 * `0x03`, **user-account update** (§12.3): replaces a user account's rule set or receive key, paid for from the account's own notes.
 
-Types `0x00` and `0x03`, and type `0x02` in sponsored mode, contain the same **private-value section** (§10.3): the proof, its public inputs, one fixed-size data item per output, and one fixed-size arena shared by the outputs. Public inputs include the nullifier of every input slot, the note-body commitment of every output slot, one commitment to the section's output data and arena, the recent block the proof used, the open fee, the issuance destination, the time window, the carrier context the transaction requires, and a blinded event commitment. Every slot is always filled: unused slots hold **padding** (class `DUMMY`), which is indistinguishable from real slots from outside the proof, so the public shape reveals only the profile.
+Types `0x00` and `0x03` contain the same **private-value section** (§10.3): the proof, its public inputs, one fixed-size data item per output, and one fixed-size arena shared by the outputs. Public inputs include the nullifier of every input slot, the note-body commitment of every output slot, one commitment to the section's output data and arena, the recent block the proof used, the open fee, the issuance destination, the time window, the carrier context the transaction requires, and a blinded event commitment, and an account-creation attachment commitment. Every slot is always filled: unused slots hold **padding** (class `DUMMY`), which is indistinguishable from real slots from outside the proof, so the public shape reveals only the profile.
 
 **Recent block.** Every proof names one `recentPcashBlockHash`. A node accepts the transaction only while that block is canonical and at most `RECENT_PCASH_BLOCK_WINDOW_SECONDS` (one hour) older than the block being derived (§10.6). Inside the proof, the circuits open whatever state they need beneath that single hash: the output tree, the account tree, Ethereum history, or earlier PCASH blocks (§8.4). Nothing about which parts were opened is public.
 
@@ -224,6 +224,7 @@ This is the byte-string encoding of §2.3 over `b` without its leading domain, s
 | `OUTPUT_DATA_HASH_DOMAIN` | `output_data_hash` |
 | `ARENA_HASH_DOMAIN` | `arena_hash` |
 | `DELIVERY_COMMITMENT_DOMAIN` | `delivery_commitment` |
+| `ACCOUNT_CREATION_ATTACHMENT_DOMAIN` | `account_creation_attachment` |
 | `ASSET_ID_DOMAIN` | `asset_id` |
 | `ASSET_SECRET_COMMITMENT_DOMAIN` | `asset_secret_commitment` |
 | `ASSET_CREATION_MARKER_DOMAIN` | `asset_creation_marker` |
@@ -428,7 +429,7 @@ The output tree (depth 40, §2.4) holds the output commitment of every note ever
 
 * Every successful private-value section appends its selected profile's `O` ordinary output commitments, one per output slot, including padding.
 * After the block's ordinary outputs, each positive system payout appends one ordinary native note: designated issuance in canonical transaction order, then poster payouts in first-positive-contribution order (§14.3).
-* User-account creation and unfunded contract creation append no output. Sponsored contract creation and user-account update each carry a five-output fee section and may also produce an open-fee payout note.
+* Standalone user-account and contract creation append no output. User-account updates carry a five-output fee section and may produce an open-fee payout. A creation attachment adds no outputs beyond its carrying value action.
 
 A transaction fails with `OutputCapacity` if its outputs, the payout notes it could cause, and the payout notes reserved by earlier successful transactions in the block could together exceed `2^40` outputs (§14.3).
 
@@ -550,7 +551,7 @@ The commitment is derived state and requires no PCASH-owned Ethereum contract. C
 Every admitted transaction (§10.2) contributes one transaction result to its block, and every system payout note (§14.3) contributes one payout result:
 
 ```text
-TransactionResult = (txType, fundingMode, l1TransactionIndex, batchItemIndex, outcomeCode,
+TransactionResult = (txType, accountCreation, l1TransactionIndex, batchItemIndex, outcomeCode,
                      posterOwnerCommitment, outputStartIndex, statementHash)
 PayoutResult      = (outputIndex, ownerCommitment, openFeeAmount, issuanceAmount)
 ```
@@ -559,20 +560,20 @@ Transaction results are ordered by Ethereum transaction index and then by batch 
 
 A transaction result's fields are:
 
-* `txType` (§10.1), and `fundingMode`, the funding mode of a contract-account creation (§12.4) and `0` for every other type. Together with the statement's length, which the sponge's length tag binds (§2.3), they fix how the statement is read: a user-account update and a sponsored contract creation both have nineteen public inputs whose last words mean different things, and the S and L profiles of type `0x00` differ only in length.
+* `txType` (§10.1) identifies the statement format together with its length, which the sponge length tag binds (§2.3). `accountCreation` is `1` when this transaction inserts an account, `2` when an attached creation reuses a compatible existing account (§11.2), and `0` otherwise, including every failed transaction. Standalone successful creations use `1`. Reuse authenticates that outcome without claiming a write or a new account index.
 * `l1TransactionIndex` and `batchItemIndex`, the transaction's position on Ethereum (§9.4).
 * `outcomeCode`, the transaction's outcome (§10.5).
 * `posterOwnerCommitment`, the poster commitment of the transaction's batch (§9.3), which receives the transaction's open fee and any open-route issuance (§13). Batch framing requires it to be canonical before any item is admitted.
 * `outputStartIndex`: for a successful transaction with a private-value section, `outputIndex0`, the output index at which its outputs were appended (§11.2); otherwise `0`. An output commitment includes the index that execution assigns, so the statement's note-body commitments determine the outputs only together with this index.
 * `statementHash`: for a successful transaction, the hash of its statement; otherwise `0`.
 
-A transaction's **statement** is an ordered list of field elements. A proof-bearing transaction (types `0x00` and `0x03`, and sponsored type `0x02`) states the public inputs its verifier reconstructs, in verifier order (§11.2, §12.3, §12.4); those of a successful transaction are canonical. Committing the whole vector rather than selected fields covers every public input of every proof-bearing type, including any a later type adds. A user-account creation or an unfunded contract creation carries no proof and states the account state row it writes (§5.1), less the two fields its type fixes, `accountKind` from `txType` and `accountRevision = 1` from creation:
+A transaction's **statement** is an ordered list of field elements. A proof-bearing transaction (types `0x00` and `0x03`) states the public inputs its verifier reconstructs, in verifier order (§11.2, §12.3, §12.4); those of a successful transaction are canonical. Committing the whole vector rather than selected fields covers every public input of every proof-bearing type, including any a later type adds. A standalone user-account or contract creation carries no proof and states the account state row it writes (§5.1), less the two fields its type fixes, `accountKind` from `txType` and `accountRevision = 1` from creation:
 
 ```text
 statement = (uint160(address), nullifierKeyCommitment, accountRuleSetCommitment, receiveKeyHash)
 ```
 
-A failed transaction changes no state, so its result proves only its type, positions, poster, and outcome. It makes no claim about what the transaction submitted: a rejected word need not be a field element (§10.2), and a sponsored creation can fail before its contract address is derived.
+A failed transaction changes no state, so its result proves only its type, positions, poster, and outcome. It makes no claim about what the transaction submitted: a rejected word need not be a field element (§10.2), and a contract creation can fail before its address is derived.
 
 A payout result holds the payout's assigned `outputIndex`, its owner commitment `C`, and the open-fee and issuance components whose sum is the note's amount (§14.3, §15). Exactly one component is nonzero: a payout contains only fees or only issuance. Because settlement combines fees across the block, tracing a poster payout's fee component to its sources means opening every contributing transaction's result: the successful results of the same block that name the payout's owner commitment as their poster, whose statements' `openFeeAmount` values sum to the payout's fee component. With both kinds, every note in the output tree has a committed creation record: an ordinary output through its transaction's statement and `outputStartIndex`, and a payout note through its payout result.
 
@@ -582,7 +583,7 @@ A payout result holds the payout's assigned `outputIndex`, its owner commitment 
 statementHash = poseidon(TRANSACTION_STATEMENT_DOMAIN, s_0, ..., s_(n-1))
 transactionResultLeaf_i = poseidon(
     TRANSACTION_RESULT_DOMAIN,
-    uint8(txType), uint8(fundingMode), uint64(l1TransactionIndex), uint64(batchItemIndex),
+    uint8(txType), uint8(accountCreation), uint64(l1TransactionIndex), uint64(batchItemIndex),
     uint16(outcomeCode), posterOwnerCommitment, uint40(outputStartIndex), statementHash)
 payoutResultLeaf_j = poseidon(
     PAYOUT_RESULT_DOMAIN,
@@ -675,7 +676,7 @@ The canonical block body retains the exact `txBytes` of every admitted transacti
 
 ## 8. Proofs and Account Rules
 
-Types `0x00` and `0x03`, and type `0x02` in sponsored mode, carry one zero-knowledge proof; user-account creation and unfunded contract-account creation carry none. This section defines the proof system, the interface between an account's authorization application and the protocol, and what a proof may read.
+Types `0x00` and `0x03` carry one zero-knowledge proof; standalone user-account and contract-account creations carry none. This section defines the proof system, the interface between an account's authorization application and the protocol, and what a proof may read.
 
 ### 8.1 CHONK proofs and verification keys
 
@@ -695,7 +696,7 @@ The BN254 trusted-setup element `[x]_2` is compiled into the pinned verifier. At
 
 **Verification.** Under the pinned implementation, a compressed CHONK proof begins with the hiding kernel's public inputs, one 32-byte word each: the transaction's statement words, then 28 words of recursion-accumulator data that the verifier consumes. Every statement word is either serialized elsewhere in `txBytes` or derived by the node, so `txBytes` carries the **posted proof body**: the compressed proof without the statement words. The accumulator words remain in the posted body. A proof is valid exactly when the pinned verifier accepts it:
 
-1. Reconstruct the transaction's ordered public inputs (§11.2, §12.3, §12.4), each as a 32-byte big-endian word. A word `>= p` has already failed as `PublicInputNotInField`.
+1. Reconstruct the transaction's ordered public inputs (§11.2, §12.3), each as a 32-byte big-endian word. A word `>= p` has already failed as `PublicInputNotInField`.
 2. Prepend those words, in order, to the posted proof body, and decompress the result with the pinned Barretenberg release.
 3. Verify the decompressed proof against the type's hiding-kernel VK.
 
@@ -703,7 +704,7 @@ The verifier thus checks the proof against exactly the statement the node recons
 
 ### 8.2 The rule statement
 
-Every protocol kernel that authorizes value or account changes (the transfer, sponsored-transfer, asset-creation, user-account-update, and contract-creation kernels) links private account-rule applications. An application defines the condition under which its entry authorizes the exact action and account contribution that the kernel supplies.
+Every protocol kernel that authorizes value or account changes (the transfer, sponsored-transfer, asset-creation, and user-account-update kernels) links private account-rule applications. An application defines the condition under which its entry authorizes the exact action and account contribution that the kernel supplies.
 
 **Permanent rule statement.** Every account-rule application returns exactly these four values, in this order, as its CHONK `return_data`, which the protocol kernel reads through its `call_data` bus:
 
@@ -713,7 +714,7 @@ Every protocol kernel that authorizes value or account changes (the transfer, sp
 authorizationCommitment = poseidon(AUTHORIZATION_COMMITMENT_DOMAIN, uint160(address), configurationCommitment)
 ```
 
-* `authorizationCommitment` says which account acts, under which settings of the selected rule. `address` names the account (§4.1). It does not change when the account's rule set, receive key, or revision changes. Each application decides which keys may authorize the account, so an account can delegate authority or rotate signers without changing which address owns its notes; the reference ECDSA rules accept only the key whose address is the account's (Appendix B.2). `configurationCommitment` is the opaque, application-owned value that the selected entry commits (§5.2); PCASH defines neither its derivation nor its meaning. The account's nullifier key is not part of the statement: kernels use the authenticated `nkRoot` for note nullifiers and the account leaf, and a rule that needs nullifier-key material takes it from its own configuration or from an opening of an account leaf. The transfer, sponsored-transfer, asset-creation, and contract-creation kernels prove that the account exists under the recent block's account-state root, except in a transfer whose every input is `DUMMY` (§11.4). The user-account-update kernel instead binds the account's current state commitment into the public account update commitment, which the node recomputes from the live row (§12.3).
+* `authorizationCommitment` says which account acts, under which settings of the selected rule. `address` names the account (§4.1). It does not change when the account's rule set, receive key, or revision changes. Each application decides which keys may authorize the account, so an account can delegate authority or rotate signers without changing which address owns its notes; the reference ECDSA rules accept only the key whose address is the account's (Appendix B.2). `configurationCommitment` is the opaque, application-owned value that the selected entry commits (§5.2); PCASH defines neither its derivation nor its meaning. The account's nullifier key is not part of the statement: kernels use the authenticated `nkRoot` for note nullifiers and the account leaf, and a rule that needs nullifier-key material takes it from its own configuration or from an opening of an account leaf. The transfer, sponsored-transfer, and asset-creation kernels prove that the account exists under the recent block's account-state root, except in a transfer whose every input is `DUMMY` (§11.4). The user-account-update kernel instead binds the account's current state commitment into the public account update commitment, which the node recomputes from the live row (§12.3).
 * `actionCommitment` says what the owner approves, on this chain. §8.3 defines it for each role.
 * `recentPcashBlockHash` names the snapshot of chain state that the proof reads (§8.4).
 * `eventEntry` identifies the actual event application and its claim (§8.6). Both rules of a sponsored transfer approve the same entry.
@@ -745,14 +746,14 @@ actionCommitment = poseidon(actionDomain, pcashChainId, privateValueCommitment, 
 | `TRANSFER_ACTION_DOMAIN` | the account of a transfer | `0` | §11.4 |
 | `ASSET_CREATION_ACTION_DOMAIN` | the account of an asset creation | the created asset's `assetId` | §11.6 |
 | `SPONSORED_TRANSFER_ACTION_DOMAIN` | the contract account of a sponsored transfer | `0` | §11.7 |
-| `CONTRACT_FEE_SPONSORSHIP_ACTION_DOMAIN` | the user account that pays a contract's fee, in a sponsored transfer or for the contract's creation | the contract's address | §11.7, §12.4 |
+| `CONTRACT_FEE_SPONSORSHIP_ACTION_DOMAIN` | the user account that pays a contract’s fee in a sponsored transfer | the contract’s address | §11.7 |
 | `ACCOUNT_UPDATE_ACTION_DOMAIN` | the account of a user-account update, together with its fee | `accountUpdateCommitment` | §12.3 |
 
-`extraData` binds what a rule approves to a value that the kernel derives or checks, or that consensus supplies: the asset ID the kernel derives from the asset definition, the address of the contract account it authenticates in a sponsored transfer, the contract address that consensus derives from a sponsored creation's body and supplies as a public input (§12.4), or the account update commitment the kernel computes. The rule's approval and the kernel's value therefore meet directly in the action commitment. An asset ID would otherwise meet the kernel's only through the asset output bodies, which a rule that treats the private value as opaque never opens.
+`extraData` binds what a rule approves to a value that the kernel derives or checks, or that consensus supplies: the asset ID the kernel derives from the asset definition, the address of the contract account it authenticates in a sponsored transfer, or the account update commitment the kernel computes. The rule's approval and the kernel's value therefore meet directly in the action commitment. An asset ID would otherwise meet the kernel's only through the asset output bodies, which a rule that treats the private value as opaque never opens.
 
-Distinct action domains keep an approval in one role from becoming authority in another: a sponsorship cannot be replayed as a transfer or for another contract, and the contract side of a sponsored transfer cannot be replayed through the transfer kernel (§11.7). Each distinct approval has its own domain: two kernels share one only when the approval means the same thing to the signer and the rule's checks do not depend on which kernel runs. One sponsorship domain covers both sponsored transfers and contract creations, so one installed sponsorship rule pays for either (§12.4).
+Distinct action domains keep an approval in one role from becoming authority in another: a sponsorship cannot be replayed as a transfer or for another contract, and the contract side of a sponsored transfer cannot be replayed through the transfer kernel (§11.7). Each distinct approval has its own domain: two kernels share one only when the approval means the same thing to the signer and the rule's checks do not depend on which kernel runs. The sponsorship domain authorizes the user’s bounded fee contribution to the named contract action (§11.7).
 
-The chain ID is an operand of every action commitment, so an approval on one PCASH chain is not an approval on another. A rule that computes its action commitment cannot leave the chain out, and a universal rule that approves any action commitment never handles the chain ID at all. The private value and the account update commitment are chain-independent; the chain enters only here. `recentPcashBlockHash` is not an operand (§8.4). `eventEntry` is also separate: an event application may prove a claim about the action without a circular commitment.
+The chain ID is an operand of every action commitment, so an approval on one PCASH chain is not an approval on another. A rule that computes its action commitment cannot leave the chain out, and a universal rule that approves any action commitment never handles the chain ID at all. The private-value and account-update commitment formulas add no chain ID operand; a signed user attachment already contains a signature bound to its network (§12.1). `recentPcashBlockHash` is not an operand (§8.4). `eventEntry` is also separate: an event application may prove a claim about the action without a circular commitment.
 
 ### 8.4 What a proof can open
 
@@ -777,7 +778,7 @@ PCASH imposes no configuration schema, salt requirement, signing convention, or 
 
 Every proof-bearing transaction exposes one `eventsCommitment` after the base private-value statement. Its private opening contains a field salt and an event entry. The prover SHOULD choose a fresh cryptographically random salt for each transaction to hide equal entries; the circuit constrains the commitment, not the entropy of its opening.
 
-An event application returns `[actionCommitment, recentPcashBlockHash, event]`. The kernel requires the first two fields to equal the typed action and anchor it derives. The action is the ordinary transfer, asset-creation, account-update, or contract-fee-sponsorship action for that kernel; in a sponsored transfer it is the primary contract's sponsored-transfer action. Any MegaApp circuit with this statement may serve as an event application. Account authorization comes only from installed rules, so the event slot needs no account authentication and grants no authority to change the ledger transition.
+An event application returns `[actionCommitment, recentPcashBlockHash, event]`. The kernel requires the first two fields to equal the typed action and anchor it derives. The action is the ordinary transfer, asset-creation, or account-update action for that kernel; in a sponsored transfer it is the primary contract's sponsored-transfer action. Any MegaApp circuit with this statement may serve as an event application. Account authorization comes only from installed rules, so the event slot needs no account authentication and grants no authority to change the ledger transition.
 
 ```text
 eventEntry = poseidon(EVENT_ENTRY_DOMAIN, applicationVkHash, event)
@@ -927,7 +928,7 @@ txBytes = txType (u8) ‖ pcashChainId (u32be) ‖ txPayload
 
 An assigned `txType` permanently fixes its payload grammar and type-specific interpretation; private-value profiles select exact capacities and verifier keys within that grammar. An assigned type MUST NOT be reinterpreted or reused. A fork MAY activate or retire a type for new blocks without changing how historical bytes decode (§3.2).
 
-`pcashChainId` occurs exactly once in `txBytes`, at the fixed envelope offset, and admission requires it to equal `PCASH_CHAIN_ID` (§10.2). Cryptographic statements use the network's `PCASH_CHAIN_ID`, which every admitted envelope equals: position `0` of every private-value section's public inputs (types `0x00` and `0x03`, and sponsored type `0x02`), which the kernels hash into every action commitment (§8.3), and the numeric `pcashChainId` of the account-creation EIP-712 message (§12.1). Proof statements use this conversion, whose result is below `p` by construction:
+`pcashChainId` occurs exactly once in `txBytes`, at the fixed envelope offset, and admission requires it to equal `PCASH_CHAIN_ID` (§10.2). Cryptographic statements use the network's `PCASH_CHAIN_ID`, which every admitted envelope equals: position `0` of every private-value section's public inputs (types `0x00` and `0x03`), which the kernels hash into every action commitment (§8.3), and the numeric `pcashChainId` of the account-creation EIP-712 message (§12.1). Proof statements use this conversion, whose result is below `p` by construction:
 
 ```text
 chainIdWord = bytes28(0) || uint32be(pcashChainId)
@@ -939,7 +940,7 @@ The four assigned types are:
 |---|---|---|---|
 | `0x00` | private-value transaction | yes | §11 |
 | `0x01` | user-account creation | no | §12.2 |
-| `0x02` | contract-account creation | sponsored mode only | §12.4 |
+| `0x02` | contract-account creation | no | §12.4 |
 | `0x03` | user-account update | yes | §12.3 |
 
 ### 10.2 Admission and structural decoding
@@ -964,7 +965,8 @@ Non-admission classes are not outcome codes: a non-admitted item produces no tra
 | `UnknownKind` | the type byte is unassigned, or the type is not active at the block's timestamp |
 | `UnknownPrivateValueShape` | a type `0x00` profile selector other than `0` or `1` (§10.4) |
 | `UnknownAuthorizationMode` | a user-account creation authorization mode other than `0` or `1` (§12.2) |
-| `UnknownFundingMode` | a contract-account creation funding mode other than `0` or `1` (§12.4) |
+| `UnknownAccountCreationTag` | an account-creation attachment tag other than `0`, `1`, or `2` (§11.2) |
+| `DirectCreationAttachment` | a direct-mode user creation in an attachment (§11.2) |
 | `UnknownReceiveKeyMode` | a creation receive-key mode other than `0` or `1`, or an update receive-key operation other than `0`, `1`, or `2` |
 | `UnknownPublishesNkRootFlag` | a contract body `publishesNkRoot` flag other than `0` or `1` (§12.4) |
 | `UnknownYParity` | a signed user-account creation `yParity` other than `0` or `1` (§12.2) |
@@ -975,19 +977,19 @@ Non-admission classes are not outcome codes: a non-admitted item produces no tra
 
 A correct envelope chain ID paired with a proof produced for another domain is admitted and then fails execution. A creation signature produced for another domain is admitted and recovers to an unrelated address, so it cannot create the intended account (§12.2). A wrong envelope chain ID is non-admitted without decoding its payload or invoking recovery or verification. Carriers and batches rejected before trustworthy item boundaries are framed likewise produce no transaction results.
 
-**Structural decoding** determines exact field boundaries and complete byte consumption, and decodes every closed-set selector byte: `txType`, the type `0x00` profile selector `shapeId`, the user-account-creation `authorizationMode` and `yParity`, the contract-account-creation `fundingMode`, every receive-key mode and operation, and the contract body's `publishesNkRoot`. One rule covers them all: a selector byte outside its set makes the item undecodable, with the class named in the table above. No field carries a length prefix: field sizes follow from the type, these selectors, and the contract body's `functionCount`. Every other value is preserved raw until ordered execution validation: 32-byte words need not be canonical field elements, signature scalars are not range-checked, and function lists are not checked for emptiness or order. Such values are execution failures of the admitted transaction.
+**Structural decoding** determines exact field boundaries and complete byte consumption, and decodes every closed-set selector byte: `txType`, the type `0x00` profile selector `shapeId`, the user-account-creation `authorizationMode` and `yParity`, the account-creation attachment tag, every receive-key mode and operation, and the contract body's `publishesNkRoot`. One rule covers them all: a selector byte outside its set makes the item undecodable, with the class named in the table above. No field carries a length prefix: field sizes follow from the type, these selectors, and the contract body's `functionCount`. Every other value is preserved raw until ordered execution validation: 32-byte words need not be canonical field elements, signature scalars are not range-checked, and function lists are not checked for emptiness or order. Such values are execution failures of the admitted transaction.
 
 **Receive-key fields.** User-account creation and the contract body encode `receiveKeyMode (u8) ‖ receiveKeyBytes`, with `ABSENT = 0` and `PRESENT = 1`. User-account update encodes `receiveKeyOperation (u8) ‖ receiveKeyBytes`, with `KEEP = 0`, `CLEAR = 1`, and `REPLACE = 2`. `receiveKeyBytes` is exactly `ML_KEM768_PUBLIC_KEY_LEN` (§5.1) bytes for `PRESENT` and `REPLACE`, and empty for every other mode. Any other mode or operation byte is non-admitted as `UnknownReceiveKeyMode`.
 
 ### 10.3 The private-value section
 
-One structure, the **private-value section**, carries every relation that spends notes or pays a fee: the payload of a type `0x00` transaction after its profile byte, the fee payment that precedes the contract body of a sponsored type `0x02` creation, and the fee payment that ends a type `0x03` update. With `I` input slots and `O` output slots:
+One structure, the **private-value section**, carries every relation that spends notes or pays a fee: the section following a type `0x00` profile byte and the fee payment ending a type `0x03` update. With `I` input slots and `O` output slots:
 
 ```text
 privateValueSection = wireWords × verifierInput (32) ‖ proof (proofBytes) ‖ O × outputData (1,213) ‖ arena (arenaBytes)
 ```
 
-* The serialized words are the private-value verifier inputs (§11.2) other than those derivation supplies itself: position `0` (the chain ID word of `PCASH_CHAIN_ID`, §10.1) and the delivery commitment, so a type `0x00` section has `wireWords = I + O + 7`. The fee sections of types `0x02` and `0x03` always use the S profile, without a profile byte. Account actions earn no issuance (§13), so these sections also omit `issuanceOwnerCommitment`, and derivation supplies zero at its position in the eighteen-word S statement; they have `wireWords = 15` and occupy 31,609 bytes.
+* The serialized words are the private-value verifier inputs (§11.2) other than the chain ID, delivery commitment, and account-creation attachment commitment, which derivation supplies. A type `0x00` section has `wireWords = I + O + 7`. A type `0x03` fee section uses profile S without a profile byte, also omits the zero issuance commitment, and supplies zero for the attachment commitment. It has fifteen wire words and occupies 31,609 bytes.
 * `proofBytes = 22,432` for every proof-bearing type and profile (§16). The posted proof body omits the public inputs that begin a compressed CHONK proof; verification prepends the transaction's reconstructed public inputs (§8.1).
 * Every private-value section carries exactly `O` output-data items of exactly `OUTPUT_DATA_BYTES = 1,213` bytes each, followed by one arena of exactly `arenaBytes = 32 + 520 × O` bytes: 2,632 in profile S and 16,672 in profile L. Derivation computes, from the exact posted bytes:
 
@@ -1002,14 +1004,14 @@ privateValueSection = wireWords × verifierInput (32) ‖ proof (proofBytes) ‖
 
 ### 10.4 Type payloads
 
-* `txType 0x00`, **private-value transaction**: `shapeId (u8) ‖ privateValueSection`. The structural selector is `0` for profile S or `1` for profile L (§11.1); any other selector is non-admitted as `UnknownPrivateValueShape`. No other top-level payment type is assigned.
+* `txType 0x00`, **private-value transaction**: `shapeId (u8) ‖ privateValueSection ‖ accountCreationAttachment`. The profile selector is `0` for S or `1` for L (§11.1); another selector is non-admitted as `UnknownPrivateValueShape`. The attachment is exactly one tagged value (§11.2), including a single zero tag when absent.
 * `txType 0x01`, **user-account creation**: the authorization mode, the user-account creation payload, a recent block hash, a deadline, and an ECDSA signature only for signed authorization (§12.2). It has no proof and no fee, and it carries no address: the account address is the authenticated top-level Ethereum sender in direct mode, or the signer node-side `ecrecover` returns in signed mode. Shared creation-only state checks follow. Consensus derives `accountRevision = 1`.
-* `txType 0x02`, **contract-account creation**: a funding mode, its funding payload, then the unsigned contract body (§12.4). The structural selector `fundingMode` is `0` for unfunded or `1` for sponsored; any other selector is non-admitted as `UnknownFundingMode`. An unfunded creation carries a recent block hash and a deadline, and has no proof, signature, private-value section, fee, or issuance. A sponsored creation carries a private-value section paid by a sponsoring user account; its proof has nineteen public inputs: the section's eighteen, then the contract address consensus derives from the body. `openFeeAmount = 0` with no private relay payment is valid and may spend nothing: every input and output slot is `DUMMY`, so the section authorizes the publication alone.
-* `txType 0x03`, **user-account update**: the account's address, the proposed rule set commitment and receive-key operation, the asserted account update commitment, and a private-value section that pays the fee from the updated account's own native notes (§12.3). The section's `recentPcashBlockHash` and `validUntilTimestamp` are the update's recent block and deadline. Consensus derives the immutable `nullifierKeyCommitment`, the next revision, and the resulting account state row from live state. The proof has nineteen public inputs: the section's eighteen, then the account update commitment.
+* `txType 0x02`, **contract-account creation**: a recent block hash, deadline, and unsigned contract body (§12.4). It has no proof, signature, private-value section, fee, or issuance.
+* `txType 0x03`, **user-account update**: the account's address, the proposed rule set commitment and receive-key operation, the asserted account update commitment, and a private-value section that pays the fee from the updated account's own native notes (§12.3). The section's `recentPcashBlockHash` and `validUntilTimestamp` are the update's recent block and deadline. Consensus derives the immutable `nullifierKeyCommitment`, the next revision, and the resulting account state row from live state. The proof has twenty public inputs: the section's nineteen, with a zero attachment commitment, then the account update commitment.
 
 ### 10.5 Execution and outcomes
 
-Once admitted, a transaction executes its type's checks in a fixed order. The first failing check determines the `outcomeCode`; if every check passes, the outcome is `Succeeded`. An implementation may parallelize internal computation only if it always selects the same first failure. These orders are consensus. Each type's order is defined with the type: private value in §11.2, user-account creation in §12.2, user-account update in §12.3, and contract-account creation, in both funding modes, in §12.4.
+Once admitted, a transaction executes its type's checks in a fixed order. The first failing check determines the `outcomeCode`; if every check passes, the outcome is `Succeeded`. An implementation may parallelize internal computation only if it always selects the same first failure. These orders are consensus. Each type's order is defined with the type: private value in §11.2, user-account creation in §12.2, user-account update in §12.3, and contract-account creation in §12.4.
 
 **Failures versus fatal errors.** A verifier rejection, including a proof body that fails decompression, is `ProofRejected`. The pinned verifier refuses a proof the same way when its own execution fails, for example by running out of memory, so a refusal is a rejection only when the verifier reports a failure caused by the proof. Any other refusal, a verifier crash, timeout, missing verification key, invalid verifier response, or any other inability to obtain the pinned verifier's verdict is a **fatal derivation error**. A false state predicate is an included failed transaction; a state read, I/O, corruption, or other infrastructure error is fatal. Fatal derivation errors halt derivation at the Ethereum block and never become transaction outcomes.
 
@@ -1044,6 +1046,7 @@ Once admitted, a transaction executes its type's checks in a fixed order. The fi
 | 22 | `EmptyContractFunctionSet` |
 | 23 | `SelectorsNotStrictlyIncreasing` |
 | 24 | `CarrierContextMismatch` |
+| 25 | `AccountCreationMismatch` |
 
 The integers are explicit protocol values, not positions inferred from a language-level array. Unknown numeric values are unsupported and MUST NOT be shifted, aliased, or reinterpreted.
 
@@ -1063,7 +1066,7 @@ A block hash passes only while it belongs to the current parent-linked header ch
 
 **Time bounds.** `notBeforeTimestamp` and `validUntilTimestamp` bound when the authorized action may execute. `validUntilTimestamp` is a pure deadline and does not extend the lifetime of the referenced block.
 
-**Carrier context.** `carrierContextHash` (§11.2) names the carrier context (§9.1) that the transaction requires. Zero states no condition: the transaction executes however it is delivered. A nonzero value is satisfied only when it equals the `carrierContextHash` of the carrier that delivers the transaction, so only by an Inbox transaction from that sender or by a carrier event from that emitter with exactly that context; otherwise the transaction fails with `CarrierContextMismatch`, checked immediately after `NotYetValid` in every proof-bearing type's order (§11.2, §12.3, §12.4). Kernels bind the value into the private-value commitment (§11.3) and do not interpret it. A rule that relies on it opens the private value and constrains the value, choosing which parts of the carrier context to pin: it recomputes the hash in its circuit and may leave the address or any part of the context as a free witness. The condition is not part of the rule statement (§8.2) or of any action's extra data (§8.3).
+**Carrier context.** `carrierContextHash` (§11.2) names the carrier context (§9.1) that the transaction requires. Zero states no condition: the transaction executes however it is delivered. A nonzero value is satisfied only when it equals the `carrierContextHash` of the carrier that delivers the transaction, so only by an Inbox transaction from that sender or by a carrier event from that emitter with exactly that context; otherwise the transaction fails with `CarrierContextMismatch`, checked immediately after `NotYetValid` in every proof-bearing type's order (§11.2, §12.3). Kernels bind the value into the private-value commitment (§11.3) and do not interpret it. A rule that relies on it opens the private value and constrains the value, choosing which parts of the carrier context to pin: it recomputes the hash in its circuit and may leave the address or any part of the context as a free witness. The condition is not part of the rule statement (§8.2) or of any action's extra data (§8.3).
 
 **Authorization lifetime versus proof lifetime.** Every proof is separately bound to its exact `recentPcashBlockHash` and can succeed only while that snapshot passes the window check. If the selected application's authorization condition does not itself commit to the snapshot, the same unchanged action may be re-proved against a newer qualifying snapshot without being reauthorized. Changing any action field produces a different action and requires authorization for that action.
 
@@ -1079,15 +1082,15 @@ Exactly two public profiles select compiled instances of one shared relation:
 
 | Profile | shapeId | Inputs I | Outputs O | Public fields | Wire words |
 |---|---:|---:|---:|---:|---:|
-| S | 0 | 4 | 5 | 18 | 16 |
-| L | 1 | 32 | 32 | 73 | 71 |
+| S | 0 | 4 | 5 | 19 | 16 |
+| L | 1 | 32 | 32 | 74 | 71 |
 
 * Dimensions are fixed by the profile, never inferred from vector lengths or configured by a client.
 * Each profile selects its own exact hiding-kernel VK (§16).
 * Real occupancy is private: which slots carry value is not public, within the limits each kernel sets (§11.4–11.7), and minimally occupied L actions are valid.
 * S and L share notes, the output tree, and the spent set. A note keeps its creation secret when it is spent through the other profile.
 
-A type `0x00` transaction is `262 + 32*I + 1765*O + proofBytes` bytes, where `proofBytes = 22,432` is the posted proof body length (§16). An S transaction occupies 31,647 bytes and an L transaction 80,198 bytes. One L transaction plus the 67-byte batch header and 4-byte item framing occupies 80,269 bytes, within the 126,945-byte capacity of one blob. Every carrier kind admits both profiles.
+A type `0x00` transaction is `262 + 32*I + 1765*O + proofBytes + attachmentBytes` bytes, where `proofBytes = 22,432` (§16). An absent attachment occupies one byte, so S occupies 31,648 bytes and L 80,199 bytes. One unattached L transaction plus the 67-byte batch header and 4-byte item framing occupies 80,270 bytes, within one blob’s 126,945-byte capacity. The largest contract attachment occupies 17,795 bytes, making the largest L transaction 97,993 bytes. Every carrier kind admits both profiles.
 
 ### 11.2 Public inputs and validation
 
@@ -1105,9 +1108,10 @@ A type `0x00` transaction is `262 + 32*I + 1765*O + proofBytes` bytes, where `pr
 6+I+O            validUntilTimestamp      (< 2^64)
 7+I+O            carrierContextHash       (0 = no condition)
 8+I+O            eventsCommitment
+9+I+O            accountCreationCommitment
 ```
 
-There are `I + O + 9` public inputs. The wire serializes the `I + O + 7` non-derived fields in that order, omitting the chain ID and the delivery commitment (§10.3). Derivation supplies the network's chain ID word (§10.1) and computes the delivery commitment from all `O` exact output-data items, including late L slots, and the arena.
+There are `I + O + 10` public inputs. The wire serializes the `I + O + 7` non-derived fields, omitting the chain ID, delivery commitment, and attachment commitment (§10.3). Derivation supplies the chain ID, computes the delivery commitment from every output-data item and the arena, and computes the attachment commitment from the exact tagged attachment below.
 
 The fields mean:
 
@@ -1115,6 +1119,7 @@ The fields mean:
 * `outputBodyCommitments`: one note-body commitment per output slot, including padding. Every body appends one ordinary output commitment.
 * `deliveryCommitment`: the commitment to the section's exact output-data items and arena (§10.3).
 * `openFeeAmount` and `issuanceOwnerCommitment`: the public fee and the issuance destination (§13).
+* `accountCreationCommitment`: the exact tagged attachment commitment, or zero when absent.
 * `notBeforeTimestamp` and `validUntilTimestamp`: the time window (§10.6).
 * `carrierContextHash`: the carrier context the transaction requires, or `0` for none (§9.1, §10.6).
 
@@ -1131,8 +1136,8 @@ The fields mean:
 3. Require `currentTimestamp <= validUntilTimestamp` (`Expired`).
 4. Require `notBeforeTimestamp <= currentTimestamp` (`NotYetValid`). `notBeforeTimestamp == 0` is unconstrained below, and there is no maximum lookahead.
 5. If `carrierContextHash != 0`, require it to equal the delivering carrier's `carrierContextHash` (§9.1, §10.6) (`CarrierContextMismatch`).
-6. Require the nullifiers, in this order: no zero value (`ZeroNullifier`), pairwise distinct (`DuplicateInputNullifier`), then globally unseen (`NullifierAlreadySpent`). Report the lowest failing input slot.
-7. Require the capacity reservations of §14.3 (`OutputCapacity`).
+6. Validate the attachment as specified below, including its signature or body, its own user-creation freshness, compatibility with an existing account, and capacity for a new account.
+7. Require the nullifiers, in this order: no zero value (`ZeroNullifier`), pairwise distinct (`DuplicateInputNullifier`), then globally unseen (`NullifierAlreadySpent`). Report the lowest failing input slot. Then require the capacity reservations of §14.3 (`OutputCapacity`).
 8. Verify the proof against the selected profile's pinned hiding-kernel VK (`ProofRejected`).
 
 **Effects.** Only if every check succeeds, atomically:
@@ -1146,6 +1151,26 @@ The fields mean:
 
 3. Update the capacity reservations (§14.3).
 4. Record the settlement obligations `(openFeeAmount, issuanceOwnerCommitment, posterOwnerCommitment)` (§13), and count the transaction as a qualifying action (§14).
+5. Insert the staged account, if absent, with the next account index and revision `1`. If it already existed compatibly, leave its row, index, revision, receive material, and original creation provenance unchanged. Record insertion or reuse in the transaction result (§7.3).
+
+**Account-creation attachment.** Its canonical encoding is:
+
+```text
+0: tag (u8 = 0)
+1: tag (u8 = 1) ‖ signedUserCreationPayload (§12.2, including authorizationMode = 1)
+2: tag (u8 = 2) ‖ contractBody (§12.4)
+```
+
+The user payload has no transaction envelope: its EIP-712 chain ID is the enclosing transaction’s chain ID. Direct authorization is non-admitted as `DirectCreationAttachment`, because it would authenticate the poster rather than the intended owner. An unknown tag is non-admitted as `UnknownAccountCreationTag`. Structural decoding consumes the attachment exactly. The commitment is zero for tag `0`, otherwise `poseidonBytes(ACCOUNT_CREATION_ATTACHMENT_DOMAIN, tag ‖ payload)`. Both the public statement and private-value commitment bind this word; signature recovery and body interpretation are node checks.
+
+For tag `1`, first recover and validate the signature as in §12.1 (`InvalidAccountSignature`); require canonical nullifier-key and rule-set commitments (`NonCanonicalAccountField`); require the creation’s recent block in the canonical recent window (`RecentPcashBlockNotInWindow`); and require its deadline not passed (`Expired`). Then read the address recovered from the signature. If present, require a USER account with exactly the signed nullifier-key commitment (`AccountCreationMismatch`). Keep its current rule set, receive key, and revision. If absent, require account capacity (`AccountCapacity`) and stage the signed initial row.
+
+For tag `2`, apply the canonical-field, key-derivation, function-list, function-set and address-derivation checks of §12.4 in that order. If the address exists, require kind CONTRACT, the derived nullifier-key and function-set commitments, revision `1`, and the derived receive-key digest (`AccountCreationMismatch`). Comparing the complete row prevents a different body that collides in the 160-bit address from being reused. If absent, require account capacity and stage the initial row.
+
+Body, signature and user-creation freshness checks run for both insertion and reuse. Reuse allocates no account index and needs no spare account capacity. Copying and publishing an identical creation first therefore does not invalidate the carrying transaction. No attachment effect commits unless every subsequent value check and proof succeeds.
+
+An attachment grants no spending, sponsorship, or installed-rule authority: those still require membership under the value transaction’s recent account root. The new account may receive outputs, but outputs are not required to fund it. The transaction earns its ordinary single issuance share; the attachment earns none. The public attachment links the account to this transaction. Standalone creation remains available.
+
 
 ### 11.3 Slot classes, markers, and the private-value commitment
 
@@ -1168,21 +1193,21 @@ Slot requirements:
 
 The prover chooses each slot's class freely, and the kernel requires it to be one of the classes above. The kernel derives every other slot field, as this section states.
 
-**Private-value commitment.** The private-value commitment binds the complete private value: the profile, the fee, issuance destination, time bounds, required carrier context, private burn amount, delivery commitment, and every slot's class and commitment, with each input's nullifier, in slot order. Every action commitment is built on it (§8.3).
+**Private-value commitment.** The private-value commitment binds the complete private value: the profile, the fee, issuance destination, time bounds, required carrier context, private burn amount, delivery commitment, attachment commitment, and every slot's class and commitment, with each input's nullifier, in slot order. Every action commitment is built on it (§8.3).
 
 ```text
 privateValueCommitment = poseidon(
     PRIVATE_VALUE_COMMITMENT_DOMAIN,
     shapeId, N_IN, N_OUT,
     openFeeAmount, issuanceOwnerCommitment, notBeforeTimestamp, validUntilTimestamp,
-    carrierContextHash, assetBurnAmount, deliveryCommitment,
+    carrierContextHash, assetBurnAmount, deliveryCommitment, accountCreationCommitment,
     inputSlotClass_0, inputCommitment_0, nullifier_0,
     ..., inputSlotClass_(N_IN-1), inputCommitment_(N_IN-1), nullifier_(N_IN-1),
     outputSlotClass_0, outputBodyCommitment_0,
     ..., outputSlotClass_(N_OUT-1), outputBodyCommitment_(N_OUT-1))
 ```
 
-The commitment binds the selected profile, every slot in order, and the private `assetBurnAmount`, without binding transient tree roots or the chain ID. The action commitment adds the chain ID (§8.3), and neither commitment binds a recent root, which is why an unchanged action can be re-proved against a newer recent block (§10.6). The profile fixes the number of operands, so each slot's position and class are bound: an output cannot be moved, and a slot cannot be reinterpreted, without changing the authorized action. Require `0 <= assetBurnAmount < 2^131`.
+The commitment binds the selected profile, every slot in order, and the private `assetBurnAmount`, without binding transient tree roots or the chain ID. The action commitment adds the chain ID (§8.3), so an unchanged action can be re-proved against a newer recent block (§10.6). A signed creation attachment separately commits its own recent block and deadline; refreshing that attachment changes the action and requires renewed authorization. The profile fixes the number of operands, so each slot's position and class are bound: an output cannot be moved, and a slot cannot be reinterpreted, without changing the authorized action. Require `0 <= assetBurnAmount < 2^131`.
 
 **Selecting the relation.** The asset ID is not a transaction field. The transfer and sponsored-transfer kernels take it as a private witness, and the asset-creation kernel derives it from the asset definition (§11.6). It is the note namespace of every `ASSET` input and output, and every kernel requires it to be nonzero for each `ASSET` slot it opens or constructs. When no slot is `ASSET`, the transfer kernel's asset-ID witness is unused. An `APPLICATION` marker carries no asset value and does not select the asset path. The slot classes then admit exactly these asset shapes:
 
@@ -1245,9 +1270,9 @@ allInputsDummy OR reconstructedAccountRoot == historicalAccountRoot
 
 `allInputsDummy` is derived in constrained code from every private input class being exactly `DUMMY`; `APPLICATION` and `ASSET_CREATION` never qualify. The supplied account fields and rule set on this path therefore do not represent authenticated installed-account authority.
 
-Dummy nullifiers remain globally single-spend (§11.2, §6.4), so an accepted proof cannot earn issuance twice. Registration itself earns no issuance. A registration and an all-padding action may be published in one batch with independent outcomes; the action is valid regardless of the registration's position or success, including when no registration is published. Spending a recovered reward later requires normal historical account and note membership.
+Dummy nullifiers remain globally single-spend (§11.2, §6.4), so an accepted proof cannot earn issuance twice. Registration itself earns no issuance. A registration and an all-padding action may be published in one batch with independent outcomes; the action is valid regardless of the registration's position or success, including when no registration is published. A creation attachment couples registration and the action under §11.2. Spending a recovered reward later requires normal historical account and note membership.
 
-Both cases use the same transfer kernel and VK within their profile, followed by the ordinary hiding kernel. The sponsored-transfer, asset-creation, and contract-creation kernels require unconditional account membership; the account-update kernel relies on the node's check of the live row (§12.3). The folded stack is `selected application → event application → transfer kernel → hiding kernel`. A zero-fee action remains valid when ordinary conservation holds.
+Both cases use the same transfer kernel and VK within their profile, followed by the ordinary hiding kernel. The sponsored-transfer and asset-creation kernels require unconditional account membership; the account-update kernel relies on the node's check of the live row (§12.3). The folded stack is `selected application → event application → transfer kernel → hiding kernel`. A zero-fee action remains valid when ordinary conservation holds.
 
 ### 11.5 Protocol kernels
 
@@ -1338,7 +1363,7 @@ The relation:
 
 The fee payer contributes no asset, owns no marker, and can lose at most `openFeeAmount + privateRelayAmount`. Exchange and every other multi-party settlement use application contracts and sequential actions rather than multi-owner type `0x00` proofs, because those require parties to contribute value to each other rather than only to the open fee and selected relay payment.
 
-The two installed applications return their role-separated rule statements privately. The sponsored-transfer kernel authenticates both exact MegaApp VK hashes, links both rules and the event application, enforces the complete type `0x00` relation, and returns the same `I + O + 9`-field statement for the selected profile as the transfer and asset-creation kernels. The second account has no public identifier, transaction mode bit, or dedicated public input.
+The two installed applications return their role-separated rule statements privately. The sponsored-transfer kernel authenticates both exact MegaApp VK hashes, links both rules and the event application, enforces the complete type `0x00` relation, and returns the same `I + O + 10`-field statement for the selected profile as the transfer and asset-creation kernels. The second account has no public identifier, transaction mode bit, or dedicated public input.
 
 **Role-separated action commitments.** The two rules approve the same private value in different roles (§8.3):
 
@@ -1370,7 +1395,7 @@ The standard law fixes fungible transfer and burn semantics. The creator has no 
 
 ## 12. Account Transactions
 
-Three transaction types create and change accounts (§5). A user account is created by its Ethereum key (`0x01`) and afterwards changed only by an update its own rules authorize (`0x03`). A contract account is created once (`0x02`), either unfunded, without a proof or fee, or with a user-account sponsor, and never changes. Updates and sponsored contract creations pay their fees through an ordinary private-value section (§10.3).
+Accounts are created by standalone user or contract creation (`0x01` or `0x02`), or ensured by a type `0x00` attachment (§11.2). A user account is created with its Ethereum key and afterwards changed only by its own rules through type `0x03`. A contract account’s body fixes its address and immutable rules. Account updates pay fees through a private-value section (§10.3); standalone creations are proof-free and pay no PCASH fee.
 
 ### 12.1 Protocol-defined EIP-712 message
 
@@ -1449,7 +1474,7 @@ Consequently, a transition that leaves the receive-key state unchanged has exact
 * every output slot is `DUMMY` except an optional ordinary private `NATIVE` relay output and at most one `NATIVE` change note returning to the account's address;
 * `assetBurnAmount = 0`, and `sum(native inputs) = openFeeAmount + privateRelayAmount + changeAmount`.
 
-A zero fee with every slot dummy is valid. The proof's ordered public inputs are the eighteen private-value inputs of §11.2 (profile S), followed by `accountUpdateCommitment` at position `18`. Position `0` is the chain ID word of `PCASH_CHAIN_ID` (§10.1), and the recent block hash and `validUntilTimestamp` are the section's own words.
+A zero fee with every slot dummy is valid. The proof has the nineteen private-value inputs of §11.2 (profile S), followed by `accountUpdateCommitment` at position `19`. The attachment commitment is zero and the kernel enforces that constraint; type `0x03` carries no attachment. Position `0` is the chain ID word, and the recent block and deadline are the section’s own words.
 
 **The account update commitment.** At the transaction's exact sequential processing position, consensus reads the immutable `nullifierKeyCommitment` and `currentAccountRevision` from the live row, derives `newAccountRevision = currentAccountRevision + 1` without overflow, and derives the live current and proposed leaves:
 
@@ -1499,7 +1524,7 @@ The change note's secret is a free kernel witness; the authorizing rule binds wh
 5. `currentAccountRevision + 1` fits in `u32` (`AccountRevisionExhausted`).
 6. The receive-key operation's state precondition holds (`ClearWithoutReceiveKey`, then `ReplaceWithIdenticalReceiveKey`).
 7. The reconstructed `accountUpdateCommitment` equals the serialized one (`AccountUpdateCommitmentMismatch`).
-8. The section's nullifier and capacity checks, as in §11.2 steps 6–7, then proof verification against the `user_account_update_hiding_kernel` VK of §16 (`ProofRejected`).
+8. The section's nullifier and capacity checks, as in §11.2 step 7, then proof verification against the account-update hiding-kernel VK of §16 (`ProofRejected`).
 
 **Effects.** On success, atomically mark the section's four nullifiers, record its fee, and append its five output commitments exactly as a private-value transaction does (§11.2), and replace the canonical row and account state commitment. On failure the transaction has no effect.
 
@@ -1509,23 +1534,15 @@ Validation MUST NOT reject duplicate `nullifierKeyCommitment` values across addr
 
 A contract account is a keyless account whose kind is committed in its account state (`accountKind == 1`), whose address derives from its contents, and which consensus never updates. It exposes an immutable set of functions, each one account-rule entry (§5.2). Calling a function means folding that entry's application into the active protocol kernel, which authenticates the exact action and the account's contribution. There is no node-executed contract code and no contract storage. Notes owned by a contract are spendable only through one of its committed functions.
 
-Contract creation is unsigned, and the contract's full contents are published in Ethereum data. A contract's contents are its identity and creating it grants the publisher no authority over it, so creation needs no authorization. A funding mode selects how the publication is paid for:
-
-* **Unfunded** (`fundingMode = 0`): no proof, sponsor, signature, or PCASH fee. Whoever posts it pays only Ethereum gas. A recent block hash and a deadline bound how long the exact bytes can succeed.
-* **Sponsored** (`fundingMode = 1`): a contract has nothing to spend before it exists, so a user account sponsors its creation through a private-value section: the sponsor's installed rule authorizes paying for this exact contract address, and the fee comes from the sponsor's own native notes, so any relayer can include it. An `openFeeAmount` of zero with no private relay payment spends nothing and leaves inclusion to a self-publisher or a selected publisher willing to carry it.
-
-Both modes publish the same body, derive the same address, and create the same account. Neither earns issuance.
+Contract creation is unsigned and proof-free. Its full contents are published in Ethereum data. Those contents determine its identity, and publishing them grants no authority over the account. Whoever posts it pays Ethereum gas; it pays no PCASH fee and earns no issuance. A recent block and deadline bound these exact bytes. To combine publication with a paying value action, attach the body under §11.2.
 
 **Payload.**
 
 ```text
-txPayload = fundingMode (u8) ‖ fundingPayload ‖ body
-
-fundingMode 0 (unfunded):   fundingPayload = recentPcashBlockHash (32) ‖ validUntilTimestamp (u64)
-fundingMode 1 (sponsored):  fundingPayload = privateValueSection (§10.3, profile S)
+txPayload = recentPcashBlockHash (32) ‖ validUntilTimestamp (u64) ‖ body
 ```
 
-`fundingMode` is the byte at offset `5` of `txBytes`, directly after the envelope, so a candidate's mode is known without decoding its body; any other value is non-admitted (`UnknownFundingMode`, §10.2). Each mode's funding payload has a fixed size: the sponsored section omits the zero `issuanceOwnerCommitment` word and occupies 31,609 bytes (15 wire words, the 22,432-byte posted proof body of §16, five output-data items, and the S arena). The body therefore begins at offset `46` in unfunded mode and at offset `31,615` in sponsored mode. No authorization bytes follow the body.
+The body starts at byte offset `45` of `txBytes`. No signature or proof follows it.
 
 **Body.**
 
@@ -1551,7 +1568,7 @@ publishesNkRoot = 1:  nullifierKeyMaterial = nkRoot
 
 A contract body never carries both, so it cannot encode an `nkRoot` and a `nullifierKeyCommitment` that disagree. `publishesNkRoot` is an immutable part of the contract's identity because it is encoded in the body and in the contract-address preimage. It is not a separate account-state-commitment operand; the address already binds it.
 
-A function entry is exactly 65 bytes in the order shown. At the maximum `functionCount` of 255, the largest contract body is 17,794 bytes. A complete unfunded creation is `81 + 65 × functionCount` bytes without a receive key, or an additional `ML_KEM768_PUBLIC_KEY_LEN` bytes with one, so at most 17,840 bytes. A sponsored creation is `31,650 + 65 × functionCount` bytes plus the same receive-key bytes, so at most 49,409 bytes.
+A function entry is exactly 65 bytes. At the maximum count of 255, the largest body is 17,794 bytes. A complete standalone creation is `80 + 65 × functionCount` bytes without a receive key, or 1,184 bytes more with one, for a maximum of 17,839 bytes.
 
 **Function set.** `functionSetCommitment` is derived from the complete canonical function list rather than serialized beside it:
 
@@ -1569,48 +1586,26 @@ contractPreimage = poseidon(CONTRACT_ADDRESS_DOMAIN, nullifierKeyCommitment, fun
 address          = uint160(contractPreimage)    // low 160 bits of the canonical integer
 ```
 
-`receiveKeyHash` is the receive-key digest of §5.1, zero without a receive key. A contract address therefore binds `nullifierKeyCommitment`, the derived `functionSetCommitment`, the receive-key digest, and `publishesNkRoot`. The funding mode and its payload are not operands, so two creations with the same complete identity derive the same address in either mode, and the second is rejected as an existing account. An application that needs a distinct instance must use a distinct `nkRoot` or a distinct committed function configuration. An ECDSA key that happens to correspond to a contract address authorizes nothing, because every consumed note authenticates an installed account rule (§11.5) and contract accounts reject all writes.
+`receiveKeyHash` is the receive-key digest of §5.1, zero without a receive key. A contract address therefore binds `nullifierKeyCommitment`, the derived `functionSetCommitment`, the receive-key digest, and `publishesNkRoot`. The standalone recent block and deadline are not address operands. Repeated standalone creation is rejected; an attachment may reuse the exact existing immutable row (§11.2). An application that needs a distinct instance must use a distinct `nkRoot` or a distinct committed function configuration. An ECDSA key that happens to correspond to a contract address authorizes nothing, because every consumed note authenticates an installed account rule (§11.5) and contract accounts reject all writes.
 
-**Sponsorship.** In sponsored mode, the section is the sponsor's fee payment (§13):
+**Competing creations.** Anyone may publish the same body with fresh time bounds. The first successful standalone creation inserts it; a later standalone creation fails with `ContractAddressExists`. Attached creations instead ensure the exact immutable account exists (§11.2).
 
-* every input slot is a `NATIVE` note owned by the sponsor, or `DUMMY`;
-* every output slot is `DUMMY` except an optional ordinary private `NATIVE` relay output and at most one `NATIVE` change note returning to the sponsor's address;
-* `assetBurnAmount = 0`, and `sum(native inputs) = openFeeAmount + privateRelayAmount + changeAmount`.
+**Checks,** in order (§10.5):
 
-The contract-creation kernel authenticates one sponsor account of kind `USER` under the recent block's account-state root together with its selected installed rule, opens the recent block's output root, proves every native input and the change rule above, links the sponsor's application, and requires its rule statement (§8.2) to equal:
+1. `nullifierKeyMaterial < p`; then, for each function in body order, `applicationVkHash_i < p` and `configurationCommitment_i < p` (`NonCanonicalContractField`). Zero is allowed for a function’s hash and configuration.
+2. Derive the nullifier-key commitment from the selected material. Every canonical material is accepted; a private commitment with no known opening cannot act.
+3. Require a nonempty function set (`EmptyContractFunctionSet`), then strictly increasing selectors in body order (`SelectorsNotStrictlyIncreasing`).
+4. Derive the function-set commitment from the complete list, then the contract address and account state commitment.
+5. Require no account at that address (`ContractAddressExists`), then spare account capacity (`AccountCapacity`).
+6. Require the recent block canonical and within the recent window (`RecentPcashBlockNotInWindow`), then require the deadline not passed (`Expired`).
 
-```text
-[authorizationCommitment(sponsorAddress, sponsorConfigurationCommitment),
- poseidon(CONTRACT_FEE_SPONSORSHIP_ACTION_DOMAIN, pcashChainId, privateValueCommitment, contractAddress),
- recentPcashBlockHash, eventEntry]
-```
-
-This is the same sponsorship action as §11.7, with the contract being created as the named contract, so one installed sponsorship rule serves both. Sharing the domain meets the test of §8.3: the sponsor pays the fee for one named contract whether that contract acts or is created, and the sponsor's rule checks only its own native contribution.
-
-`contractAddress` is public input position `18`. Consensus derives it from the body exactly as in the address derivation above, so a proof for one body cannot fund another.
-
-**Unfunded lifetime.** In unfunded mode, the recent block and deadline bound the eligibility of these exact transaction bytes: they can succeed only until the earlier of `validUntilTimestamp` and the end of the recent block's window. The bounds are not signed or proof-bound.
-
-**Competing creations.** Anyone may publish the same body again, unfunded with fresh bounds or under a different sponsorship, and every such creation targets the same account. The first successful creation wins and later creations fail with `ContractAddressExists`; a failed sponsored creation consumes no nullifiers and pays no fee.
-
-**Checks,** in order (§10.5). Both funding modes share one order; a step marked sponsored is skipped in unfunded mode.
-
-1. Sponsored: every section word is canonical (`PublicInputNotInField`). An unfunded creation has no check here: its recent block hash is only compared with committed block hashes, which are canonical, so a noncanonical value fails at step 7.
-2. `nullifierKeyMaterial < p`; then, for each function in body order, `applicationVkHash_i < p` and `configurationCommitment_i < p` (`NonCanonicalContractField`). Zero is allowed for a function's VK hash and configuration commitment.
-3. Derive `nullifierKeyCommitment` from `nullifierKeyMaterial`: for `publishesNkRoot == 0` the material is the commitment itself; for `publishesNkRoot == 1` it is `nkRoot` and the commitment is derived. Every canonical material is accepted. A private contract whose commitment has no known opening, such as zero, can never act; a published root of zero is one more public root.
-4. The function set is nonempty (`EmptyContractFunctionSet`). Then, for each function in index order, its selector is greater than the previous function's (`SelectorsNotStrictlyIncreasing`).
-5. Derive `functionSetCommitment` from the complete canonical list; each function commitment is an account-rule entry commitment and its selector is its entry index. The full function opening is consensus-verified and present in Ethereum data.
-6. Derive `address` from the canonical operands and compute the account state commitment; then require no existing account at that address (`ContractAddressExists`); then require capacity (`AccountCapacity`).
-7. The recent block is canonical and in the recent window (§10.6, `RecentPcashBlockNotInWindow`), then the candidate block's timestamp does not exceed `validUntilTimestamp` (`Expired`), then, sponsored only, `notBeforeTimestamp` has been reached (`NotYetValid`) and the carrier context condition holds (`CarrierContextMismatch`). An unfunded creation reads the recent block and deadline from its funding payload; a sponsored creation reads all four from its section.
-8. Sponsored: the section's nullifier and capacity checks, as in §11.2 steps 6–7, then proof verification against the `contract_creation_hiding_kernel` VK of §16 with the derived address as its last public input (`ProofRejected`).
-
-**Effects.** On success, assign the next 40-bit `accountIndex` and atomically write the complete kind-`1`, revision-`1` account state row, its leaf, and the address-to-index mapping. A sponsored creation, in the same atomic step, marks the section's four nullifiers, records its fee, and appends its five output commitments exactly as a private-value transaction does (§11.2); an unfunded creation has no nullifier, output, fee, or issuance effects. The raw body and receive key remain in Ethereum data, not in intrinsic state. On failure the transaction has no effect.
+**Effects.** On success, assign the next 40-bit account index and atomically write the kind-CONTRACT, revision-1 row, its leaf, and its address-to-index mapping. It has no nullifier, output, fee, or issuance effects. The raw body and receive key remain in Ethereum data. Failure writes nothing.
 
 ## 13. Fees, Relay Payments, and Issuance Destinations
 
 A transaction reaches Ethereum only if someone posts it and pays the Ethereum gas. PCASH gives transactions two ways to pay whoever does that, and, because successful type `0x00` transactions earn issuance, a way to say where that issuance goes.
 
-Every private-value transaction, user-account update, and sponsored contract creation declares `openFeeAmount` in its proof-bound private-value section, and a private-value transaction also declares `issuanceOwnerCommitment`.
+Every private-value transaction and user-account update declares `openFeeAmount` in its proof-bound private-value section, and a private-value transaction also declares `issuanceOwnerCommitment`.
 
 **Open fee.** `openFeeAmount` is existing native PCASH offered publicly to the poster of the batch that successfully includes the action, identified by the batch's `posterOwnerCommitment` (§9.3). Native conservation is `sum(native inputs) = sum(ordinary native outputs) + openFeeAmount`. Issuance is created only at settlement, after the transaction, so it can never fund the same action's inputs or outputs.
 
@@ -1623,11 +1618,11 @@ Every private-value transaction, user-account update, and sponsored contract cre
 
 The open fee and open-route issuance are a public offer to whoever successfully includes the transaction, as an Ethereum priority fee goes to whoever builds the block, so a transaction can be broadcast without first arranging a relayer. Copying it into another batch never changes its inputs, outputs, fee, private relay payment, or designated destination, which its proof fixes; it changes only which poster collects its open fee and open-route issuance, which is competition among posters, not a loss to the sender. A sender that wants a particular party paid uses a private relay payment or the designated route.
 
-A nonzero issuance commitment requires `openFeeAmount = 0`, and a positive open fee requires a zero issuance commitment. `openFeeAmount = 0` with a zero issuance commitment is valid and leaves issuance open to the poster. The proof enforces these rules (§11.2); nodes do not check them separately. User-account updates and sponsored contract creations earn no issuance: their sections do not serialize `issuanceOwnerCommitment`, and derivation supplies zero in its statement position (§10.3). User-account creation and unfunded contract-account creation have neither a mandatory nor an optional PCASH fee, and earn no issuance.
+A nonzero issuance commitment requires `openFeeAmount = 0`, and a positive open fee requires a zero issuance commitment. `openFeeAmount = 0` with a zero issuance commitment is valid and leaves issuance open to the poster. The proof enforces these rules (§11.2); nodes do not check them separately. User-account updates earn no issuance: their section omits the issuance word and derivation supplies zero (§10.3). Standalone user-account and contract-account creation have neither a mandatory nor an optional PCASH fee, and earn no issuance.
 
 The open fee and issuance settle into separate native notes (§14.3). A selected relayer is paid from an ordinary output and may separately receive issuance through the designated commitment on an eligible action. Self-publication uses a zero open fee and no relay-payment output, and an eligible action may designate the wallet's own one-time issuance commitment.
 
-**Who pays.** A user-account update spends the updated account's own notes (§12.3). Sponsored contract creation uses a registered user-account sponsor, and unfunded contract creation pays no PCASH fee (§12.4). Subsequent contract actions may pay from contract-owned native notes without any user initiator. The two-account sponsorship relation (§11.7) bounds the sponsor's contribution to the open fee, one exact ordinary relay output, and the sponsor's change, without granting authority over the primary account's value.
+**Who pays.** A user-account update spends the updated account's own notes (§12.3). Standalone contract creation pays no PCASH fee (§12.4); an attached creation shares the carrying value transaction’s fee and outcome. Subsequent contract actions may pay from contract-owned native notes without any user initiator. The two-account sponsorship relation (§11.7) bounds the sponsor's contribution to the open fee, one exact ordinary relay output, and the sponsor's change, without granting authority over the primary account's value.
 
 ## 14. Native Issuance and Block Settlement
 
@@ -1648,7 +1643,7 @@ Native PCASH is created only when a block is settled, as the issuance component 
 
 The initial lag is `0` (the initial state's `lagQ`, §7.7), so issuance starts at the reference pace with multiplier `1`. The maximum remembered positive lag is `LQ = 4 days × Q`, two half-lives, so the multiplier never exceeds `4`. There is no registration grant, issuance balance, entitlement tree, separate native spending representation, calendar deadline, or saved allowance from an empty or underfilled block.
 
-**Qualification.** Only successful type `0x00` actions qualify, once per action, in either profile. Qualification counts actions, not participants, and does not depend on whether an action moves value: publicly callable contracts may authorize repeated qualifying actions. Registrations, updates, contract creations, folded applications, failed actions, and system notes do not qualify. A qualifying action's issuance goes to its issuance destination (§13), independently of any ordinary private relay output, and the action remains valid when its actual issuance is zero.
+**Qualification.** Only successful type `0x00` actions qualify, once per action, in either profile. Qualification counts actions, not participants, and does not depend on whether an action moves value: publicly callable contracts may authorize repeated qualifying actions. Standalone creations, updates, folded applications, failed actions, and system notes do not qualify. An attachment adds no share to its carrying type `0x00` action. A qualifying action's issuance goes to its issuance destination (§13), independently of any ordinary private relay output, and the action remains valid when its actual issuance is zero.
 
 ### 14.1 The block quote
 
@@ -1732,7 +1727,7 @@ pendingPayoutSlots  = 0
 postersWithOpenFees = {}        // posterOwnerCommitments with a successful positive open fee, across all batches
 ```
 
-For each transaction with a private-value section (types `0x00` and `0x03`, and sponsored type `0x02`), at the `OutputCapacity` step of its check order (§11.2, §12.3, §12.4), with `O` its output count, `f` its `openFeeAmount`, and `C` the `posterOwnerCommitment` of its batch:
+For each transaction with a private-value section (types `0x00` and `0x03`), at the `OutputCapacity` step of its check order (§11.2, §12.3, §12.4), with `O` its output count, `f` its `openFeeAmount`, and `C` the `posterOwnerCommitment` of its batch:
 
 ```text
 feeSlot = 1 if f > 0 and C is not in postersWithOpenFees, else 0
@@ -1741,7 +1736,7 @@ require nextOutputIndex + O + pendingPayoutSlots + feeSlot + issSlot <= 2^40
         // otherwise the outcome is OutputCapacity
 ```
 
-A zero-fee type `0x00` transaction still reserves `issSlot`; zero-fee sponsored type `0x02` and type `0x03` transactions reserve nothing beyond their outputs. A poster's fee note is reserved once per block by its first successful positive fee, whatever the fee's size. The reservation state changes only if the transaction succeeds:
+A zero-fee type `0x00` transaction still reserves `issSlot`; zero-fee type `0x03` transactions reserve nothing beyond their outputs. A poster's fee note is reserved once per block by its first successful positive fee, whatever the fee's size. The reservation state changes only if the transaction succeeds:
 
 ```text
 pendingPayoutSlots += feeSlot + issSlot
@@ -1803,7 +1798,6 @@ These pins fix the proof system used in consensus verification (§8.1). Every ot
 |---|---|---|---:|
 | `0x00`, profile S | transfer, sponsored transfer, and asset creation (§11.5) | `private_value_hiding_kernel` | 22,432 |
 | `0x00`, profile L | the same three, compiled for L | `private_value_large_hiding_kernel` | 22,432 |
-| `0x02`, sponsored mode | sponsored contract creation (§12.4) | `contract_creation_hiding_kernel` | 22,432 |
 | `0x03` | user-account update (§12.3) | `user_account_update_hiding_kernel` | 22,432 |
 
 The posted proof body length excludes the statement words, includes the 28 accumulator words (§8.1), and is a framing rule: a private-value section carries exactly this many proof bytes with no length prefix, so the length fixes where the output data begins (§10.3).
@@ -1817,10 +1811,9 @@ A hiding-kernel VK is 119 field elements (§8.1). Its pin is the SHA-256 of thos
 | Barretenberg release | `6.0.0` |
 | BN254 `[x]_2` element compiled into the verifier, SHA-256 | `0x01797bfc4de5a96f0e516a9ea4537d18786dc30cb991aca4274c95822b69c32f` |
 | Grumpkin SRS, first 65,536 points, SHA-256 | `0x64236c9455e75aeea77a94587ea607eed2e978d2609a421d66bf10bb9698b8fd` |
-| `private_value_hiding_kernel` VK, SHA-256 | `0xed9eb1572c2d70eb6e91a5990be21b90f8273b305e6433d086e6ff804fb4cd04` |
-| `private_value_large_hiding_kernel` VK, SHA-256 | `0x24944594f235fd0d6109dfa8a87c267c074fd5efb841f40c6adf8d24c51ce46e` |
-| `contract_creation_hiding_kernel` VK, SHA-256 | `0x4203bdaa693a367ac9be1ddf38bcd3b98dcf2b11e6cefbb4b51a8860fdf41324` |
-| `user_account_update_hiding_kernel` VK, SHA-256 | `0xb46ac50a76415b9c64bb1634afad8b301f6798edf1fa7197d6a13cf522e46bab` |
+| `private_value_hiding_kernel` VK, SHA-256 | `0x233b24d3cc6c6dcb3e8b3d8f7fb9c6165b7705a2580ddacfc3ad4de86f95c34a` |
+| `private_value_large_hiding_kernel` VK, SHA-256 | `0x1319d52ee651bed3c6b0f001b911ee728531ce20ed8330ab52536d3f987932b2` |
+| `user_account_update_hiding_kernel` VK, SHA-256 | `0x7282e43fa375e939eae95c9f17b61b3bb21a641fff208d9028abc627c67a1bd6` |
 
 ## 17. Conformance Vectors
 
@@ -1833,7 +1826,7 @@ The protocol conformance vectors, published with the reference implementation, a
 * `blob_codec.json`: blob counts and per-blob SHA-256 digests of canonical blob encodings at boundary payload lengths, for §9.2.
 * `issuance.json`: exact curve, lag, and settlement transitions, exponent quantization boundaries, rounding boundaries, saturation, terminal state, and dust (§14).
 * `protocol_vectors.json`: chain-neutral note and dummy nullifiers; the private-value commitment; standard asset identity, creation, and transfer; authorization commitments; the action commitment of each action domain; the account update commitment and its complete unified account-state-commitment operands; account state commitments without a receive key and with the digest of an exact receive key; the output-data hash of an exact item, the hash of an exact arena, and the delivery commitment over them; reference output-note-secret derivation; designated-issuance and poster recovery; the nullifier tree; account-rule entries; the genesis parent hash; Ethereum and PCASH history leaves and trees, with an Ethereum block hash above `p`; carrier context hashes of an Inbox sender and of carrier events with contexts on both sides of the eight-chunk minimum; a transaction ID; transaction statements, transaction and payout result leaves, and the transaction-results root; typed StateRoot and header openings; the block hash; and contract-address derivation.
-* `account_sections/`: the exact bytes of a sponsored contract creation and a user-account update, each with its wire words and its nineteen-word statement, for the fee-section layout of §10.3 with the issuance word omitted, the derived delivery commitment, and the appended final word (§12.3, §12.4). Their proofs, output data, and arenas are placeholders: these vectors test decoding and statement reconstruction, not proof verification.
+* `account_sections/`: attached contract creation and user-account update wire examples, with nineteen- and twenty-word statements respectively. Both include the derived delivery commitment and zero issuance; the attached creation commits its tagged body, while the update supplies a zero attachment commitment and appends its update commitment. Proofs and delivery data are placeholders for decoding and statement reconstruction.
 
 JSON is only a transport and display container; no commitment consumes JSON bytes. `genesisHash` is derived from canonical block `0` and binds the network configuration (§7.7). Example-rule and reference-implementation vectors are documented with their respective components and are not protocol conformance vectors.
 
@@ -1937,6 +1930,8 @@ Copying a transaction preserves a designated destination, which is proof-bound. 
 
 These are application recovery conventions, not a universal secret derivation for contract keys. A contract rule that designates its issuance route supplies an independent secret or delivery convention; published contract `nkRoot` values cannot supply secret recovery material. Multiple authorizers approve one shared route according to their roles, and a distinct fee sponsor need not own the issuance.
 
+**Creation attachments.** The reference wallet attaches the contract body to every funding chunk, so chunks may arrive in any order. For an attached signed user creation, it uses the value transaction’s recent block and deadline. Reference rules that sign value actions include the attachment commitment in their signed messages. Exact bytes remain the retry unit until expiry or loss of that canonical anchor. Refreshing requires a new creation signature, renewed action approval, and a new proof; the wallet retains the approved payment identity and reconciles prior submission before selecting another spend. On reuse, delivery uses the existing account’s authenticated current receive key rather than treating the creation’s initial key as an update.
+
 ### B.3 Canonical recovery records
 
 The node retains designated transaction contexts, explicit batch poster contexts, and ordered payout records, produced by the same settlement pass that creates the payouts. They are discovery material, not another mint authority. Each payout record carries:
@@ -1950,7 +1945,7 @@ The tagged component expands to the existing committed pair: `openFee` maps to `
 
 A designated record identifies its source transaction by Ethereum transaction index and batch item index, and retains that transaction's single context. A poster record has no source transaction ID. Each note of a poster group retains the same contributing Ethereum transaction indices and the distinct contexts of all contributing batches in encounter order, including batches whose only contribution is issuance at zero fee. Individual successful fee contributions remain available through batch manifests and transaction records. Untrusted posters can copy a commitment with an unrelated context, so recovery tries every retained context rather than trusting the first.
 
-Canonical blocks, checkpoints, export and import, and suffix replacement preserve these records, or sufficient history to rebuild them. A node advertising seed restoration MUST NOT silently prune them; state roots alone do not suffice.
+Canonical blocks, checkpoints, and suffix replacement preserve these records, or sufficient history to rebuild them. A node advertising seed restoration MUST NOT silently prune them; state roots alone do not suffice.
 
 A fresh wallet scans paginated node records, derives candidate commitments from its seed, reconstructs matching ordinary notes, and obtains canonical membership and spentness evidence at a coherent completed boundary. It requires no saved transaction hashes, quote list, plaintext backup, Ethereum connection, or historical blob retrieval. An explicitly lagging index is not an authoritative zero balance. Orphaned discoveries are replaced on reorganization. Recovered notes and notes delivered by encryption share one native inventory. Consolidation uses ordinary private-value transfers of a supported profile when necessary to fit a requested spend, or when explicitly requested by an operator.
 
@@ -1966,7 +1961,7 @@ noteKey   = HKDF(ikm = ss, salt = SHA-256("pcash.envelope-salt" ‖ version ‖ 
 plaintext = version (1) ‖ kind (1) ‖ chainId (4) ‖ assetId (32) ‖ amount (16) ‖ owner (20) ‖ noteSecret (32) ‖ outputIndex (1) ‖ anchor (1)
 ```
 
-`version` is `1` in both places, and `ss` is the shared secret of the envelope's encapsulation. The envelope names no recipient: a wallet finds its outputs by trial decryption, and the tag rejects every envelope meant for another key. `owner` is the note's owner address (§4.1), and `outputIndex` is the output's slot. For a note, `kind` is `1` when it has a recipient region in the arena whose anchor cell is `anchor`, and `0` otherwise, with `anchor = 0`. For message-only delivery, `kind = 2`, the bytes occupied by `assetId`, `amount`, `owner`, and `noteSecret` are all zero, and `anchor` identifies its recipient region. A message-only envelope occupies a dummy output slot and creates no spendable note. Records reuse an existing note envelope when the recipient address and receive key match; other recipients use free dummy slots. A slot without in-band delivery carries a real envelope to a fresh key that is then discarded, so filler and deliveries are drawn from the same distribution. `ss` is the output's disclosure key: it opens the envelope and derives the keys of the output's region.
+`version` is `1` in both places, and `ss` is the shared secret of the envelope's encapsulation. The envelope names no recipient: a wallet finds its outputs by trial decryption, and the tag rejects every envelope meant for another key. `owner` is the note's owner address (§4.1), and `outputIndex` is the output's slot. For a note, `kind` is `1` when it has a recipient region in the arena whose anchor cell is `anchor`, and `0` otherwise, with `anchor = 0`. For message-only delivery, `kind = 2`, the bytes occupied by `assetId`, `amount`, `owner`, and `noteSecret` are all zero, and `anchor` identifies its recipient region. A message-only envelope occupies a dummy output slot and creates no spendable note. Records reuse an existing note envelope when the recipient address and receive key match; other recipients use free dummy slots. A slot without in-band delivery carries a real envelope to a fresh key that is then discarded, so filler and deliveries are drawn from the same distribution. `ss` is the output's disclosure key: it opens the envelope and derives the keys of the output's region. A direct send's envelope takes `ss = SHA-256("pcash.direct-send" ‖ noteSecret)`, with `noteSecret` as 32 bytes, in place of an encapsulated secret, and its `kemCiphertext` encapsulates to a fresh key that is then discarded, as filler's does, so whoever holds the note's opening reads the envelope and its region.
 
 **The arena.** Records that do not fit a fixed envelope, such as memos, asset definitions, application data, the sender's own recovery data, and application records published to every reader, live in one arena per section:
 
@@ -2014,7 +2009,7 @@ k             = ⌈(10 + listLength) / 65⌉
 
 The record list is nonempty and holds only application records. A section that publishes nothing has no segment, and its cell `0` is an ordinary cell. A reader needs only the arena bytes, with no key and no transaction context: the arena has public records when cell `0` begins with the marker, `1 <= listLength <= 65(C − 1) − 10`, the padding is zero, and the record list is valid and holds only application records; otherwise it has none. Random filler and encrypted cells match the eight-byte marker with probability `2^-64`. The segment reveals its records and its length to everyone and authenticates no author. Its bytes are bound to the transaction only as part of the arena the delivery commitment covers, so the same records can appear in any other transaction; an application that needs authorship signs within its record.
 
-**Allocation.** One capacity plan accounts for the public segment, recipient regions, sender recovery and envelope slots. If they do not fit, construction fails before proving; records are never truncated or dropped to fit. The public segment takes cells `0` to `k − 1`. Cell `C − 1` is the sender region's anchor and is reserved in every build; a build without a sender region fills it with random bytes, so a recipient's cells do not reveal whether one exists. The writer assigns every other cell by a uniformly random permutation: each recipient region and the sender region's continuation receive a uniformly random set of them. Recipient identities never appear in plaintext delivery headers. The reference wallet writes a sender region in every transaction it builds, with an empty payload if it has nothing to record, so its outgoing key recognizes all of its transactions; for a sponsored transfer or sponsored contract creation, that is the fee payer's wallet.
+**Allocation.** One capacity plan accounts for the public segment, recipient regions, sender recovery and envelope slots. If they do not fit, construction fails before proving; records are never truncated or dropped to fit. The public segment takes cells `0` to `k − 1`. Cell `C − 1` is the sender region's anchor and is reserved in every build; a build without a sender region fills it with random bytes, so a recipient's cells do not reveal whether one exists. The writer assigns every other cell by a uniformly random permutation: each recipient region and the sender region's continuation receive a uniformly random set of them. Recipient identities never appear in plaintext delivery headers. The reference wallet writes a sender region in every transaction it builds, with an empty payload if it has nothing to record, so its outgoing key recognizes all of its transactions; for a sponsored transfer, that is the fee payer’s wallet.
 
 **Payloads.** Every region and the public segment hold the same record list. In the public segment it fills exactly `listLength`. In a region it is followed by zero padding: the list ends where the next identifier would begin with a zero byte, every byte after that is zero, and a list that fills its region exactly has no terminator. A zero byte inside a record's length or data is not a terminator.
 
@@ -2034,12 +2029,15 @@ Records are ordered lexicographically by their identifier bytes, so standard rec
 | 2 — asset definition | the definition opening of §11.6 with its metadata: `1 (1) ‖ initialSupply (17) ‖ assetSecretCommitment (32) ‖ nameLength (1) ‖ name ‖ symbolLength (1) ‖ symbol ‖ decimals (1) ‖ contentDigest (32)` | recipient, sender |
 | 3 — claimed sender | a 20-byte address, unauthenticated | recipient, sender |
 | 4 — sent envelopes | per envelope: `slotAndFlags (1) ‖ ss (32) ‖ recipientAddress (20)` | sender |
-| 5 — sent openings | per output: `slot (1) ‖ recipientAddress (20) ‖ assetId (32) ‖ amount (16) ‖ noteSecret (32)` | sender |
+| 5 — sent openings | per output: `slotAndFlags (1) ‖ recipientAddress (20) ‖ assetId (32) ‖ amount (16) ‖ noteSecret (32)` | sender |
+| 6 — direct-send openings | per opening: `version (1) ‖ chainId (4) ‖ contentHash (32) ‖ slot (1) ‖ owner (20) ‖ amount (16) ‖ noteSecret (32)` | sender |
 | application ID | opaque | recipient, sender, public |
 
-In a sent-envelope entry, the low seven bits of `slotAndFlags` encode the slot and the high bit marks records-only recovery: its records are recovered but its note is excluded from paid-output history. The decoded slot must be below the selected profile’s output count. Every envelope carrying explicitly addressed records has a sent-envelope entry, including reused relay-fee and change envelopes. Entries in sent-envelope and sent-opening records are in strictly ascending slot order, ignoring the flag bit. A standard type outside its region's column invalidates the region, and any standard type invalidates the public segment. A recipient's records are those of its region: a record sent to several recipients is copied into each of their regions, so no recipient learns that another received it. An unavailable record never invalidates a note: the envelope alone delivers the opening. A delivered asset definition is associated with a note only if it derives that note's asset ID; transaction data remains independent of note metadata. Recovery records are wallet-managed and cannot be supplied as application records.
+In a sent-envelope entry, the low seven bits of `slotAndFlags` encode the slot and the high bit marks records-only recovery: its records are recovered but its note is excluded from paid-output history. In a sent-opening entry, the high bit marks a direct send. The decoded slot must be below the selected profile’s output count. Every envelope carrying explicitly addressed records has a sent-envelope entry, including reused relay-fee and change envelopes, except a direct send's, whose flagged sent opening derives its key. Entries in sent-envelope and sent-opening records are in strictly ascending slot order, ignoring the flag bit; direct-send openings are in strictly ascending byte order. A standard type outside its region's column invalidates the region, and any standard type invalidates the public segment. A recipient's records are those of its region: a record sent to several recipients is copied into each of their regions, so no recipient learns that another received it. An unavailable record never invalidates a note: the envelope alone delivers the opening. A delivered asset definition is associated with a note only if it derives that note's asset ID; transaction data remains independent of note metadata. Recovery records are wallet-managed and cannot be supplied as application records.
 
-**Recovery.** A recipient decapsulates each envelope with each of its receive keys and, for `kind = 1` or `kind = 2`, opens its region. A wallet holding only its outgoing key derives the sender keys for each transaction and decrypts one anchor, at cell `C − 1`; on a match it reads the body, opens every envelope listed in its sent-envelope record with its `ss` together with that output's region, and rebuilds each note listed in its sent-opening record, whose owner is `recipientAddress` (§4.1). Explicit self records and counterparty-directed records recover from the outgoing key even when the transaction creates no sent or received note. A restoring wallet takes asset definitions from every region it opens, its sender region included, whether or not the transaction has sent outputs. The reference wallet's asset actions from its own account carry the definition in the sender region rather than on that account's change or new holdings, so a wallet scanning with receive keys alone learns those definitions only from an earlier delivery. Wallets store records with transaction and block provenance independently of notes, following the same scan checkpoints and reorganization rollback as note inventory, including the public records of the transactions their outgoing key recognizes. Any reader, holding no key, reads public records from the arena alone. Decryption authenticates neither a claimed author nor inclusion: every recovered opening is checked against the transaction's output body commitments. The reference node serves each transaction's output data and arena together in its output feed, so a wallet reads every arena once, from the stream it already scans.
+**Recovery.** A recipient decapsulates each envelope with each of its receive keys and, for `kind = 1` or `kind = 2`, opens its region. A wallet holding only its outgoing key derives the sender keys for each transaction and decrypts one anchor, at cell `C − 1`; on a match it reads the body, opens every envelope listed in its sent-envelope record with its `ss` together with that output's region, and rebuilds each note listed in its sent-opening record, whose owner is `recipientAddress` (§4.1), opening a direct send's envelope and region with the key its note secret derives. Explicit self records and counterparty-directed records recover from the outgoing key even when the transaction creates no sent or received note. A restoring wallet takes asset definitions from every region it opens, its sender region included, whether or not the transaction has sent outputs. The reference wallet's asset actions from its own account carry the definition in the sender region rather than on that account's change or new holdings, so a wallet scanning with receive keys alone learns those definitions only from an earlier delivery. Wallets store records with transaction and block provenance independently of notes, following the same scan checkpoints and reorganization rollback as note inventory, including the public records of the transactions their outgoing key recognizes. Any reader, holding no key, reads public records from the arena alone. Decryption authenticates neither a claimed author nor inclusion: every recovered opening is checked against the transaction's output body commitments. The reference node serves each transaction's output data and arena together in its output feed, so a wallet reads every arena once, from the stream it already scans.
+
+**Direct sends.** A wallet pays an address that publishes no receive key by a direct send: a native note whose envelope is keyed by its note secret (above), so it carries a memo and claimed sender like any payment, and whose opening the payer records as a flagged sent opening and delivers to the owner out of band, as a link carrying the type-6 encoding with version 1. That opening names its output by the content hash of the funding transaction and the output slot, not by leaf, because a reorganization can include the same bytes at another leaf; the owner's wallet resolves the leaf from the accepted receipt and checks the opening against the commitment there. Trial decryption cannot find such a note, so the owner's wallet keeps an opening once the output it names is accepted and opens under it, and matches that output whenever a scan passes it. Until a final transaction of the owner's records an opening in a direct-send-openings record, the owner's setup mining action carries it, and otherwise the first transaction that spends the note. A wallet that learns an opening, from a link or from such a record, after its scan passed the funding output reads the output feed from that output for a transaction consuming the note's nullifier, so a note another device on the same seed already spent stays spent, and takes the note's path from the node unless a final transaction spent it, since a reorganization can remove a spend that is not final. An opening neither recorded nor kept survives only in the link.
 
 ## References
 

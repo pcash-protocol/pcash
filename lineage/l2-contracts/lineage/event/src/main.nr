@@ -98,10 +98,6 @@ fn main(
                     "lineage predecessor must be a private value transaction",
                 );
                 assert(
-                    input.transaction_result.funding_mode == 0,
-                    "private value predecessor funding mode must be zero",
-                );
-                assert(
                     input.transaction_result.outcome == 0,
                     "lineage predecessor must have succeeded",
                 );
@@ -124,7 +120,7 @@ fn main(
                         event_entry(lineage_vk_identity, previous_claim),
                         input.event_salt,
                     )
-                        == input.transaction_statement[S_PUBLIC_INPUTS - 1],
+                        == input.transaction_statement[S_PUBLIC_INPUTS - 2],
                     "predecessor event must use the trusted lineage application and policy",
                 );
                 let body = input.transaction_statement[2 + S_INPUTS + input.output_slot];

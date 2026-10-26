@@ -77,7 +77,6 @@ export function nativeMarketplaceProver(): MarketplaceProver {
       return { proof: result.proof };
     },
     proveUserAccountUpdate: notMarketplace,
-    proveSponsoredContractCreation: notMarketplace,
   };
 }
 

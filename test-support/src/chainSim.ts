@@ -7,7 +7,7 @@
 // request transcripts.
 
 import { randomBytes } from "node:crypto";
-import type { AccountChange, OutputResult, PcashNodeClient, StatusResult } from "@pcash/sdk/clients";
+import { OutputOpeningMismatchError, type AccountChange, type OutputResult, type PcashNodeClient, type ReceiptResult, type StatusResult } from "@pcash/sdk/clients";
 import { OUTPUT_DATA_BYTES, MERKLE_DEPTH, PRIVATE_VALUE_PROFILES, privateValueProfile } from "@pcash/sdk/constants";
 import { emptyLadder, fieldToHex, poseidon2, type OutputFrontier } from "@pcash/sdk/crypto";
 import {
@@ -218,7 +218,15 @@ export class ChainSim {
   indexLag = 0n;
   /** Rows per output or account-change page. An output page holds whole transactions. */
   pageSize = 2_000;
+  /**
+   * Answer receipts by content hash, output paths at the head, and included
+   * transactions by ID, as a node does for a wallet resolving a direct send.
+   * Off, receipts are never found.
+   */
+  servesFundingReads = false;
   #blocks: SimBlock[] = [];
+  /** The exact bytes of each transaction `include` added, by content hash. */
+  readonly #entries = new Map<string, Uint8Array>();
   #salt = 0n;
 
   constructor(pcashChainId: bigint, network: { l1ChainId?: bigint; inboxAddress?: string } = {}) {
@@ -352,10 +360,12 @@ export class ChainSim {
     const publicInputs = privateValuePublicInputs(decoded);
     const nullifiers = publicInputs.slice(profile.offsets.nullifiers, profile.offsets.nullifiers + profile.inputs).map(word);
     const bodies = publicInputs.slice(profile.offsets.outputs, profile.offsets.outputs + profile.outputs);
+    const contentHash = toHex(keccak256(entry)).toLowerCase();
+    this.#entries.set(contentHash, entry);
     return this.addBlock({
       ...input,
       transactions: [{
-        contentHash: toHex(keccak256(entry)),
+        contentHash,
         shape: decoded.shape,
         nullifiers,
         arena: decoded.arena,
@@ -369,6 +379,33 @@ export class ChainSim {
     this.#blocks.length = Number(forkAt) + 1;
     this.#salt += 1n;
     for (const block of blocks) this.addBlock(block);
+  }
+
+  /** The canonical inclusion of one exact transaction, as an accepted receipt. */
+  #receipts(contentHash: string): ReceiptResult[] {
+    const rows = this.#blocks.flatMap((block) => block.outputs)
+      .filter((output): output is Extract<OutputResult, { kind: "ordinary" }> => output.kind === "ordinary"
+        && output.contentHash.toLowerCase() === contentHash.toLowerCase());
+    if (rows.length === 0) return [];
+    const first = rows[0]!;
+    return [{
+      inclusion: { l1BlockNumber: first.origin.pcashNumber, l1BlockHash: first.origin.pcashHash, l1TransactionIndex: 0n,
+        l1TransactionHash: ZERO_WORD, batchItemIndex: 0n },
+      contentHash: first.contentHash.toLowerCase(),
+      transactionId: first.transactionId,
+      outcome: "succeeded",
+      failureDetail: null,
+      l1Sender: `0x${"00".repeat(20)}`,
+      issuanceOwnerCommitment: null,
+      settledOpenFeeAmount: 0n,
+      settledIssuanceAmount: 0n,
+      kind: "privateValue",
+      accountCreation: 0,
+      outputLeafStart: first.outputIndex,
+      outputsAdded: BigInt(rows.length),
+      nullifiers: first.nullifiers,
+      account: null,
+    }];
   }
 
   status(): StatusResult {
@@ -399,7 +436,33 @@ export class ChainSim {
       // Polling for the wallet's own submitted transaction; never answered here.
       getReceipt: async (query: unknown) => {
         record("getReceipt", [query]);
-        return [];
+        if (!this.servesFundingReads || typeof query !== "object" || query === null || !("contentHash" in query)) return [];
+        return this.#receipts(String(query.contentHash));
+      },
+      getTransaction: async (transactionId: string) => {
+        record("getTransaction", [transactionId]);
+        if (!this.servesFundingReads) throw new Error("simulated node does not serve getTransaction");
+        const row = this.#blocks.flatMap((block) => block.outputs)
+          .find((output) => output.kind === "ordinary" && output.transactionId === transactionId);
+        if (row?.kind !== "ordinary") return null;
+        const entry = this.#entries.get(row.contentHash.toLowerCase());
+        return entry === undefined ? null : { summary: { transactionId, contentHash: row.contentHash }, rawTransaction: toHex(entry) };
+      },
+      getOutputPaths: async (requests: readonly { outputIndex: bigint | number; outputCommitment: bigint }[]) => {
+        record("getOutputPaths", [requests]);
+        if (!this.servesFundingReads) throw new Error("simulated node does not serve getOutputPaths");
+        const head = this.head;
+        if (requests.some(({ outputIndex }) => BigInt(outputIndex) >= BigInt(head.leaves.length))) return null;
+        return {
+          root: word(head.envelope.state.outputRoot),
+          count: BigInt(head.leaves.length),
+          paths: requests.map(({ outputIndex, outputCommitment: expected }) => {
+            const index = BigInt(outputIndex);
+            if (head.leaves[Number(index)] !== expected) throw new OutputOpeningMismatchError("batched output path mismatch");
+            return { outputIndex: index, siblings: Array.from({ length: MERKLE_DEPTH }, (_, h) => subtreeRoot(head.leaves, h, (index >> BigInt(h)) ^ 1n)) };
+          }),
+          boundary: head.envelope,
+        };
       },
       getMempoolTransaction: async (contentHash: string) => {
         record("getMempoolTransaction", [contentHash]);

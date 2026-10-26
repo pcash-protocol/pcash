@@ -41,7 +41,7 @@ export function SellerListingPanel({ market, item }: { market: MarketplaceModel;
     ?? (item.error === undefined ? undefined : friendlyError(item.error));
   const message = market.messageFor((trade) => trade.identity === identity && trade.action !== "buy");
   // A listing whose escrow funding never started holds nothing and can be dropped.
-  const discardable = item.phase === "draft" || item.phase === "contract-submitted";
+  const discardable = item.phase === "draft";
   const discard = () => {
     if (window.confirm("Discard this listing? Its escrow was never funded, so nothing is locked in it.")) market.discardListing(item);
   };
@@ -54,7 +54,7 @@ export function SellerListingPanel({ market, item }: { market: MarketplaceModel;
     </dl>
     {item.contentHash && ["funding-submitted", "publication-failed", "reclaim-prepared", "reclaim-failed"].includes(item.phase) && <MempoolFinalization key={item.contentHash} contentHash={item.contentHash} onConfirmed={() => market.runActivityAction(item)} />}
     {action && <>
-      <p>{action === "reclaim" ? `Return unsold ${asset} to your wallet.` : action === "restore-contract" ? "Create the missing escrow contract, then reclaim after the deadline." : "Your progress is saved. Continue and we’ll take care of the remaining work."}</p>
+      <p>{action === "reclaim" ? `Return unsold ${asset} to your wallet.` : "Your progress is saved. Continue and we’ll take care of the remaining work."}</p>
       <TradeWalletSetup />
       {market.ready && <div className={styles.offerActions}>
         <button className="button primary" disabled={market.busy} onClick={() => market.runActivityAction(item)}>

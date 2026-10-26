@@ -4,7 +4,7 @@
   "functions": [
     {
       "name": "gated",
-      "applicationVkHash": "0x142c7f2fadb21f29bf7182e83a94a12cf2bb1352350f9d7e831e75e64782fe3e",
+      "applicationVkHash": "0x277a277adefc5d53f0587f2167f56f76538781c7149ab5cf07af4058002dfe03",
       "selector": 0,
       "arguments": [
         {

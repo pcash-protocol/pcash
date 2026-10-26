@@ -6,7 +6,7 @@ import type { Hex } from "viem";
 import type { StatusResult } from "@pcash/sdk/browser";
 import type { PcashNodeClient } from "@pcash/sdk/browser";
 import type { SelectedRelayQuoteProvider } from "@pcash/sdk/eip712";
-import type { TransactionData } from "@pcash/sdk/protocol";
+import type { TransactionData, AccountCreationAttachment } from "@pcash/sdk/protocol";
 import type { Wallet, DurableSubmissionAdapter } from "@pcash/sdk/wallet";
 import { noteFundedTransferValidUntil as sharedNoteFundedTransferValidUntil } from "@pcash/sdk/wallet/actions";
 import { marketplaceMempoolSubmission, submitBuiltTransaction } from "./submitBuiltTransaction.ts";
@@ -18,6 +18,7 @@ export type { RecipientDelivery } from "@pcash/sdk/delivery";
 export interface NoteFundedTransferFlowParams {
   submission?: DurableSubmissionAdapter;
   wallet: Wallet;
+  accountCreation?: AccountCreationAttachment;
   /** Wallet-bound node selected by the enclosing Marketplace action. */
   node: PcashNodeClient;
   to: string;
@@ -32,8 +33,8 @@ export interface NoteFundedTransferFlowParams {
   validUntilTimestamp?: bigint;
   /** Called after the exact content hash is durably journaled, before network submission. */
   onPreparedContentHash?: (contentHash: string, transactionHex: Hex) => void | Promise<void>;
-  /** Called after proof construction, before the transaction is journaled or submitted. */
-  beforeSubmit?: () => void | Promise<void>;
+  /** Run after preflight and before the wallet journal is written. */
+  beforeSubmit?: (contentHash: string, transactionHex: Hex) => void | Promise<void>;
   onProgress?: (phase: ProvePhase, message: string) => void;
 }
 
@@ -49,6 +50,7 @@ export interface NoteFundedTransferFlowResult {
 
 export interface NoteFundedTransferPreflightParams {
   wallet: Wallet;
+  accountCreation?: AccountCreationAttachment;
   amount: bigint;
   openFeeAmount?: bigint;
   privateRelayFeeAmount?: bigint;
@@ -70,6 +72,7 @@ export async function preflightNoteFundedTransfer(
 ): Promise<NoteFundedTransferPreflightResult> {
   const result = await params.wallet.preflightSend({
     amount: params.amount,
+    ...(params.accountCreation === undefined ? {} : { accountCreation: params.accountCreation }),
     validUntilMode: "ceiling",
     ...(params.openFeeAmount !== undefined ? { openFeeAmount: params.openFeeAmount } : {}),
     ...(params.privateRelayFeeAmount !== undefined ? { privateRelayFeeAmount: params.privateRelayFeeAmount } : {}),
@@ -104,14 +107,16 @@ export async function runNoteFundedTransferFlow(
   runtime: NoteFundedTransferFlowRuntime = DEFAULT_NOTE_FUNDED_TRANSFER_RUNTIME,
 ): Promise<NoteFundedTransferFlowResult> {
   const result = await params.wallet.send({
+    settlePollMaxAttempts: 1,
     ...(params.submission ? { submission: params.submission } : params.openFeeAmount === undefined || params.openFeeAmount === 0n ? {} : {
       submission: marketplaceMempoolSubmission(params.node, runtime.submitBuiltTransaction, params.onProgress),
     }),
     to: params.to,
     ...(params.data === undefined ? {} : { data: params.data }),
     amount: params.amount,
+    ...(params.accountCreation === undefined ? {} : { accountCreation: params.accountCreation }),
     validUntilMode: "ceiling",
-    ...(params.beforeSubmit !== undefined ? { beforeJournal: params.beforeSubmit } : {}),
+    ...(params.beforeSubmit !== undefined ? { beforeJournal: (contentHash: string, transactionHex: string) => params.beforeSubmit!(contentHash, transactionHex as Hex) } : {}),
     ...(params.onPreparedContentHash !== undefined
       ? { onPrepared: (contentHash: string, transactionHex: string) => params.onPreparedContentHash!(contentHash, transactionHex as Hex) }
       : {}),

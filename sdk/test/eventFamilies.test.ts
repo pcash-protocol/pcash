@@ -8,7 +8,7 @@ import { eventStatementFromKernel } from "../src/protocol/events.ts";
 import { fm, type WitnessMap } from "../src/protocol/witness.ts";
 import { prepareEventApplication, type ChonkCircuitMaterial } from "../src/prover/stacks.ts";
 import { assetProfileFixture } from "./assetProfileFixtures.ts";
-import { sponsoredContractCreationFixture, userAccountUpdateFixture } from "./accountActionFixtures.ts";
+import { userAccountUpdateFixture } from "./accountActionFixtures.ts";
 import { proverAssetsDir } from "./circuitBundle.ts";
 
 const resolve = createChonkCircuitResolver({
@@ -19,7 +19,7 @@ const execute = (circuit: ChonkCircuitMaterial, witness: WitnessMap) =>
   new Noir(circuit.artifact as never).execute(witness as never);
 
 // Both private-value profiles share an asset-creation relation; account actions use S.
-describe.each(["asset S", "asset L", "account update", "contract creation"] as const)("substantive transaction event in %s", (family) => {
+describe.each(["asset S", "asset L", "account update"] as const)("substantive transaction event in %s", (family) => {
   it("accepts the configured entry and rejects a zero or different rule entry", async () => {
     const event = 789n;
     const preparedEvent = await prepareEventApplication({ packageName: "event_fixture", event, eventSalt: 456n, resolve });
@@ -37,12 +37,10 @@ describe.each(["asset S", "asset L", "account update", "contract creation"] as c
       kernelMap = fixture.build.buildAssetCreationKernelWitnessMap(await resolve(authorizationName, "app"));
       authorizationMap = fixture.signed.witnessMap;
     } else {
-      const fixture = family === "account update"
-        ? userAccountUpdateFixture({ preparedEvent })
-        : sponsoredContractCreationFixture({ preparedEvent });
+      const fixture = userAccountUpdateFixture({ preparedEvent });
       build = fixture.build;
       authorizationName = fixture.authorizationPackage;
-      kernelName = family === "account update" ? "user_account_update_kernel" : "contract_creation_kernel";
+      kernelName = "user_account_update_kernel";
       kernelMap = fixture.build.buildKernelWitnessMap(await resolve(authorizationName, "app"));
       authorizationMap = fixture.authorizationWitnessMap;
     }
@@ -61,7 +59,7 @@ describe.each(["asset S", "asset L", "account update", "contract creation"] as c
     const kernel = await resolve(kernelName, "kernel");
     const result = await execute(kernel, kernelMap);
     expect((result.returnValue as string[]).map(BigInt)).toEqual(build.publicInputs);
-    const statementName = family === "contract creation" ? "fee_statement" : "rule_statement";
+    const statementName = "rule_statement";
     for (const wrongEntry of [0n, preparedEvent.eventEntry + 1n]) {
       const changed = structuredClone(kernelMap);
       (changed[statementName] as string[])[3] = fm(wrongEntry);

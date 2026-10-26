@@ -149,18 +149,14 @@ test("a retry's fresh bytes replace the saved claim bytes", () => {
 test("publication settlement retains exact bytes through accepted receipts and clears each only at finality", () => {
   const publish: PublishRecord = {
     phase: "funding-submitted",
-    l2ContractContentHash: "contract-tx",
-    l2ContractTransactionHex: "0xcontract",
     fundingContentHash: "funding-tx",
     fundingTransactionHex: "0xfunding",
     updatedAt: 1,
   };
   const accepted = checkpointPublishFinality(publish, {
-    l2Contract: { phase: "accepted", acceptedBlock: "10", acceptedBlockHash: "0xcontract-block" },
     funding: { phase: "accepted", acceptedBlock: "11", acceptedBlockHash: "0xfunding-block" },
   }, 2);
   assert.equal(accepted.phase, "finalizing");
-  assert.equal(accepted.l2ContractTransactionHex, "0xcontract");
   assert.equal(accepted.fundingTransactionHex, "0xfunding");
 
   const reorged = checkpointPublishFinality(accepted, {
@@ -172,13 +168,10 @@ test("publication settlement retains exact bytes through accepted receipts and c
   assert.equal(hasCanonicalFunding(reorged), false);
 
   const finalized = checkpointPublishFinality(reorged, {
-    l2Contract: { phase: "finalized", acceptedBlock: "12", acceptedBlockHash: "0xcanonical-contract" },
     funding: { phase: "finalized", acceptedBlock: "13", acceptedBlockHash: "0xcanonical-funding" },
   }, 4);
   assert.equal(finalized.phase, "funded");
-  assert.equal(finalized.l2ContractTransactionHex, undefined);
   assert.equal(finalized.fundingTransactionHex, undefined);
-  assert.equal(finalized.l2ContractFinalizedAt, 4);
   assert.equal(finalized.fundingFinalizedAt, 4);
   assert.equal(hasCanonicalFunding(finalized), true);
 });

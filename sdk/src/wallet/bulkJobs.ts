@@ -1,4 +1,6 @@
 import { PRIVATE_VALUE_PROFILES, privateValueProfile, type PrivateValueProfile, type PrivateValueShape } from "@pcash/sdk/constants";
+import type { AccountCreationAttachment } from "@pcash/sdk/protocol";
+import { storeAccountCreation, type StoredAccountCreationAttachment } from "./actions/accountCreation.ts";
 import { fieldToHex, toField } from "@pcash/sdk/crypto";
 import { beBytes, bytes32Hex, concatBytes, fromHex, keccak256, randomFieldEntropy, toHex, U128_LIMIT, utf8 } from "@pcash/sdk/utils";
 import { defineRecordSchema, packed } from "../protocol/packed.ts";
@@ -57,6 +59,7 @@ export interface BulkRecoveryObservation {
 
 /** Local restart state, never an onchain registry or a source of anticipated funding. */
 export interface BulkJob {
+  accountCreation?: StoredAccountCreationAttachment;
   jobId: string;
   kind: "payment" | "consolidation";
   assetId: string;
@@ -72,6 +75,7 @@ export interface BulkJob {
 }
 
 export function createBulkJob(params: {
+  accountCreation?: AccountCreationAttachment;
   kind: BulkJob["kind"];
   assetId?: bigint;
   recipients?: readonly { to: string; amount: bigint; noteSecret?: bigint }[];
@@ -109,6 +113,7 @@ export function createBulkJob(params: {
     recoveryTagBytes(fromHex(params.recovery.appTag));
   }
   return { jobId: randomFieldEntropy().toString(16), kind: params.kind, assetId: assetId.toString(), recipients,
+    ...(params.accountCreation === undefined ? {} : { accountCreation: storeAccountCreation(params.accountCreation)! }),
     openFeeAmounts: {
       [PRIVATE_VALUE_PROFILES.S.shapeId]: fees[PRIVATE_VALUE_PROFILES.S.shapeId].toString(),
       [PRIVATE_VALUE_PROFILES.L.shapeId]: fees[PRIVATE_VALUE_PROFILES.L.shapeId].toString(),

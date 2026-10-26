@@ -8,6 +8,7 @@ import { dirname, join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 import {
+  circuitCacheRoot,
   circuitInputFiles,
   circuitInputFingerprint,
   createCircuitSourceSnapshot,
@@ -35,9 +36,6 @@ const staticRequiredArtifacts = [
   "known-answers/user_account_update/proof",
   "known-answers/user_account_update/proof.rejected",
   "known-answers/user_account_update/public_inputs",
-  "known-answers/contract_creation/proof",
-  "known-answers/contract_creation/proof.rejected",
-  "known-answers/contract_creation/public_inputs",
   "marketplace-manifest.json",
   "protocol-manifest.json",
   "tokens-manifest.json",
@@ -50,6 +48,33 @@ const requiredArtifacts = [
     circuit.verificationKeyPath,
   ]),
 ];
+
+test("circuit cache selection honors configured and local paths before a shared primary cache", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pcash-worktree-circuit-cache-"));
+  const primary = join(root, "primary");
+  const worktree = join(root, "worktree");
+  const gitDir = join(primary, ".git", "worktrees", "branch");
+  await mkdir(gitDir, { recursive: true });
+  await mkdir(worktree);
+  await writeFile(join(gitDir, "commondir"), "../..\n");
+  await writeFile(join(worktree, ".git"), `gitdir: ${gitDir}\n`);
+  const primaryCache = join(primary, ".cache", "pcash", "circuit-bundles");
+  const localCache = join(worktree, ".cache", "pcash", "circuit-bundles");
+
+  assert.equal(circuitCacheRoot(primary, null), primaryCache);
+  assert.equal(circuitCacheRoot(worktree, null), localCache);
+
+  await mkdir(primaryCache, { recursive: true });
+  assert.equal(circuitCacheRoot(worktree, null), primaryCache);
+  assert.equal(existsSync(localCache), false);
+
+  await mkdir(localCache, { recursive: true });
+  assert.equal(circuitCacheRoot(worktree, null), localCache);
+
+  const configured = join(root, "configured");
+  assert.equal(circuitCacheRoot(worktree, configured), configured);
+  assert.equal(existsSync(configured), false);
+});
 
 async function writeCatalogManifests(root, { protocol = [], marketplace = [], tokens = [], lineage = [] }) {
   for (const [path, owner, circuits] of [

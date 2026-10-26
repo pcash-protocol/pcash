@@ -19,7 +19,7 @@ const UNPAID = txId("03");
 
 function item(contentHash: string, overrides: Partial<MempoolItemResult> = {}): MempoolItemResult {
   return {
-    contentHash, statementId: contentHash, stableId: contentHash, conflictKeys: [], kind: "privateValue", fundingMode: null,
+    contentHash, statementId: contentHash, stableId: contentHash, conflictKeys: [], kind: "privateValue",
     byteSize: 1_000n, openFeeAmount: 0n, issuanceOwnerCommitment: `0x${"00".repeat(32)}`, issuanceRoute: "open",
     validUntil: null, status: "ready", conflictCount: 0n, receivedAtUnixMs: 1n,
     headCheckedBlock: 1n, headCheckedBlockHash: hash("aa"), recentPcashBlockHash: null, publicRecords: [], rawTransaction: null, ...overrides,
@@ -166,7 +166,7 @@ it("carries own entries of any kind oldest first and never lets a later one pass
   const { client, prepareRelay } = node([
     item(SMALL, { byteSize: 1_000n, receivedAtUnixMs: 3n }),
     item(FUNDING, { byteSize: 60_000n, receivedAtUnixMs: 2n }),
-    item(LISTING, { kind: "contractAccount", fundingMode: "sponsored", byteSize: 40_000n, receivedAtUnixMs: 1n }),
+    item(LISTING, { kind: "privateValue", byteSize: 40_000n, receivedAtUnixMs: 1n }),
     item(PAYING, { byteSize: 1_000n, openFeeAmount: 5n }),
   ]);
   const result = await planFastBatch({ node: client, status, profile: { address: 1n, nkRoot: 2n },
@@ -219,7 +219,7 @@ it("counts the pending entries it could carry and the batch's qualifying actions
   const { client } = node([
     item(OWN, { receivedAtUnixMs: 1n }),
     item(PAYING, { openFeeAmount: 5n }),
-    item(UNPAID, { kind: "contractAccount", fundingMode: "sponsored" }),
+    item(UNPAID, { kind: "contractAccount" }),
   ]);
   const result = await planFastBatch({ node: client, status, profile: { address: 1n, nkRoot: 2n },
     ownPendingContentHashes: [OWN], transactionByteSize: 2_000n, requiredTransactionCount: 1, issuanceInputs: mineForecast });

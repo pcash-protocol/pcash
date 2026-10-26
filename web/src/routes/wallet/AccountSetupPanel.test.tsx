@@ -204,3 +204,29 @@ describe("account setup presentation", () => {
     expect(render()).toContain("compress chonk…");
   });
 });
+
+it("offers setup funded by the poster reward when the wallet has no ETH", () => {
+  state.wallet.l1Balance = 0n;
+  const html = render();
+  expect(html).toContain("Set up without ETH");
+  expect(html).toContain("A relayer receives the mining reward");
+});
+
+it("shows relayer progress for open setup without asking for an Ethereum transaction", () => {
+  state.wallet.phase = "activation-pending";
+  state.wallet.activation = { publication: "open", state: "mempool-submitted", contentHash: `0x${"ab".repeat(32)}`, validUntilTimestamp: "200", l1TxHash: null };
+  state.wallet.status = { latestBlockTimestamp: 100n };
+  const html = render();
+  expect(html).toContain("Waiting for a relayer");
+  expect(html).not.toContain("Review Ethereum transaction");
+  expect(html).not.toContain("did not return a transaction hash");
+});
+
+it("offers an expired open setup retry without ETH", () => {
+  state.wallet.phase = "activation-pending";
+  state.wallet.activation = { publication: "open", state: "mempool-submitted", contentHash: `0x${"ab".repeat(32)}`, validUntilTimestamp: "200", l1TxHash: null };
+  state.wallet.status = { latestBlockTimestamp: 201n };
+  const html = render();
+  expect(html).toContain("Retry setup without ETH");
+  expect(html).not.toContain("Review Ethereum transaction");
+});

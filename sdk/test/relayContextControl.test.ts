@@ -36,7 +36,7 @@ function transaction(nullifiers: bigint[], privateFeeAmount: bigint) {
   }
   const arena = randomArena(PRIVATE_VALUE_PROFILES.S.shapeId);
   const publicInputs = [BigInt(chainId), nkRoot, ...nullifiers, ...bodies,
-    deliveryCommitment(outputData, arena), 0n, issuanceCommitment, 0n, 1_000n, 0n, 0n];
+    deliveryCommitment(outputData, arena), 0n, issuanceCommitment, 0n, 1_000n, 0n, 0n, 0n];
   const raw = encodePrivateValueTransaction({ shape: PRIVATE_VALUE_PROFILES.S.shapeId, publicInputs,
     proof: new Uint8Array(WIRE_PROOF_BYTES), outputData, arena });
   const contentHash = toHex(keccak256(raw));

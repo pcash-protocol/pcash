@@ -26,7 +26,6 @@ import { assertOutputDataItems, sizeClassFiller } from "../protocol/envelope.ts"
 import type {
   PrivateValueOutputData,
   PrivateValueOutputDataOverrides,
-  TX_KIND_CONTRACT_ACCOUNT_CREATION,
   TX_KIND_USER_ACCOUNT_UPDATE,
 } from "../protocol/codec.ts";
 import { sealSectionDelivery, type ArenaSender, type EnvelopeOutput } from "../protocol/sectionDelivery.ts";
@@ -54,7 +53,7 @@ export interface FeePaymentNoteInput {
 
 export interface NativeFeePaymentParams extends EventOptions {
   /** The transaction whose fee section this is: its arena context names the type. */
-  transactionType: typeof TX_KIND_CONTRACT_ACCOUNT_CREATION | typeof TX_KIND_USER_ACCOUNT_UPDATE;
+  transactionType: typeof TX_KIND_USER_ACCOUNT_UPDATE;
   pcashChainId: FieldNumberish;
   recentPcashBlockHash: FieldNumberish;
   payer: {
@@ -278,6 +277,7 @@ export function buildNativeFeePayment(params: NativeFeePaymentParams): NativeFee
       carrierContextHash,
       assetBurnAmount: 0n,
       deliveryCommitment: delivery,
+      accountCreationCommitment: 0n,
     },
     inputs: [inputs[0]!, inputs[1]!, inputs[2]!, inputs[3]!],
     outputs: [outputs[0]!, outputs[1]!, outputs[2]!, outputs[3]!, outputs[4]!],
@@ -295,6 +295,7 @@ export function buildNativeFeePayment(params: NativeFeePaymentParams): NativeFee
     validUntilTimestamp,
     carrierContextHash,
     eventOpening.eventsCommitment,
+    0n,
   ];
   const nativeInputWitness = Array.from({ length: N_IN }, (_, slot) => {
     const opening = nativeInputs.find((input) => input.slot === slot);

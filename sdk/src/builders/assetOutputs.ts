@@ -1,3 +1,4 @@
+import type { AccountCreationAttachment } from "../protocol/codec.ts";
 import type { ResolvedTransactionData } from "../protocol/records.ts";
 import type { EventOptions } from "../protocol/events.ts";
 import type { PrivateValueShape } from "../constants/privateValueProfiles.ts";
@@ -205,6 +206,7 @@ export interface BuildAssetActionBaseParams extends EventOptions {
   validUntilTimestamp: FieldNumberish;
   /** The carrier context the delivering carrier must have; 0 = any delivery. Default 0. */
   carrierContextHash?: FieldNumberish;
+  accountCreation?: AccountCreationAttachment;
   /** Defaults to fresh CSPRNG entropy. Explicit values are for deterministic vectors. */
   dummyInputSeed?: FieldNumberish;
   /**

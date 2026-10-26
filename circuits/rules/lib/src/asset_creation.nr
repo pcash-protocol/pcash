@@ -168,6 +168,7 @@ mod tests {
             carrier_context_hash: 0,
             asset_burn_amount: 0,
             delivery_commitment: 0,
+            account_creation_commitment: 0,
             input_slot_classes,
             input_commitments: [0; 4],
             nullifiers,
@@ -258,16 +259,17 @@ mod tests {
     // TEST_SIGNING_KEY's signature over the creation `run_signed_creation`
     // proves on TEST_PCASH_CHAIN_ID.
     global SIGNED_CREATION_SIGNATURE: [u8; 64] = [
-        0x81, 0x87, 0xf7, 0x5f, 0xcc, 0x27, 0xad, 0xfa, 0x1a, 0x60, 0x76, 0x52, 0xbc, 0x41, 0xae,
-        0xab, 0x12, 0x8e, 0x71, 0x53, 0xf2, 0x79, 0x46, 0x95, 0x7b, 0x07, 0xdf, 0x56, 0x4f, 0x67,
-        0x2b, 0xe4, 0x70, 0x4b, 0x43, 0xcd, 0x83, 0x3c, 0x99, 0x0a, 0xc7, 0x4d, 0xfb, 0xe5, 0x24,
-        0x05, 0x99, 0xfc, 0xfe, 0x75, 0x7f, 0x76, 0xa1, 0x21, 0x8f, 0xb7, 0x5c, 0x14, 0x04, 0x4e,
-        0x2a, 0x46, 0x8f, 0x62,
+        0x8a, 0xb1, 0x3a, 0x43, 0x0b, 0x3b, 0x88, 0x2f, 0xa2, 0xd1, 0xc4, 0x3f, 0x0c, 0x70, 0x54,
+        0x0b, 0xc0, 0xba, 0x3b, 0x62, 0xe3, 0x79, 0xe2, 0x4d, 0xb4, 0x75, 0xff, 0x18, 0x4c, 0x4a,
+        0xb5, 0xfc, 0x74, 0x0f, 0x75, 0xdf, 0x5a, 0xd9, 0xdc, 0x22, 0xd9, 0x71, 0x32, 0xca, 0xeb,
+        0xc9, 0x07, 0x0b, 0x02, 0x05, 0xe4, 0x3d, 0x72, 0x4d, 0xba, 0x53, 0x5a, 0xcc, 0xc9, 0x2b,
+        0xa5, 0x97, 0x7b, 0x84,
     ];
 
     fn run_signed_creation(
         pcash_chain_id: Field,
         event_entry: Field,
+        account_creation_commitment: Field,
     ) -> [Field; RULE_STATEMENT_LENGTH] {
         let asset_id = standard_fungible_asset_id(6, 100, 7);
         let mut tx = creation_transaction([
@@ -280,6 +282,7 @@ mod tests {
             note_body_commitment(owner_commitment(TEST_RECIPIENT, 0x5001), asset_id, 100);
         let mut outputs = [OutputDeclaration { recipient: 0, amount: 0, asset_id: 0 }; 5];
         outputs[0] = OutputDeclaration { recipient: TEST_RECIPIENT, amount: 100, asset_id };
+        tx.account_creation_commitment = account_creation_commitment;
         authorize::<4, 5, 0>(
             S_ASSET_CREATION_TYPE_HASH,
             pcash_chain_id,
@@ -305,13 +308,18 @@ mod tests {
 
     #[test]
     fn test_creation_accepts_the_owner_signature() {
-        let _ = run_signed_creation(TEST_PCASH_CHAIN_ID, 0);
+        let _ = run_signed_creation(TEST_PCASH_CHAIN_ID, 0, 0);
     }
 
     // The message signs the chain ID the action commitment binds, so a
     // creation signed for one chain cannot be proved on another.
     #[test(should_fail_with = "signature must be valid")]
     fn test_creation_rejects_a_signature_for_another_chain() {
-        let _ = run_signed_creation(TEST_PCASH_CHAIN_ID + 1, 0);
+        let _ = run_signed_creation(TEST_PCASH_CHAIN_ID + 1, 0, 0);
     }
+    #[test(should_fail_with = "signature must be valid")]
+    fn test_creation_rejects_an_unsigned_attachment() {
+        let _ = run_signed_creation(TEST_PCASH_CHAIN_ID, 0, 1);
+    }
+
 }

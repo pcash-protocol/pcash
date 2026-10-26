@@ -5,7 +5,7 @@ import { isWalletSyncConflict } from "./syncConflictRetry.ts";
 import type { WalletStateStore } from "../store.ts";
 import { fromHex, sleep } from "@pcash/sdk/utils";
 import type { PcashNodeClient, StatusResult } from "@pcash/sdk/clients";
-import type { RelayJournalRecovery } from "@pcash/sdk/relay";
+import { batchEntryCarrying, type RelayJournalRecovery } from "@pcash/sdk/relay";
 import type { WalletReservation } from "../reservations.ts";
 import {
   addMempoolOutboxEntry,
@@ -62,6 +62,17 @@ export interface DurableSubmissionAdapter<Prepared = unknown, Output = unknown> 
   isDefinitePreBroadcastError?(error: unknown): boolean;
 }
 
+/** Reconcile transport state and identify the L1 carrier of these exact PCASH bytes. */
+export async function reconcileL1Publication(
+  submission: Pick<DurableSubmissionAdapter, "l1Recovery">,
+  contentHash: string,
+) {
+  const recovery = await submission.l1Recovery?.();
+  const inFlight = (await recovery?.reconcile())?.latched === true;
+  const carrying = inFlight ? batchEntryCarrying((await recovery!.show()).entries, contentHash) : undefined;
+  return { inFlight, carrying };
+}
+
 /** Prepare several independent actions before submitting their exact bytes together. */
 export function deferSubmission(adapter: DurableSubmissionAdapter): DurableSubmissionAdapter {
   return { ...adapter, prepareOnly: true, preflight: async () => undefined };
@@ -104,10 +115,7 @@ interface DurableAction {
   contentHash: string;
   transactionHex: string;
   kind: MempoolOutboxEntry["kind"];
-  /** Mempool transaction kind the node reports for these exact bytes. An asset
-   *  action is a private-value transaction unless it is a sponsored contract
-   *  creation, which spends notes the same way but is retained as its own kind. */
-  mempoolKind?: string;
+
 }
 
 interface UnjournaledFreshAction<Prepared> {
@@ -249,10 +257,7 @@ function exactRetained(
   retained: Awaited<ReturnType<PcashNodeClient["getMempoolTransaction"]>>,
   action: DurableAction,
 ): boolean {
-  const expectedKind = action.mempoolKind
-    ?? (action.kind === "noteFundedTransfer" || action.kind === "assetAction"
-      ? "privateValue"
-      : "userAccountUpdate");
+  const expectedKind = action.kind === "userAccountUpdate" ? "userAccountUpdate" : "privateValue";
   return retained !== null
     && retained.contentHash.toLowerCase() === action.contentHash.toLowerCase()
     && retained.kind === expectedKind
@@ -356,6 +361,17 @@ export async function submitDurableAction<Prepared, Output>(
         retried: true,
         recovered: true,
       });
+    }
+    if (params.submission.mode === "l1") {
+      const { carrying } = await reconcileL1Publication(params.submission, params.action.contentHash);
+      if (carrying !== undefined) {
+        if (carrying.transactionHash === null) {
+          throw new Error("The saved transaction's Ethereum publication has no known hash. Review it before retrying.");
+        }
+        await markL1Submitted(params, carrying.transactionHash);
+        params.callbacks?.onProgress?.("confirming", "Waiting for the saved Ethereum publication.");
+        return outcome(null, { accepted: false, queued: false, settled: false, retried: true, recovered: true });
+      }
     }
     params.state.onCanonicalMiss?.();
     prepared = await params.submission.preflight({

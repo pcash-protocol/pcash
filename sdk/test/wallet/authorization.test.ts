@@ -30,7 +30,7 @@ const PAYMENT = {
   issuanceOwnerCommitment: 0n,
   relayFeeAmount: 0n,
   relayFeeOwnerCommitment: 0n,
-  transactionContext: 19n,
+  accountCreationCommitment: 0n, transactionContext: 19n,
   notBefore: 14n,
   validUntil: 15n,
 };
@@ -77,7 +77,7 @@ describe("canonical PCASH authorization", () => {
       openFeeAmount: 15n,
       relayFeeAmount: 0n,
       relayFeeOwnerCommitment: 0n,
-      transactionContext: 19n,
+      accountCreationCommitment: 0n, transactionContext: 19n,
       notBefore: 0n,
       validUntil: 14n,
     };

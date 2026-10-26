@@ -117,6 +117,7 @@ pub fn build_private_value<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
         carrier_context_hash: choices.carrier_context_hash,
         asset_burn_amount: choices.asset_burn_amount,
         delivery_commitment: choices.delivery_commitment,
+        account_creation_commitment: choices.account_creation_commitment,
         input_slot_classes: choices.input_slot_classes,
         input_commitments,
         nullifiers,
@@ -149,6 +150,7 @@ mod tests {
             carrier_context_hash: 0,
             asset_burn_amount: 0,
             delivery_commitment: 0,
+            account_creation_commitment: 0,
             input_slot_classes: [SLOT_CLASS_DUMMY; N_IN],
             output_slot_classes: [SLOT_CLASS_DUMMY; N_OUT],
         };
@@ -364,6 +366,6 @@ mod tests {
             secrets,
             [0; S_OUTPUTS],
         );
-        assert(commitment == 0x1b87877559840436a438326b6de4665b83964f0192538ffdfa6495de496157bd);
+        assert(commitment == 0x1712151034e37f8a16f6575d4fda18e37f8ff689da91d03bba5652a4bea3f575);
     }
 }

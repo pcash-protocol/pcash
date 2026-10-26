@@ -55,9 +55,8 @@ use pcash_state::CircuitWord;
 use pcash_crypto::Fr;
 use pcash_derive::private_value_profiles::PrivateValueShape;
 use pcash_derive::{
-    AccountCreationAuthorization, ContractAccountCreation, ContractBody, ContractFunction,
-    ContractFunding, PrivateValueSection, ReceiveKeyUpdate, SectionLayout, Transaction,
-    UserAccountCreation, UserAccountUpdate,
+    AccountCreationAuthorization, ContractBody, ContractFunction, PrivateValueSection,
+    ReceiveKeyUpdate, SectionLayout, Transaction, UserAccountCreation, UserAccountUpdate,
 };
 use pcash_l1::{Follower, L1Client, L1Error, Step};
 use pcash_metrics::{Metrics, NoopMetrics, PrometheusMetrics};
@@ -929,23 +928,29 @@ fn account_update_transaction(
 }
 
 fn contract_creation_transaction(mut fee: PrivateValueSection) -> Vec<u8> {
-    fee.proof
-        .resize(SectionLayout::ContractAccountCreation.proof_bytes(), 0);
-    Transaction::ContractAccountCreation(ContractAccountCreation {
-        // Publishes a nullifier-key commitment, not nkRoot; no receive key.
-        body: ContractBody::new(
-            false,
-            word(0x51),
-            None,
-            vec![ContractFunction {
-                selector: 0,
-                application_vk_hash: word(0x52),
-                configuration_commitment: word(0x53),
-            }],
-        )
-        .unwrap(),
-        funding: ContractFunding::Sponsored(fee),
-    })
+    *fee.public_input_mut(fee.shape().profile().issuance_owner_offset)
+        .unwrap() = CircuitWord::ZERO;
+    fee.proof.resize(
+        SectionLayout::PrivateValue(PrivateValueShape::S).proof_bytes(),
+        0,
+    );
+    Transaction::PrivateValue(
+        (fee)
+            .with_account_creation(pcash_derive::AccountCreationAttachment::Contract(
+                ContractBody::new(
+                    false,
+                    word(0x51),
+                    None,
+                    vec![ContractFunction {
+                        selector: 0,
+                        application_vk_hash: word(0x52),
+                        configuration_commitment: word(0x53),
+                    }],
+                )
+                .unwrap(),
+            ))
+            .unwrap(),
+    )
     .encode(PCASH_CHAIN_ID)
     .unwrap()
 }
@@ -2310,7 +2315,7 @@ async fn cold_replay_restart_and_reorg_across_a_fork_boundary() -> eyre::Result<
         );
         assert_eq!(
             tip.hash,
-            known_hash("1ec008180cdd1b03d5b21993031731cf3f3ea4e5a306e51b9df6aebfffe39587")
+            known_hash("090b8678c8e4a057b4ccf86c62938fa4b8a1426c3b4f491257d87b42373d5a3d")
         );
         assert_eq!(
             status.genesis_hash,
@@ -2421,7 +2426,7 @@ async fn cold_replay_restart_and_reorg_across_a_fork_boundary() -> eyre::Result<
     );
     assert_eq!(
         replayed_tip.hash,
-        known_hash("1ec008180cdd1b03d5b21993031731cf3f3ea4e5a306e51b9df6aebfffe39587")
+        known_hash("090b8678c8e4a057b4ccf86c62938fa4b8a1426c3b4f491257d87b42373d5a3d")
     );
 
     let b_nul0 = nul(301);
@@ -2484,7 +2489,7 @@ async fn cold_replay_restart_and_reorg_across_a_fork_boundary() -> eyre::Result<
     );
     assert_eq!(
         final_tip.hash,
-        known_hash("20bb12b3802eed1aef9ac7f05f30d1dd423867d02dc24a230ca0fda360c8ff29")
+        known_hash("1bfa2d9438d03e86c0d98cd49d659e718e03695d7252a214dd7810d03437d878")
     );
     assert_eq!(
         b_tx_id,
@@ -4845,12 +4850,14 @@ async fn rebuild_preserves_contract_and_account_update_nullifier_receipts() -> e
         == pcash_state::PayoutComponent::Issuance
         && !record.payout.payout.amount.is_zero()));
     assert_eq!(
-        before.0[3][0].settled_issuance_amount,
+        before.0[3][0].settled_issuance_amount * U256::from(2),
         payouts[1].payout.payout.amount
     );
-    assert!(before.0[..2]
-        .iter()
-        .all(|receipts| receipts[0].settled_issuance_amount.is_zero()));
+    assert!(before.0[0][0].settled_issuance_amount.is_zero());
+    assert_eq!(
+        before.0[1][0].settled_issuance_amount,
+        before.0[3][0].settled_issuance_amount
+    );
 
     // Rebuild the index from stored records, then require every nullifier
     // lookup to resolve identically.

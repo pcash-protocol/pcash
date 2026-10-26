@@ -84,7 +84,6 @@ suite("PrivateKeyRelaySubmitter against Anvil", () => {
     stableId: "1",
     conflictKeys: [],
     kind: "userAccountCreation",
-    fundingMode: null,
     byteSize: BigInt(entry.length),
     openFeeAmount: 0n,
     issuanceOwnerCommitment: `0x${"00".repeat(20)}`,
@@ -119,7 +118,7 @@ suite("PrivateKeyRelaySubmitter against Anvil", () => {
         settledOpenFeeAmount: 0n,
         settledIssuanceAmount: 0n,
         kind: "userAccountCreation",
-        fundingMode: null,
+        accountCreation: 0 as const,
         inclusion: {
           l1BlockNumber: 1n,
           l1BlockHash: query.inclusionId.l1BlockHash,

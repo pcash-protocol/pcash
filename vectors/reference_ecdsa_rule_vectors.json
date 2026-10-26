@@ -25,8 +25,8 @@
   "readableRules": {
     "payment": {
       "primaryType": "PcashPayment",
-      "type": "PcashPayment(uint256 pcashChainId,address recipient,uint256 amount,uint256 openFeeAmount,address issuanceRecipient,uint256 issuanceOwnerCommitment,uint256 relayFeeAmount,uint256 relayFeeOwnerCommitment,uint256 transactionContext,uint64 notBefore,uint64 validUntil)",
-      "typeHash": "0xcdf690166420e824e291e1d42cc104d90e742bbe577fff1ed8c1b65e23e41497",
+      "type": "PcashPayment(uint256 pcashChainId,address recipient,uint256 amount,uint256 openFeeAmount,address issuanceRecipient,uint256 issuanceOwnerCommitment,uint256 relayFeeAmount,uint256 relayFeeOwnerCommitment,uint256 accountCreationCommitment,uint256 transactionContext,uint64 notBefore,uint64 validUntil)",
+      "typeHash": "0x0e772628a7e02acf1048961e22110b77229bd6f0e5eb1b596a80610ecab17f94",
       "fields": [
         "0x0000000000000000000000000000000000000000000000000000000000005a3c",
         "0x0000000000000000000000002222222222222222222222222222222222222222",
@@ -36,17 +36,18 @@
         "0x085dd5d21070e206f6dc73aafff37182cd92d8650d1eca825699cecc4bcec70c",
         "0x0000000000000000000000000000000000000000000000000000000000000000",
         "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "0x000000000000000000000000000000000000000000000000000000000000cca1",
         "0x2c65ebfe08852fbe98f202935ad68184498646649703fd748f7f23758ebc1c43",
         "0x000000000000000000000000000000000000000000000000000000000000000a",
         "0x00000000000000000000000000000000000000000000000000000000000003e7"
       ],
-      "structHash": "0x11e60a769ab3d296a4769937b8ba1e11d75a38239bad1a5c039dadf6d8935c95",
-      "signingHash": "0xc3e62290c12dbf7fd34fff12afed6b2180180b3394a55c35793498909b9b83f3"
+      "structHash": "0xf71567c2639d6675db63f76c76d0311f3221c8f5302adfb77bcf833e7acd4f8b",
+      "signingHash": "0x6c3bbf58b44f2bc64e1138c4884b13633ef0be044a22a1555844abd5470c07b1"
     },
     "transactionDetail": {
       "primaryType": "PcashTransactionDetail",
-      "type": "PcashTransactionDetail(uint256 pcashChainId,address authorizingAddress,uint256 spentAssetId,uint256 spentAssetAmount,uint256 assetBurnAmount,address out0Recipient,uint256 out0Amount,uint256 out0AssetId,address out1Recipient,uint256 out1Amount,uint256 out1AssetId,address out2Recipient,uint256 out2Amount,uint256 out2AssetId,address out3Recipient,uint256 out3Amount,uint256 out3AssetId,address out4Recipient,uint256 out4Amount,uint256 out4AssetId,uint256 openFeeAmount,address issuanceRecipient,uint256 issuanceOwnerCommitment,uint256 transactionContext,uint64 notBefore,uint64 validUntil,uint256 privateValueCommitment)",
-      "typeHash": "0x629290a21f92b2e0c6d70a15dcbf03d81bbfa0d2aaf5db72e35c320b4ccb5613",
+      "type": "PcashTransactionDetail(uint256 pcashChainId,address authorizingAddress,uint256 spentAssetId,uint256 spentAssetAmount,uint256 assetBurnAmount,address out0Recipient,uint256 out0Amount,uint256 out0AssetId,address out1Recipient,uint256 out1Amount,uint256 out1AssetId,address out2Recipient,uint256 out2Amount,uint256 out2AssetId,address out3Recipient,uint256 out3Amount,uint256 out3AssetId,address out4Recipient,uint256 out4Amount,uint256 out4AssetId,uint256 openFeeAmount,address issuanceRecipient,uint256 issuanceOwnerCommitment,uint256 accountCreationCommitment,uint256 transactionContext,uint64 notBefore,uint64 validUntil,uint256 privateValueCommitment)",
+      "typeHash": "0xeb824e22693e33e2d01cbbf5a31d27f791c3c262ff84638e5f10ae0c05cc92e7",
       "fields": [
         "0x0000000000000000000000000000000000000000000000000000000000005a3c",
         "0x00000000000000000000000087c018ef0000000000000000000000000000a1a9",
@@ -71,13 +72,14 @@
         "0x0000000000000000000000000000000000000000000000000000000000000000",
         "0x00000000000000000000000087c018ef0000000000000000000000000000a1a9",
         "0x085dd5d21070e206f6dc73aafff37182cd92d8650d1eca825699cecc4bcec70c",
+        "0x000000000000000000000000000000000000000000000000000000000000cca1",
         "0x2c65ebfe08852fbe98f202935ad68184498646649703fd748f7f23758ebc1c43",
         "0x000000000000000000000000000000000000000000000000000000000000000a",
         "0x00000000000000000000000000000000000000000000000000000000000003e7",
-        "0x159fc89c0f9cc6f1d184d9c7bddb1ff03fad2b25e3f3694bb3b89aedfcf81296"
+        "0x235dfc7161df6203d4eb3415cbed9db186bf2d4934dd6662901379fd34cca572"
       ],
-      "structHash": "0x806ad5e337f9768ba36cefeaa958c25ee972be58985ab0f298a1c620746b7288",
-      "signingHash": "0x162497c0eb28772e206cf3008f23eeb12e698d45ae2ba5a84e4ca1b644c189c5"
+      "structHash": "0x731c509c95e92213159327147dd69166d8a52d92d325db719734594768739a2b",
+      "signingHash": "0xd5bbbc72e931bad278d143660640558c60569f7b0c64be824a2532006994c22c"
     }
   }
 }

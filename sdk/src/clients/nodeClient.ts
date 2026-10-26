@@ -25,7 +25,7 @@ import {
   verifyContract,
   type FunctionSelector,
 } from "../protocol/contract.ts";
-import { decodeTransaction, TX_KIND_CONTRACT_ACCOUNT_CREATION, type ContractFundingMode } from "../protocol/codec.ts";
+import { decodeTransaction, TX_KIND_CONTRACT_ACCOUNT_CREATION } from "../protocol/codec.ts";
 import type { DataRecord } from "../protocol/records.ts";
 import {
   parseCurrentBoundaryEnvelope,
@@ -416,8 +416,8 @@ export interface ReceiptResult {
   /** The block's rewardEach for a successful type 0x00 action, otherwise zero. */
   settledIssuanceAmount: bigint;
   kind: "privateValue" | "userAccountCreation" | "userAccountUpdate" | "contractAccount" | "unknown";
-  /** A contract creation's funding mode; null for every other kind. */
-  fundingMode: ContractFundingMode | null;
+  /** 0: none; 1: inserted; 2: an attachment reused an existing account. */
+  accountCreation: 0 | 1 | 2;
   outputLeafStart: bigint | null;
   outputsAdded: bigint;
   nullifiers: string[] | null;
@@ -443,8 +443,8 @@ export interface TransactionSummaryResult {
   declaredIssuanceOwnerCommitment: string | null;
   issuanceRoute: IssuanceRoute;
   kind: string;
-  /** A contract creation's funding mode; null for every other kind. */
-  fundingMode: ContractFundingMode | null;
+  /** 0: none; 1: inserted; 2: an attachment reused an existing account. */
+  accountCreation: 0 | 1 | 2;
   block: BlockIdResult;
   pcashTransactionIndex: bigint;
   timestamp: bigint;
@@ -491,7 +491,8 @@ const ITEM_EXCLUSION_REASONS = [
   "unknownKind",
   "unknownPrivateValueShape",
   "unknownAuthorizationMode",
-  "unknownFundingMode",
+  "unknownAccountCreationTag",
+  "directCreationAttachment",
   "unknownReceiveKeyMode",
   "unknownPublishesNkRootFlag",
   "unknownYParity",
@@ -856,8 +857,6 @@ export interface MempoolItemResult {
   stableId: string;
   conflictKeys: string[];
   kind: string;
-  /** A contract creation's funding mode; null for every other kind. */
-  fundingMode: ContractFundingMode | null;
   byteSize: bigint;
   openFeeAmount: bigint;
   issuanceOwnerCommitment: string;
@@ -1005,7 +1004,10 @@ function encodeExplorerCursor(cursor: ExplorerCursor): Record<string, unknown> {
   };
 }
 
-const parseFundingMode: Parser<ContractFundingMode | null> = nullable(oneOf("unfunded", "sponsored"));
+const parseAccountCreation: Parser<0 | 1 | 2> = (value, label) => {
+  if (value !== 0 && value !== 1 && value !== 2) throw new Error(`${label} must be 0, 1, or 2`);
+  return value;
+};
 
 const parseMempoolItem: Parser<MempoolItemResult> = shape({
   contentHash: str,
@@ -1013,7 +1015,6 @@ const parseMempoolItem: Parser<MempoolItemResult> = shape({
   stableId: str,
   conflictKeys: array(str),
   kind: str,
-  fundingMode: parseFundingMode,
   byteSize: quantity,
   openFeeAmount: quantity,
   issuanceOwnerCommitment: (value, label) => bytes32Hex(field(value, label)),
@@ -1117,7 +1118,7 @@ const parseReceiptDto: Parser<ReceiptResult> = withFailureDetail(shape({
   settledOpenFeeAmount: quantity,
   settledIssuanceAmount: quantity,
   kind: oneOf("privateValue", "userAccountCreation", "userAccountUpdate", "contractAccount", "unknown"),
-  fundingMode: parseFundingMode,
+  accountCreation: parseAccountCreation,
   outputLeafStart: nullable(quantity),
   outputsAdded: quantity,
   nullifiers: parseNullableNullifiers,
@@ -1137,7 +1138,7 @@ const parseTransactionSummary: Parser<TransactionSummaryResult> = withFailureDet
   declaredIssuanceOwnerCommitment: nullable(str),
   issuanceRoute: parseIssuanceRoute,
   kind: str,
-  fundingMode: parseFundingMode,
+  accountCreation: parseAccountCreation,
   block: parseBlockId,
   pcashTransactionIndex: quantity,
   timestamp: quantity,
@@ -1968,10 +1969,10 @@ export class PcashNodeClient {
     const transaction = rpcString(r.transaction, "contract.transaction");
     const transactionBytes = hexToBytes(transaction);
     const decodedEntry = decodeTransaction(transactionBytes);
-    if (decodedEntry.kind !== TX_KIND_CONTRACT_ACCOUNT_CREATION) {
-      throw new Error("contract origin is not a contract creation transaction");
-    }
-    const body = decodeContractBody(decodedEntry.body);
+    const creationBody = decodedEntry.kind === TX_KIND_CONTRACT_ACCOUNT_CREATION ? decodedEntry.body
+      : decodedEntry.kind === 0 && decodedEntry.accountCreation?.kind === "contract" ? decodedEntry.accountCreation.body : undefined;
+    if (creationBody === undefined) throw new Error("contract origin carries no contract creation");
+    const body = decodeContractBody(creationBody);
     const verification = verifyContract(body);
     if (
       verification.address !== BigInt(returnedAddress) ||

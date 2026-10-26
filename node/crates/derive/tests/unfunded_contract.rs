@@ -4,7 +4,7 @@
     clippy::panic,
     reason = "tests use direct assertions for fixture setup"
 )]
-//! Contract-account creation in its two funding modes: the unfunded codec and
+//! Contract-account creation in its standalone and attached forms: the unfunded codec and
 //! lifetime, and the derivation rules the modes share or that differ between
 //! them.
 
@@ -14,8 +14,8 @@ use common::*;
 use alloy_primitives::{Address, B256, U256};
 use pcash_derive::private_value_profiles::PrivateValueShape;
 use pcash_derive::{
-    derive_block, derive_prepared_block, prepare_block, ContractFunding, ParseError, SectionLayout,
-    Transaction, CONTRACT_MAX_BODY_BYTES, KIND_CONTRACT_ACCOUNT_CREATION, MAX_TX_BYTES,
+    derive_block, derive_prepared_block, prepare_block, ParseError, SectionLayout, Transaction,
+    CONTRACT_MAX_BODY_BYTES, KIND_CONTRACT_ACCOUNT_CREATION, MAX_TX_BYTES,
     ML_KEM768_PUBLIC_KEY_LEN, RECEIVE_KEY_ABSENT, RECEIVE_KEY_PRESENT, WIRE_PROOF_BYTES,
 };
 use pcash_state::{
@@ -75,14 +75,14 @@ fn unfunded(body: &[u8], recent: CircuitWord, deadline: u64) -> Vec<u8> {
     unfunded_contract_txbytes(body, recent, deadline)
 }
 
-/// Section words for a sponsor that pays `fee` on the open route from the
+/// Section words for a attachment that pays `fee` on the open route from the
 /// notes `salt` names, with no not-before bound.
 fn fee_words(recent: CircuitWord, salt: u64, fee: u64, deadline: u64) -> Vec<CircuitWord> {
     section_words(recent, salt, fee, Address::ZERO, 0, deadline)
 }
 
-fn sponsored(body: &[u8], words: &[CircuitWord]) -> Vec<u8> {
-    sponsored_contract_txbytes(
+fn attached(body: &[u8], words: &[CircuitWord]) -> Vec<u8> {
+    attached_contract_txbytes(
         body,
         &private_value_section(
             words,
@@ -112,8 +112,8 @@ fn frozen_address() -> Address {
 #[test]
 fn unfunded_wire_is_fixed_and_body_address_is_frozen() {
     let raw = unfunded(&frozen_body(), word(4), 5);
-    assert_eq!(raw.len(), 211);
-    assert_eq!(hex::encode(&raw), "02504353480000000000000000000000000000000000000000000000000000000000000000040000000000000005000000000000000000000000000000000000000000000000000000000000000011000201000000000000000000000000000000000000000000000000000000000000002200000000000000000000000000000000000000000000000000000000000000330500000000000000000000000000000000000000000000000000000000000000440000000000000000000000000000000000000000000000000000000000000055");
+    assert_eq!(raw.len(), 210);
+    assert_eq!(hex::encode(&raw), "025043534800000000000000000000000000000000000000000000000000000000000000040000000000000005000000000000000000000000000000000000000000000000000000000000000011000201000000000000000000000000000000000000000000000000000000000000002200000000000000000000000000000000000000000000000000000000000000330500000000000000000000000000000000000000000000000000000000000000440000000000000000000000000000000000000000000000000000000000000055");
     let Transaction::ContractAccountCreation(creation) =
         Transaction::decode(&raw, PCASH_CHAIN_ID).unwrap()
     else {
@@ -123,22 +123,17 @@ fn unfunded_wire_is_fixed_and_body_address_is_frozen() {
         Transaction::decode(&raw, PCASH_CHAIN_ID + 1),
         Err(ParseError::WrongChainId(PCASH_CHAIN_ID))
     );
-    assert_eq!(
-        creation.funding,
-        ContractFunding::Unfunded {
-            recent_pcash_block_hash: word(4),
-            valid_until_timestamp: 5,
-        }
-    );
+    assert_eq!(creation.recent_pcash_block_hash, word(4));
+    assert_eq!(creation.valid_until_timestamp, 5);
     let check = contract_body_check(&raw);
     assert_eq!(check.address().unwrap(), frozen_address());
     assert_eq!(
         check.nullifier_key_commitment().unwrap(),
         field_element(word(0x11))
     );
-    // Neither the funding payload nor the funding mode enters the address.
+    // The publication lifetime and enclosing transaction do not enter the address.
     let reanchored = unfunded(&frozen_body(), word(6), 7);
-    let paid = sponsored(&frozen_body(), &fee_words(word(4), 7, 5, 5));
+    let paid = attached(&frozen_body(), &fee_words(word(4), 7, 5, 5));
     for other in [&reanchored, &paid] {
         assert_eq!(
             contract_body_check(other).address().unwrap(),
@@ -165,26 +160,11 @@ fn unfunded_parsing_consumes_exactly_its_shape_and_rejects_unknown_selectors() {
         Transaction::decode(&trailing, PCASH_CHAIN_ID),
         Err(ParseError::Trailing)
     );
-    // An unfunded payload and body are far shorter than a section.
-    let mut sponsored_mode = raw.clone();
-    sponsored_mode[5] = 1;
-    assert_eq!(
-        Transaction::decode(&sponsored_mode, PCASH_CHAIN_ID),
-        Err(ParseError::Truncated)
-    );
-    for mode in 2..=u8::MAX {
-        let mut unknown = raw.clone();
-        unknown[5] = mode;
-        assert_eq!(
-            Transaction::decode(&unknown, PCASH_CHAIN_ID),
-            Err(ParseError::UnknownFundingMode(mode))
-        );
-    }
-    // type ‖ chainId ‖ fundingMode ‖ recent block ‖ deadline, then
+    // type ‖ chainId ‖ recent block ‖ deadline, then
     // publishesNkRoot ‖ nullifier-key material ‖ receive-key mode.
     for (offset, error) in [
-        (46, ParseError::UnknownPublishesNkRootFlag(2)),
-        (79, ParseError::UnknownReceiveKeyMode(2)),
+        (45, ParseError::UnknownPublishesNkRootFlag(2)),
+        (78, ParseError::UnknownReceiveKeyMode(2)),
     ] {
         let mut invalid = raw.clone();
         invalid[offset] = 2;
@@ -195,27 +175,27 @@ fn unfunded_parsing_consumes_exactly_its_shape_and_rejects_unknown_selectors() {
         word(4),
         5,
     );
-    assert_eq!(maximum.len(), 17_840);
-    assert_eq!(maximum.len(), 46 + CONTRACT_MAX_BODY_BYTES);
+    assert_eq!(maximum.len(), 17_839);
+    assert_eq!(maximum.len(), 45 + CONTRACT_MAX_BODY_BYTES);
     assert!(maximum.len() < MAX_TX_BYTES);
     assert!(Transaction::decode(&maximum, PCASH_CHAIN_ID).is_ok());
 }
 
-/// Every truncation, a trailing byte, and every unassigned funding mode leave
+/// Truncations, trailing bytes, and unassigned attachment tags leave
 /// an item undecodable in either mode: it is excluded, commits no transaction
 /// result, and reaches no verifier.
 #[test]
 fn malformed_creations_of_either_mode_are_excluded_without_admitting_an_item() {
-    use ItemExclusionReason::{TrailingBytes, Truncated, UnknownFundingMode};
+    use ItemExclusionReason::{TrailingBytes, Truncated, UnknownAccountCreationTag};
     let rules = stub_rules();
     let mut state = initialize(&rules);
     let recent = state.canonical_tip().unwrap().hash;
     let body = body(false, None, 1);
     let free = unfunded(&body, recent, ts_of(1));
-    let paid = sponsored(&body, &fee_words(recent, 7, 0, ts_of(1)));
+    let paid = attached(&body, &fee_words(recent, 7, 0, ts_of(1)));
     let with_mode = |raw: &[u8], mode: u8| {
         let mut changed = raw.to_vec();
-        changed[5] = mode;
+        changed[6 + SectionLayout::PrivateValue(PrivateValueShape::S).section_bytes()] = mode;
         changed
     };
 
@@ -223,11 +203,10 @@ fn malformed_creations_of_either_mode_are_excluded_without_admitting_an_item() {
         .map(|len| (free[..len].to_vec(), Truncated))
         .collect::<Vec<_>>();
     free_items.push(([free.as_slice(), &[0]].concat(), TrailingBytes));
-    free_items.extend((2..=u8::MAX).map(|mode| (with_mode(&free, mode), UnknownFundingMode)));
 
-    // Each boundary of the sponsored layout: envelope, funding mode, section
+    // Each boundary of the attached layout: envelope, profile, section
     // words, proof, output data, and body.
-    let section_end = 6 + SectionLayout::ContractAccountCreation.section_bytes();
+    let section_end = 6 + SectionLayout::PrivateValue(PrivateValueShape::S).section_bytes();
     let proof_start = 6 + 14 * 32;
     let mut paid_items = [
         1,
@@ -245,11 +224,11 @@ fn malformed_creations_of_either_mode_are_excluded_without_admitting_an_item() {
     .map(|len| (paid[..len].to_vec(), Truncated))
     .collect::<Vec<_>>();
     paid_items.push(([paid.as_slice(), &[0]].concat(), TrailingBytes));
-    paid_items.extend([2, 0xff].map(|mode| (with_mode(&paid, mode), UnknownFundingMode)));
+    paid_items.extend([3, 0xff].map(|mode| (with_mode(&paid, mode), UnknownAccountCreationTag)));
 
-    // Every unassigned mode of a sponsored creation is refused by admission.
+    // Every unassigned mode of a attached creation is refused by admission.
     let verifier = StubVerifier::accept();
-    let unknown_paid = (2..=u8::MAX)
+    let unknown_paid = (3..=u8::MAX)
         .map(|mode| with_mode(&paid, mode))
         .collect::<Vec<_>>();
     assert_eq!(
@@ -262,7 +241,7 @@ fn malformed_creations_of_either_mode_are_excluded_without_admitting_an_item() {
             &unknown_paid
         )
         .unwrap(),
-        vec![ItemResult::Excluded(UnknownFundingMode); 254]
+        vec![ItemResult::Excluded(UnknownAccountCreationTag); 253]
     );
 
     let calldata = |items: &[(Vec<u8>, ItemExclusionReason)]| {
@@ -389,14 +368,14 @@ fn unfunded_deadline_and_recent_block_boundaries_use_creation_outcomes() {
 }
 
 #[test]
-fn sponsored_not_before_and_expiry_boundaries_are_inclusive() {
+fn attached_not_before_and_expiry_boundaries_are_inclusive() {
     let rules = stub_rules();
     let state = initialize(&rules);
     let recent = state.canonical_tip().unwrap().hash;
     let body = body(false, None, 1);
     let end = ts_of(0) + RECENT_PCASH_BLOCK_WINDOW_SECONDS;
     let paid = |not_before, valid_until| {
-        sponsored(
+        attached(
             &body,
             &section_words(recent, 7, 0, Address::ZERO, not_before, valid_until),
         )
@@ -485,8 +464,8 @@ fn unfunded_body_failures_precede_invalid_timing_and_leave_no_effects() {
 }
 
 /// Inputs that break more than one rule commit the outcome of the first check
-/// in the shared order: sponsored section canonicality, the body, its address,
-/// timing, then the sponsor's payment and proof. Account capacity, between
+/// in the shared order: attached section canonicality, the body, its address,
+/// timing, then the attachment's payment and proof. Account capacity, between
 /// the address and timing, is covered by the engine's unit test
 /// `unfunded_account_capacity_precedes_timing`.
 #[test]
@@ -500,7 +479,7 @@ fn the_first_failed_check_decides_in_both_modes() {
     let mut state = initialize(&rules);
     let genesis = state.canonical_tip().unwrap().hash;
     // Block 1 creates the contract at `existing`'s address and spends the
-    // sponsor notes of `spent`.
+    // attachment notes of `spent`.
     let existing = body(false, None, 1);
     let spent = fee_words(genesis, 7, 0, ts_of(1));
     let setup = derive_block(
@@ -511,7 +490,7 @@ fn the_first_failed_check_decides_in_both_modes() {
             addr(0xf00),
             batch(&[
                 unfunded(&existing, genesis, ts_of(1)),
-                sponsored(&body(false, None, 2), &spent),
+                attached(&body(false, None, 2), &spent),
             ]),
         ),
         &rules,
@@ -537,13 +516,13 @@ fn the_first_failed_check_decides_in_both_modes() {
     let cases = [
         // Section canonicality precedes the body and the address.
         (
-            "sponsored noncanonical recent hash, bad body",
-            sponsored(&bad, &set(words(20, 0, live), 1, noncanonical)),
+            "attached noncanonical recent hash, bad body",
+            attached(&bad, &set(words(20, 0, live), 1, noncanonical)),
             PublicInputNotInField,
         ),
         (
-            "sponsored noncanonical recent hash, existing address",
-            sponsored(&existing, &set(words(21, 0, live), 1, noncanonical)),
+            "attached noncanonical recent hash, existing address",
+            attached(&existing, &set(words(21, 0, live), 1, noncanonical)),
             PublicInputNotInField,
         ),
         // An unfunded recent hash is only compared with committed block
@@ -570,9 +549,9 @@ fn the_first_failed_check_decides_in_both_modes() {
             EmptyContractFunctionSet,
         ),
         (
-            "sponsored expired, bad body",
-            sponsored(&bad, &words(22, 0, past)),
-            EmptyContractFunctionSet,
+            "attached expired, bad body",
+            attached(&bad, &words(22, 0, past)),
+            Expired,
         ),
         (
             "unfunded expired, existing address",
@@ -585,58 +564,58 @@ fn the_first_failed_check_decides_in_both_modes() {
             ContractAddressExists,
         ),
         (
-            "sponsored expired, existing address",
-            sponsored(&existing, &words(23, 0, past)),
-            ContractAddressExists,
+            "attached expired, existing address",
+            attached(&existing, &words(23, 0, past)),
+            Expired,
         ),
         (
-            "sponsored unknown block, existing address",
-            sponsored(&existing, &set(words(24, 0, live), 1, unknown)),
-            ContractAddressExists,
+            "attached unknown block, existing address",
+            attached(&existing, &set(words(24, 0, live), 1, unknown)),
+            RecentPcashBlockNotInWindow,
         ),
         (
-            "sponsored not yet valid, existing address",
-            sponsored(&existing, &words(25, timestamp + 1, live)),
-            ContractAddressExists,
+            "attached not yet valid, existing address",
+            attached(&existing, &words(25, timestamp + 1, live)),
+            NotYetValid,
         ),
-        // Timing precedes the sponsor's payment and proof.
+        // Timing precedes the attachment's payment and proof.
         (
-            "sponsored unknown block, duplicate nullifier",
-            sponsored(&fresh, &{
+            "attached unknown block, duplicate nullifier",
+            attached(&fresh, &{
                 let misanchored = set(words(26, 0, live), 1, unknown);
                 set(misanchored.clone(), 3, misanchored[2])
             }),
             RecentPcashBlockNotInWindow,
         ),
         (
-            "sponsored expired, zero nullifier",
-            sponsored(&fresh, &set(words(27, 0, past), 2, word(0))),
+            "attached expired, zero nullifier",
+            attached(&fresh, &set(words(27, 0, past), 2, word(0))),
             Expired,
         ),
         (
-            "sponsored expired, spent nullifier",
-            sponsored(&fresh, &set(words(28, 0, past), 2, spent[2])),
+            "attached expired, spent nullifier",
+            attached(&fresh, &set(words(28, 0, past), 2, spent[2])),
             Expired,
         ),
         (
-            "sponsored not yet valid, rejected proof",
-            sponsored(&fresh, &words(29, timestamp + 1, live)),
+            "attached not yet valid, rejected proof",
+            attached(&fresh, &words(29, timestamp + 1, live)),
             NotYetValid,
         ),
         // Each payment failure on its own.
         (
-            "sponsored zero nullifier",
-            sponsored(&fresh, &set(words(30, 0, live), 2, word(0))),
+            "attached zero nullifier",
+            attached(&fresh, &set(words(30, 0, live), 2, word(0))),
             ZeroNullifier,
         ),
         (
-            "sponsored spent nullifier",
-            sponsored(&fresh, &set(words(31, 0, live), 2, spent[2])),
+            "attached spent nullifier",
+            attached(&fresh, &set(words(31, 0, live), 2, spent[2])),
             NullifierAlreadySpent,
         ),
         (
-            "sponsored rejected proof",
-            sponsored(&fresh, &words(32, 0, live)),
+            "attached rejected proof",
+            attached(&fresh, &words(32, 0, live)),
             ProofRejected,
         ),
     ];
@@ -711,67 +690,45 @@ fn both_key_forms_and_receive_key_states_create_without_proofs_fees_or_issuance(
 }
 
 #[test]
-fn cross_mode_first_creation_wins_and_failed_sponsor_pays_nothing() {
+fn attachment_succeeds_before_or_after_standalone_creation() {
     for unfunded_first in [false, true] {
         let rules = stub_rules();
         let mut state = initialize(&rules);
         let recent = state.canonical_tip().unwrap().hash;
         let body = body(false, None, 2);
         let free = unfunded(&body, recent, ts_of(1));
-        let paid = sponsored(&body, &fee_words(recent, 7, 5, ts_of(1)));
+        let paid = attached(&body, &fee_words(recent, 7, 5, ts_of(1)));
         let items = if unfunded_first {
             vec![free, paid]
         } else {
             vec![paid, free]
         };
-        let address = contract_body_check(&items[0]).address().unwrap();
-        let block = block_with_batch(1, INBOX(), addr(0xf00), batch(&items));
-        let outcome = derive_block(&mut state, &block, &rules, &StubVerifier::accept()).unwrap();
+        let outcome = derive_block(
+            &mut state,
+            &block_with_batch(1, INBOX(), addr(0xf00), batch(&items)),
+            &rules,
+            &StubVerifier::accept(),
+        )
+        .unwrap();
         assert_eq!(
             item_results(&outcome),
-            vec![
-                SUCCEEDED,
-                ItemResult::Admitted(TransactionOutcome::ContractAddressExists)
-            ]
-        );
-        assert_eq!(
-            outcome.transaction_effects[1],
-            TransactionEffects::Rejected(RejectedEffects {
-                account: Some(address),
-                detail: Some(FailureDetailSeed::Complete(
-                    FailureDetail::ContractAddressExists { address }
-                )),
-            })
+            if unfunded_first {
+                vec![SUCCEEDED, SUCCEEDED]
+            } else {
+                vec![
+                    SUCCEEDED,
+                    ItemResult::Admitted(TransactionOutcome::ContractAddressExists),
+                ]
+            }
         );
         assert_eq!(state.account_count(), 1);
-        assert_eq!(state.output_count(), if unfunded_first { 0 } else { 6 });
-        assert_eq!(
-            state.nullifier_seen(tagged_word(0x0e, 7 * 16 + 1)).unwrap(),
-            !unfunded_first
-        );
+        assert!(state.nullifier_seen(tagged_word(0x0e, 7 * 16 + 1)).unwrap());
         let economics = &outcome.committed_boundary.history.economics;
-        assert_eq!(
-            economics.open_fees_total,
-            U256::from(if unfunded_first { 0u64 } else { 5 })
-        );
-        assert_eq!(economics.qualifying_actions, 0);
-        assert_eq!(economics.issuance_total, U256::ZERO);
-        assert_eq!(
-            outcome.committed_boundary.history.payouts.len(),
-            usize::from(!unfunded_first)
-        );
-        let frozen = if unfunded_first {
-            frozen_digest(
-                "0x2bee647ca9bd60d38fe5daeae15b002097aae7c294d363afbdc2cc37a04734f5",
-                "0xe7dd5360f8a9f3e97564171413a8528eecdbdabe084129ff2f6895b9e7f9a45e",
-            )
-        } else {
-            frozen_digest(
-                "0x2f5e2157b2ecf1505f15770a3a7974b39a5a9ccf0fc383f56d13c1c2c8600dbe",
-                "0xc9095bac87a522a844e95e6b05807c100711ecdcc7bfa7c021e84e206d2af04f",
-            )
-        };
-        assert_eq!(committed_digest(&outcome), frozen);
+        assert_eq!(economics.open_fees_total, U256::from(5));
+        assert_eq!(economics.qualifying_actions, 1);
+        assert_eq!(economics.issuance_total, economics.reward_each);
+        assert_eq!(outcome.committed_boundary.history.payouts.len(), 2);
+        assert_eq!(state.output_count(), 7);
     }
 }
 
@@ -837,10 +794,10 @@ fn prepared_and_direct_execution_agree_for_unfunded_creations_and_failures() {
     );
 }
 
-/// Prewarming and execution verify only sponsored creations, and a block that
+/// Prewarming and execution verify only attached creations, and a block that
 /// pays issuance for a transfer pays none for a creation in either mode.
 #[test]
-fn only_sponsored_creation_reaches_the_verifier_and_neither_mode_earns_issuance() {
+fn attached_creation_verifies_and_earns_one_ordinary_issuance_share() {
     let rules = stub_rules();
     let mut direct_state = initialize(&rules);
     let mut prepared_state = initialize(&rules);
@@ -853,14 +810,14 @@ fn only_sponsored_creation_reaches_the_verifier_and_neither_mode_earns_issuance(
     );
     let items = vec![
         unfunded(&body(false, None, 1), recent, deadline),
-        sponsored(&body(false, None, 2), &fee_words(recent, 0x51, 5, deadline)),
-        sponsored(&body(false, None, 3), &fee_words(recent, 0x52, 0, deadline)),
+        attached(&body(false, None, 2), &fee_words(recent, 0x51, 5, deadline)),
+        attached(&body(false, None, 3), &fee_words(recent, 0x52, 0, deadline)),
         unfunded(&body(true, None, 1), recent, deadline),
         transfer,
     ];
     let block = block_with_batch(1, INBOX(), addr(0xf00), batch(&items));
 
-    // The two sponsored creations and the transfer.
+    // The two attached creations and the transfer.
     let verifier = StubVerifier::accept();
     let prepared = prepare_block(&block, &rules, &source(INBOX()), &verifier);
     assert_eq!(verifier.calls.get(), 3);
@@ -875,16 +832,22 @@ fn only_sponsored_creation_reaches_the_verifier_and_neither_mode_earns_issuance(
     assert_eq!(item_results(&outcome), vec![SUCCEEDED; 5]);
     assert_eq!(prepared_state.account_count(), 4);
     let economics = &outcome.committed_boundary.history.economics;
-    assert_eq!(economics.qualifying_actions, 1);
+    assert_eq!(economics.qualifying_actions, 3);
     assert!(!economics.reward_each.is_zero());
-    assert_eq!(economics.issuance_total, economics.reward_each);
+    assert_eq!(
+        economics.issuance_total,
+        economics.reward_each * U256::from(3)
+    );
     assert_eq!(economics.open_fees_total, U256::from(5));
     let payouts = &outcome.committed_boundary.history.payouts;
     assert_eq!(payouts.len(), 2);
     assert_eq!(payouts[0].result_components().0, U256::from(5));
     assert_eq!(payouts[0].result_components().1, U256::ZERO);
     assert_eq!(payouts[1].result_components().0, U256::ZERO);
-    assert_eq!(payouts[1].result_components().1, economics.reward_each);
+    assert_eq!(
+        payouts[1].result_components().1,
+        economics.reward_each * U256::from(3)
+    );
     assert_eq!(payouts[1].output_index, payouts[0].output_index + 1);
     assert_eq!(payouts[1].owner_commitment, payouts[0].owner_commitment);
     assert_eq!(payouts[1].source, payouts[0].source);
@@ -939,12 +902,12 @@ fn unfunded_creation_rejects_an_orphaned_reference() {
 #[test]
 fn both_modes_create_the_frozen_account_leaf_for_one_body() {
     let mut created = Vec::new();
-    for sponsor in [false, true] {
+    for attachment in [false, true] {
         let rules = stub_rules();
         let mut state = initialize(&rules);
         let recent = state.canonical_tip().unwrap().hash;
-        let raw = if sponsor {
-            sponsored(&frozen_body(), &fee_words(recent, 7, 0, ts_of(1)))
+        let raw = if attachment {
+            attached(&frozen_body(), &fee_words(recent, 7, 0, ts_of(1)))
         } else {
             unfunded(&frozen_body(), recent, ts_of(1))
         };
@@ -952,7 +915,7 @@ fn both_modes_create_the_frozen_account_leaf_for_one_body() {
         let block = block_with_batch(1, INBOX(), addr(0xf00), batch(&[raw]));
         let outcome = derive_block(&mut state, &block, &rules, &verifier).unwrap();
         assert_eq!(item_results(&outcome), vec![SUCCEEDED]);
-        assert_eq!(verifier.calls.get(), usize::from(sponsor));
+        assert_eq!(verifier.calls.get(), usize::from(attachment));
         let account = state.account_of(frozen_address()).unwrap().unwrap();
         let leaf = pcash_state::account_state_commitment(
             frozen_address(),

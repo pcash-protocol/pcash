@@ -139,6 +139,7 @@ fn private_value_fixture(
         word(ts_of(block_number) + 120),
         CircuitWord::ZERO,
         tagged_word(0x10, nullifier_seed),
+        CircuitWord::ZERO,
     ];
     PrivateValueFixture {
         public_inputs,
@@ -320,7 +321,7 @@ fn output_data_is_opaque_and_section_sizes_are_framing_for_every_proof_kind() {
             ),
             (large, SectionLayout::PrivateValue(PrivateValueShape::L)),
             (update, SectionLayout::UserAccountUpdate),
-            (contract, SectionLayout::ContractAccountCreation),
+            (contract, SectionLayout::PrivateValue(PrivateValueShape::S)),
         ] {
             // The section's words, then the carrying type's own input.
             let (words, output_count) =
@@ -333,13 +334,7 @@ fn output_data_is_opaque_and_section_sizes_are_framing_for_every_proof_kind() {
                         words.push(update.account_update_commitment);
                         (words, update.section.output_data().len())
                     }
-                    Transaction::ContractAccountCreation(contract) => {
-                        let section = contract.section().unwrap();
-                        let address = contract_body_check(&transaction).address().unwrap();
-                        let mut words = section.public_inputs();
-                        words.push(CircuitWord::left_padding_from(address.as_slice()));
-                        (words, section.output_data().len())
-                    }
+                    Transaction::ContractAccountCreation(_) => unreachable!(),
                     Transaction::UserAccountCreation(_) => unreachable!(),
                 };
             let expected_public_inputs = words.iter().flat_map(|word| word.to_vec()).collect();
@@ -357,7 +352,7 @@ fn output_data_is_opaque_and_section_sizes_are_framing_for_every_proof_kind() {
             // A contract creation's body follows its section, which ends
             // with the arena.
             let section_end = match layout {
-                SectionLayout::ContractAccountCreation => 6 + layout.section_bytes(),
+                SectionLayout::PrivateValue(_) => 6 + layout.section_bytes(),
                 _ => transaction.len(),
             };
             let arena_offset = section_end - layout.shape().profile().arena_bytes;
@@ -730,7 +725,7 @@ fn private_value_commit_exposes_exact_typed_index_effects() {
     let result = &boundary.block.transaction_results[0];
     assert_eq!(result.outcome, TransactionOutcome::Succeeded);
     assert_eq!(
-        (result.tx_type, result.funding_mode),
+        (result.tx_type, result.account_creation),
         (KIND_PRIVATE_VALUE, 0)
     );
     assert_eq!(result.poster_owner_commitment, word(0xbeef));
@@ -871,7 +866,7 @@ fn mixed_blocks_commit_frozen_hashes_effects_and_history() {
         vec![
             SUCCEEDED,
             SUCCEEDED,
-            ItemResult::Admitted(TransactionOutcome::ContractAddressExists),
+            SUCCEEDED,
             SUCCEEDED,
             ItemResult::Admitted(TransactionOutcome::NullifierAlreadySpent),
             ItemResult::Excluded(ItemExclusionReason::Truncated),
@@ -897,7 +892,7 @@ fn mixed_blocks_commit_frozen_hashes_effects_and_history() {
         .map(|result| {
             (
                 result.tx_type,
-                result.funding_mode,
+                result.account_creation,
                 result.poster_owner_commitment,
                 result.output_start_index,
                 result.statement_hash != B256::ZERO,
@@ -907,15 +902,15 @@ fn mixed_blocks_commit_frozen_hashes_effects_and_history() {
     assert_eq!(
         committed,
         vec![
-            (1, 0, first_poster, 0, true),
-            (2, 1, first_poster, 0, true),
-            (2, 1, first_poster, 0, false),
-            (0, 0, first_poster, 5, true),
-            (0, 0, first_poster, 0, false),
+            (1, 1, first_poster, 0, true),
+            (0, 1, first_poster, 0, true),
+            (0, 2, first_poster, 5, true),
             (0, 0, first_poster, 10, true),
+            (0, 0, first_poster, 0, false),
+            (0, 0, first_poster, 15, true),
             (1, 0, first_poster, 0, false),
-            (0, 0, second_poster, 15, true),
-            (1, 0, second_poster, 0, true),
+            (0, 0, second_poster, 20, true),
+            (1, 1, second_poster, 0, true),
             (1, 0, second_poster, 0, false),
             (0, 0, second_poster, 0, false),
         ]
@@ -998,15 +993,15 @@ fn mixed_blocks_commit_frozen_hashes_effects_and_history() {
     assert_eq!(
         committed_digest(&first),
         frozen_digest(
-            "0x2a8483876eb4ff1552f2d4bfe3db88f37b36cef8040339ea1146139c3618ca4a",
-            "0xa61bf99761b9632835f9ef26bfbd73a3c27013d94c2457c53ea5c0b2e3c125d1",
+            "0x1c77931f68e654b2df5cde54f28202eb69b92b70d3b1fc75c69c31dc8352d32d",
+            "0x5d97294868d38897b050bba08bc87fed370b3a12fb164fde87276353b88e0374",
         )
     );
     assert_eq!(
         committed_digest(&second),
         frozen_digest(
-            "0x0133aba1b2e19abf720a814279410763ef86202d497f852cab979b742135d6dd",
-            "0xfe93cb5e85a2681bc5b511c6a5f26754ae3555c1cf2144d395a89abdb3819ad4",
+            "0x0dc321d60d985f2dee858c73cc3596a867dd98db3bde0da5be779ec8b716565f",
+            "0xa930dcbaff2f9daae5f0598da5f829d90a74c58c55841c42045edc91e85baa53",
         )
     );
 }
@@ -1620,7 +1615,16 @@ fn poster_groups_follow_their_first_positive_contribution() {
     };
     // Poster A first appears with a zero-fee open account operation, which
     // contributes nothing; poster B's positive contribution comes first.
-    let zero_fee_account = contract_with_fee(&state, 0x100, 7, 0);
+    let body_transaction =
+        Transaction::decode(&contract_with_fee(&state, 0x100, 7, 0), PCASH_CHAIN_ID).unwrap();
+    let zero_fee_account =
+        Transaction::ContractAccountCreation(pcash_derive::ContractAccountCreation {
+            body: body_transaction.contract_body().unwrap().clone(),
+            recent_pcash_block_hash: recent_pcash_block_hash(&state),
+            valid_until_timestamp: ts_of(1),
+        })
+        .encode(PCASH_CHAIN_ID)
+        .unwrap();
     let block = inbox_block(
         1,
         vec![
@@ -1867,7 +1871,7 @@ fn contract_with_fee(state: &impl StateDb, nk: u64, salt: u64, fee: u64) -> Vec<
 }
 
 #[test]
-fn account_operations_pay_open_fees_to_poster_and_never_earn_issuance() {
+fn attached_creations_earn_issuance_and_account_updates_only_pay_fees() {
     let rules = stub_rules();
     let mut state = initialize(&rules);
     let signing_key = SigningKey::from_slice(&[0x31u8; 32]).unwrap();
@@ -1893,8 +1897,8 @@ fn account_operations_pay_open_fees_to_poster_and_never_earn_issuance() {
     assert_eq!(item_results(&outcome), vec![SUCCEEDED; 5]);
     let economics = &outcome.committed_boundary.history.economics;
     let reward = economics.reward_each;
-    assert_eq!(economics.qualifying_actions, 1);
-    assert_eq!(economics.issuance_total, reward);
+    assert_eq!(economics.qualifying_actions, 4);
+    assert_eq!(economics.issuance_total, reward * U256::from(4));
     assert_eq!(economics.open_fees_total, U256::from(11));
     let summary = outcome
         .committed_boundary
@@ -1913,7 +1917,7 @@ fn account_operations_pay_open_fees_to_poster_and_never_earn_issuance() {
         summary,
         vec![
             (word(0xbeef), U256::from(11), U256::ZERO),
-            (word(0xbeef), U256::ZERO, reward)
+            (word(0xbeef), U256::ZERO, reward * U256::from(4))
         ]
     );
     assert_components_balance(&outcome);
@@ -2945,7 +2949,7 @@ struct ContractFunctionFixture {
     configuration_commitment: CircuitWord,
 }
 
-/// A sponsored creation of the body [`contract_body`] encodes.
+/// A attached creation of the body [`contract_body`] encodes.
 #[allow(
     clippy::too_many_arguments,
     reason = "fixture constructor names every encoded field"
@@ -2957,7 +2961,7 @@ fn contract_transaction(
     functions: &[ContractFunctionFixture],
     section: &[u8],
 ) -> Vec<u8> {
-    sponsored_contract_txbytes(
+    attached_contract_txbytes(
         &contract_body(
             nullifier_key_material,
             receive_key,
@@ -3072,7 +3076,7 @@ fn contract_creation_with_a_failing_fee_section_creates_no_account() {
 }
 
 #[test]
-fn contract_effect_retains_typed_material_and_duplicate_address_is_rejected() {
+fn contract_effect_retains_typed_material_and_duplicate_inputs_are_rejected() {
     let rules = stub_rules();
     let mut state = initialize(&rules);
     let functions = sample_functions();
@@ -3176,7 +3180,7 @@ fn contract_effect_retains_typed_material_and_duplicate_address_is_rejected() {
     assert_eq!(
         item_results(&duplicate),
         vec![ItemResult::Admitted(
-            TransactionOutcome::ContractAddressExists
+            TransactionOutcome::NullifierAlreadySpent
         )]
     );
     assert!(accepted_effects(&duplicate, 0).is_none());
@@ -3515,7 +3519,7 @@ fn successful_results_commit_the_verified_statement_or_the_written_account() {
         .map(|result| {
             (
                 result.tx_type,
-                result.funding_mode,
+                result.account_creation,
                 result.output_start_index,
             )
         })
@@ -3525,20 +3529,20 @@ fn successful_results_commit_the_verified_statement_or_the_written_account() {
         vec![
             (0, 0, 0),
             (0, 0, 5),
-            (1, 0, 0),
-            (1, 0, 0),
+            (1, 1, 0),
+            (1, 1, 0),
             (3, 0, 37),
-            (2, 0, 0),
-            (2, 1, 42),
+            (2, 1, 0),
+            (0, 1, 42),
         ]
     );
 }
 
-/// Every transaction type and funding mode succeeds from a prewarmed block:
+/// Every transaction type and publication form succeeds from a prewarmed block:
 /// execution asks for one verdict per proof-bearing transaction, and the
 /// complete cache, which fails on a miss, already holds each.
 #[test]
-fn every_transaction_type_and_funding_mode_executes_from_the_prewarmed_cache() {
+fn every_transaction_type_and_account_creation_executes_from_the_prewarmed_cache() {
     let rules = stub_rules();
     let mut state = initialize(&rules);
     let creation_deadline = ts_of(0) + pcash_state::RECENT_PCASH_BLOCK_WINDOW_SECONDS;
@@ -3607,7 +3611,7 @@ fn every_transaction_type_and_funding_mode_executes_from_the_prewarmed_cache() {
     );
     let verifier = StubVerifier::accept();
     let prepared = pcash_derive::prepare_block(&block, &rules, &source(INBOX()), &verifier);
-    // Both private-value shapes, the update, and the sponsored creation.
+    // Both private-value shapes, the update, and the attached creation.
     assert_eq!(verifier.calls.get(), 4);
     let under_lock = CountedVerifier {
         inner: CachedVerifier::new_complete(prepared.cache(), &verifier),
@@ -3636,9 +3640,7 @@ fn every_transaction_type_and_funding_mode_executes_from_the_prewarmed_cache() {
 /// places when a transaction fails more than one.
 #[test]
 fn the_validity_window_gates_prewarming_and_execution_alike_for_every_proof_kind() {
-    use TransactionOutcome::{
-        ContractAddressExists, Expired, NotYetValid, ProofRejected, RecentPcashBlockNotInWindow,
-    };
+    use TransactionOutcome::{Expired, NotYetValid, ProofRejected, RecentPcashBlockNotInWindow};
     let rules = stub_rules();
     let mut state = initialize(&rules);
     // Block 1 creates the account the updates name and the contract one
@@ -3688,7 +3690,7 @@ fn the_validity_window_gates_prewarming_and_execution_alike_for_every_proof_kind
         B256::ZERO,
     );
     let sponsored = |body: &[u8], words: &[CircuitWord]| {
-        sponsored_contract_txbytes(
+        attached_contract_txbytes(
             body,
             &private_value_section(words, &vec![0u8; WIRE_PROOF_BYTES], &data),
         )
@@ -3714,7 +3716,7 @@ fn the_validity_window_gates_prewarming_and_execution_alike_for_every_proof_kind
         )
     };
     let creation = |words: &[CircuitWord]| sponsored(&fresh_body, words);
-    // The funding mode does not enter the address.
+    // The publication form does not enter the address.
     let fresh_address = contract_body_check(&unfunded_contract_txbytes(&fresh_body, recent, live))
         .address()
         .unwrap();
@@ -3722,7 +3724,7 @@ fn the_validity_window_gates_prewarming_and_execution_alike_for_every_proof_kind
     let kinds: [(&str, Build, Option<Address>); 3] = [
         ("private value", &private_value, None),
         ("account update", &update, Some(address)),
-        ("sponsored creation", &creation, Some(fresh_address)),
+        ("attached creation", &creation, Some(fresh_address)),
     ];
 
     let expired = FailureDetail::Expired {
@@ -3804,14 +3806,14 @@ fn the_validity_window_gates_prewarming_and_execution_alike_for_every_proof_kind
     }
     // The address precedes the window.
     cases.push(rejection(
-        "sponsored creation expired at an existing address",
+        "attached creation expired at an existing address",
         sponsored(
             &existing_body,
             &section_words(recent, 63, 0, Address::ZERO, 0, timestamp - 1),
         ),
         Some(existing),
-        ContractAddressExists,
-        Some(FailureDetail::ContractAddressExists { address: existing }),
+        Expired,
+        Some(expired),
     ));
     // Per type: both bounds, and the live transaction whose recent block
     // only state can refuse.
@@ -3876,13 +3878,11 @@ fn state_with_user_account(
 /// proof-bearing type's order. Prewarming applies it as execution does: a
 /// transaction that requires another carrier context is never verified. The
 /// time bounds before the condition, and an existing contract address before
-/// a sponsored creation's time bounds, keep their places; the condition
+/// a attached creation's time bounds, keep their places; the condition
 /// precedes the nullifier and account checks.
 #[test]
 fn the_carrier_context_condition_gates_prewarming_and_execution_alike_for_every_proof_kind() {
-    use TransactionOutcome::{
-        CarrierContextMismatch, ContractAddressExists, NotYetValid, ProofRejected,
-    };
+    use TransactionOutcome::{CarrierContextMismatch, NotYetValid, ProofRejected};
     let rules = stub_rules();
     let (mut state, address) = state_with_user_account(&rules);
     let recent = recent_pcash_block_hash(&state);
@@ -3933,7 +3933,7 @@ fn the_carrier_context_condition_gates_prewarming_and_execution_alike_for_every_
     };
     let update = |words: &[CircuitWord]| update_of(address, words);
     let sponsored = |body: &[u8], words: &[CircuitWord]| {
-        sponsored_contract_txbytes(
+        attached_contract_txbytes(
             body,
             &private_value_section(words, &vec![0u8; WIRE_PROOF_BYTES], &data),
         )
@@ -3947,7 +3947,7 @@ fn the_carrier_context_condition_gates_prewarming_and_execution_alike_for_every_
     let kinds: [(&str, Build, Option<Address>); 3] = [
         ("private value", &private_value, None),
         ("account update", &update, Some(address)),
-        ("sponsored creation", &creation, Some(fresh_address)),
+        ("attached creation", &creation, Some(fresh_address)),
     ];
 
     let mismatch = |required: CircuitWord| {
@@ -4035,7 +4035,7 @@ fn the_carrier_context_condition_gates_prewarming_and_execution_alike_for_every_
         CarrierContextMismatch,
         mismatch(another_sender),
     ));
-    // A sponsored creation's address precedes its time bounds and condition.
+    // A attached creation's address precedes its time bounds and condition.
     let existing_body = contract_body(tagged_word(0x0c, 0x81), None, false, &sample_functions());
     let existing = {
         let unfunded = unfunded_contract_txbytes(&existing_body, recent, live);
@@ -4051,14 +4051,17 @@ fn the_carrier_context_condition_gates_prewarming_and_execution_alike_for_every_
         address
     };
     cases.push(rejection(
-        "sponsored creation at an existing address requiring another carrier context",
+        "attached creation at an existing address requiring another carrier context",
         sponsored(
             &existing_body,
             &section_words_requiring(recent, 61, live, another_sender),
         ),
         Some(existing),
-        ContractAddressExists,
-        Some(FailureDetail::ContractAddressExists { address: existing }),
+        CarrierContextMismatch,
+        Some(FailureDetail::CarrierContextMismatch {
+            required: another_sender,
+            carrier: delivered,
+        }),
     ));
     // Per type: the matching carrier context and no condition reach the proof.
     assert_rejections(&mut state, &rules, 3, cases, 6);
@@ -4113,7 +4116,7 @@ fn a_carrier_context_condition_is_met_only_by_the_carrier_it_names() {
         let address = contract_body_check(&unfunded_contract_txbytes(&body, recent, valid_until))
             .address()
             .unwrap();
-        let raw = sponsored_contract_txbytes(
+        let raw = attached_contract_txbytes(
             &body,
             &private_value_section(
                 &section_words_requiring(recent, salt, valid_until, carrier_context),
@@ -5224,14 +5227,14 @@ fn selector_bytes_outside_their_sets_are_not_admitted() {
     let parity = keyless.len() - 1;
     // type ‖ chainId ‖ address ‖ rule-set commitment.
     let update_operation = 1 + 4 + 20 + 32;
-    // type ‖ chainId ‖ fundingMode ‖ section, then publishesNkRoot ‖
+    // type ‖ chainId ‖ accountCreation ‖ section, then publishesNkRoot ‖
     // nullifier-key material.
-    let funding_mode = pcash_derive::FUNDING_MODE_OFFSET;
-    let contract_flag = 1 + 4 + 1 + SectionLayout::ContractAccountCreation.section_bytes();
+    let account_creation = 6 + SectionLayout::PrivateValue(PrivateValueShape::S).section_bytes();
+    let contract_flag = account_creation + 1;
     let contract_mode = contract_flag + 1 + 32;
 
     use ItemExclusionReason::{
-        TrailingBytes, Truncated, UnknownFundingMode, UnknownPublishesNkRootFlag,
+        TrailingBytes, Truncated, UnknownAccountCreationTag, UnknownPublishesNkRootFlag,
         UnknownReceiveKeyMode, UnknownYParity,
     };
     let cases = [
@@ -5292,14 +5295,14 @@ fn selector_bytes_outside_their_sets_are_not_admitted() {
             TrailingBytes,
         ),
         (
-            "funding mode two",
-            set(&contract, funding_mode, 2),
-            UnknownFundingMode,
+            "attachment tag three",
+            set(&contract, account_creation, 3),
+            UnknownAccountCreationTag,
         ),
         (
-            "funding mode 0xff",
-            set(&contract, funding_mode, 0xff),
-            UnknownFundingMode,
+            "attachment tag 0xff",
+            set(&contract, account_creation, 0xff),
+            UnknownAccountCreationTag,
         ),
         (
             "publishesNkRoot two",

@@ -65,7 +65,7 @@ export interface ReclaimWitnessParams {
 }
 
 export const MARKETPLACE_RECLAIM_EIP712_TYPE =
-  "PcashMarketplaceReclaim(uint256 pcashChainId,address escrowContract,bytes32 offerId,uint256 assetId,address recipient,uint256 payoutAmount,uint256 openFeeAmount,address issuanceRecipient,uint256 issuanceOwnerCommitment,uint256 relayFeeAmount,uint256 relayFeeOwnerCommitment,uint256 transactionContext,uint64 notBefore,uint64 validUntil,bytes32 payoutOpeningCommitment)";
+  "PcashMarketplaceReclaim(uint256 pcashChainId,address escrowContract,bytes32 offerId,uint256 assetId,address recipient,uint256 payoutAmount,uint256 openFeeAmount,address issuanceRecipient,uint256 issuanceOwnerCommitment,uint256 relayFeeAmount,uint256 relayFeeOwnerCommitment,uint256 accountCreationCommitment,uint256 transactionContext,uint64 notBefore,uint64 validUntil,bytes32 payoutOpeningCommitment)";
 /** The domain tag of context "escrow_reclaim_payout_opening", as in the reclaim circuit. */
 export const RECLAIM_PAYOUT_OPENING_DOMAIN =
   0x2881c3c5884c7b6f25f880e448cfc78e5d28f5d313d6890207b568221c727626n;
@@ -82,6 +82,7 @@ export interface MarketplaceReclaimMessage {
   issuanceOwnerCommitment: bigint;
   relayFeeAmount: bigint;
   relayFeeOwnerCommitment: bigint;
+  accountCreationCommitment: bigint;
   transactionContext: bigint;
   notBefore: bigint;
   validUntil: bigint;
@@ -155,6 +156,7 @@ function reclaimMessage(params: Pick<
     issuanceOwnerCommitment: toField(params.transaction.global.issuanceOwnerCommitment),
     relayFeeAmount: params.relayFeeAmount,
     relayFeeOwnerCommitment: params.relayFeeOwnerCommitment,
+    accountCreationCommitment: toField(params.transaction.global.accountCreationCommitment, "accountCreationCommitment"),
     transactionContext: issuance.transactionContext,
     notBefore: toField(params.transaction.global.notBeforeTimestamp, "notBefore"),
     validUntil: toField(params.transaction.global.validUntilTimestamp, "validUntil"),

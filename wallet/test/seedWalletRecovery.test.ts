@@ -52,7 +52,7 @@ function filesUnder(directory: string): string[] {
 function recoveryNode(sim: ChainSim): PcashNodeClient {
   const node = sim.client();
   node.status = async () => ({ ...sim.status(), acceptedTransactionTypes: [0, 1, 2, 3] });
-  node.getBlock = async (number) => ({ hash: fieldToHex(sim.block(BigInt(number)).hash) } as Awaited<ReturnType<PcashNodeClient["getBlock"]>>);
+  node.getBlock = async (number) => ({ hash: fieldToHex(sim.block(BigInt(number)).hash), timestamp: sim.block(BigInt(number)).envelope.header.timestamp } as Awaited<ReturnType<PcashNodeClient["getBlock"]>>);
   return node;
 }
 
@@ -79,10 +79,7 @@ async function openSeedWallet(
     submission,
     settlePollIntervalMs: 0,
     settlePollMaxAttempts: 2,
-    provers: { privateValue: { proveAndEncode: async (build) => encodePrivateValueTransaction({
-      shape: build.shape, publicInputs: build.publicInputs,
-      proof: new Uint8Array(WIRE_PROOF_BYTES), outputData: build.outputData, arena: build.arena,
-    }) } },
+    provers: { privateValue: { proveAndEncode: async (build) => build.encodeTransaction(new Uint8Array(WIRE_PROOF_BYTES)) } },
   });
   let closed = false;
   const close = async () => {
@@ -127,8 +124,9 @@ it("registers with the seed signer and restores payments, sent records, change a
     mode: "mempool",
     preflight: async () => null,
     submit: async ({ transactionBytes }) => {
-      const decoded = decodeTransaction(transactionBytes);
-      submittedKinds.push(decoded.kind);
+      const action = decodeTransaction(transactionBytes);
+      submittedKinds.push(action.kind);
+      const decoded = action.kind === 0 && action.accountCreation?.kind === "user" ? decodeTransaction(action.accountCreation.transactionBytes) : action;
       if (decoded.kind === 1) {
         expect(decoded.authorization.kind).toBe("signed");
         if (decoded.authorization.kind !== "signed" || decoded.mlKemPublicKey === null) {
@@ -148,7 +146,7 @@ it("registers with the seed signer and restores payments, sent records, change a
             Uint8Array.of(decoded.authorization.yParity + 27))) as `0x${string}`,
         });
         expect(signer.toLowerCase()).toBe("0xf278cf59f82edcf871d630f28ecc8056f25c1cdb");
-        sim.addBlock({ accounts: [
+        sim.include(transactionBytes, { accounts: [
           { address: signer, nullifierKeyCommitment: bytesToBigInt(decoded.nullifierKeyCommitment),
             accountRuleSetCommitment: bytesToBigInt(decoded.ruleSetCommitment), receiveKey: decoded.mlKemPublicKey },
           { address: BOB, nullifierKeyCommitment: 7n, accountRuleSetCommitment: 9n, receiveKey: bobKeys.publicKey },
@@ -206,7 +204,7 @@ it("registers with the seed signer and restores payments, sent records, change a
   }
   await first.wallet.sync();
   await expectRecoveredHistory(first.wallet);
-  expect(submittedKinds).toEqual([1, 0]);
+  expect(submittedKinds).toEqual([0, 0]);
   await first.close();
 
   const sensitiveBytes = [

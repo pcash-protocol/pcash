@@ -25,8 +25,8 @@ use signature_common::secp256k1::{Secp256k1PubKey, Signature};
 
 // keccak256 of the SDK CONTRACT_FEE_SPONSORSHIP_EIP712_TYPE, written by scripts/circuits/gen_reference_message_types.mjs.
 global CONTRACT_FEE_SPONSORSHIP_TYPE_HASH: [u8; 32] = [
-    0x63, 0x94, 0xbb, 0xbe, 0x8f, 0xc8, 0xa8, 0xfe, 0xa9, 0xe4, 0x53, 0x93, 0xf5, 0xa8, 0xe0, 0xdc,
-    0xd0, 0xfb, 0xef, 0xf7, 0x99, 0x4c, 0xb7, 0x12, 0xa3, 0x11, 0xb9, 0x5b, 0x18, 0x4a, 0x55, 0x7b,
+    0xa2, 0x57, 0x0d, 0x8b, 0x6b, 0x95, 0xa3, 0xaa, 0xa9, 0x8d, 0x5d, 0xb0, 0x7f, 0x94, 0x9a, 0x0f,
+    0x8a, 0x69, 0x83, 0x44, 0x2d, 0xff, 0xea, 0x10, 0x3b, 0x03, 0x7a, 0x64, 0xff, 0xd4, 0x69, 0x26,
 ];
 
 pub fn contract_fee_sponsorship_relation<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
@@ -52,8 +52,7 @@ pub fn contract_fee_sponsorship_relation<let N_IN: u32, let N_OUT: u32, let SHAP
         native_change_amount,
     );
     // No open or bearer sponsorship: the kernel builds this action from the
-    // contract it authenticated, or for a creation from the address the node
-    // derives, so it matches only the signed contract.
+    // contract it authenticated, so it matches only the signed contract.
     rule_statement(
         owner.authorization_commitment,
         contract_fee_sponsorship_action_commitment(
@@ -162,6 +161,7 @@ mod tests {
             carrier_context_hash: 0,
             asset_burn_amount: 0,
             delivery_commitment: 0x61,
+            account_creation_commitment: 0,
             input_slot_classes: [
                 SLOT_CLASS_ASSET,
                 SLOT_CLASS_NATIVE,
@@ -332,20 +332,22 @@ mod tests {
     // TEST_SIGNING_KEY's signature over the sponsorship `run_signed_sponsorship`
     // proves on TEST_PCASH_CHAIN_ID.
     global SIGNED_SPONSORSHIP_SIGNATURE: [u8; 64] = [
-        0xec, 0xbc, 0x8e, 0x1b, 0x45, 0x50, 0x1b, 0x7d, 0x8a, 0xdf, 0xb2, 0x80, 0x0c, 0x7f, 0x67,
-        0x92, 0xb4, 0x64, 0xf8, 0xf3, 0xe1, 0xb9, 0x0e, 0x55, 0xe9, 0x43, 0x3d, 0xfb, 0xb8, 0xf3,
-        0x0d, 0x73, 0x61, 0xc9, 0xd4, 0x22, 0x7e, 0x2a, 0x67, 0xab, 0x26, 0x98, 0xa5, 0x1e, 0x46,
-        0x45, 0xae, 0x5f, 0xb2, 0x04, 0x42, 0x31, 0xc2, 0xc6, 0x1b, 0x3c, 0x26, 0x2c, 0x6d, 0xc4,
-        0xf7, 0x63, 0x58, 0x68,
+        0x00, 0xb6, 0xc3, 0x17, 0x56, 0xaa, 0xdc, 0xb0, 0xce, 0x0e, 0x54, 0x4a, 0xc3, 0xd1, 0x6f,
+        0xf7, 0x7a, 0xfb, 0xe4, 0x28, 0x2a, 0x71, 0x93, 0x12, 0x8f, 0x4c, 0xc9, 0x99, 0xa0, 0xa6,
+        0xd0, 0x65, 0x24, 0x45, 0xd2, 0x4e, 0x92, 0xac, 0x40, 0x16, 0x3a, 0xdd, 0x35, 0x81, 0x70,
+        0x61, 0x33, 0x67, 0x5f, 0xde, 0x42, 0xa1, 0xc0, 0xce, 0x34, 0xf1, 0xff, 0x1b, 0x63, 0xf0,
+        0x01, 0x5a, 0xfd, 0x8d,
     ];
 
     fn run_signed_sponsorship(
         pcash_chain_id: Field,
         event_entry: Field,
+        account_creation_commitment: Field,
     ) -> [Field; RULE_STATEMENT_LENGTH] {
         let mut tx = fixture();
         tx.issuance_owner_commitment = 0;
         tx.output_slot_classes[1] = SLOT_CLASS_DUMMY;
+        tx.account_creation_commitment = account_creation_commitment;
         authorize::<4, 5, 0>(
             pcash_chain_id,
             TEST_RECENT_BLOCK,
@@ -366,13 +368,18 @@ mod tests {
 
     #[test]
     fn test_sponsorship_accepts_the_sponsor_signature() {
-        let _ = run_signed_sponsorship(TEST_PCASH_CHAIN_ID, 0);
+        let _ = run_signed_sponsorship(TEST_PCASH_CHAIN_ID, 0, 0);
     }
 
     // The message signs the chain ID the action commitment binds, so a
     // sponsorship signed for one chain cannot be proved on another.
     #[test(should_fail_with = "signature must be valid")]
     fn test_sponsorship_rejects_a_signature_for_another_chain() {
-        let _ = run_signed_sponsorship(TEST_PCASH_CHAIN_ID + 1, 0);
+        let _ = run_signed_sponsorship(TEST_PCASH_CHAIN_ID + 1, 0, 0);
     }
+    #[test(should_fail_with = "signature must be valid")]
+    fn test_sponsorship_rejects_an_unsigned_attachment() {
+        let _ = run_signed_sponsorship(TEST_PCASH_CHAIN_ID, 0, 1);
+    }
+
 }

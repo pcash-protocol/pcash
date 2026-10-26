@@ -12,6 +12,7 @@ import {
   payoutSeed,
   payoutTransactionContext,
   privateValueTransactionSize,
+  type AccountCreationAttachment,
   recoverPayoutOpening,
   type DesignatedIssuanceOpening,
 } from "@pcash/sdk/protocol";
@@ -24,8 +25,8 @@ import type { DurableSubmissionAdapter } from "./durableSubmission.ts";
 /** Default public open fee when the node cannot estimate one: 0.01 PCASH. */
 export const FALLBACK_TRANSACTION_FEE_AMOUNT = 10_000_000_000_000_000n;
 
-export function paddedPrivateValueByteSize(shape: PrivateValueShape): bigint {
-  return BigInt(privateValueTransactionSize(shape));
+export function paddedPrivateValueByteSize(shape: PrivateValueShape, accountCreation?: AccountCreationAttachment): bigint {
+  return BigInt(privateValueTransactionSize(shape, accountCreation));
 }
 export const PADDED_PRIVATE_VALUE_BYTE_SIZE = paddedPrivateValueByteSize(PRIVATE_VALUE_PROFILES.S.shapeId);
 export const MAX_MINE_ACTIONS = Math.min(MAX_RELAY_CONTENT_HASHES, Number((MAX_BROWSER_RELAY_BATCH_BYTES - BATCH_HEADER_BYTES) / (PADDED_PRIVATE_VALUE_BYTE_SIZE + ITEM_LENGTH_PREFIX_BYTES)));

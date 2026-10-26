@@ -47,7 +47,6 @@ function item(
     stableId: contentHashFor("8"),
     conflictKeys: [],
     kind: "privateValue",
-    fundingMode: null,
     byteSize,
     openFeeAmount,
     issuanceOwnerCommitment: ZERO,
@@ -501,10 +500,9 @@ describe("Relayer", () => {
 
 it.each([
   ["zero-fee privateValue at a zero offer", { kind: "privateValue" }],
-  ["zero-fee contractAccount", { kind: "contractAccount", fundingMode: "sponsored" as const }],
   ["zero-fee userAccountUpdate", { kind: "userAccountUpdate" }],
   ["userAccountCreation", { kind: "userAccountCreation", issuanceRoute: "none" as const }],
-  ["unfunded contractAccount", { kind: "contractAccount", fundingMode: "unfunded" as const, issuanceRoute: "none" as const }],
+  ["unfunded contractAccount", { kind: "contractAccount", issuanceRoute: "none" as const }],
   ["zero open fee designated elsewhere", { kind: "userAccountUpdate", issuanceOwnerCommitment: OTHER_DESTINATION, issuanceRoute: "designated" as const }],
 ])("maximum-wait escalation requires sponsorship for an unpaid %s", async (_label, overrides) => {
   const free = item("a", 0n, 100n, { ...overrides, receivedAtUnixMs: 0n });

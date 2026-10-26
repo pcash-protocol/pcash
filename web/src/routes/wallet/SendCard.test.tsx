@@ -14,13 +14,15 @@ const state = vi.hoisted(() => ({
     phase: "ready", busy: false, paymentStage: { state: "idle" } as WalletPaymentStage, status: { pcashChainId: 1n, genesisHash: "0xgenesis" }, connectedAccount: "0xme",
     synchronize: vi.fn(), preflightPrivateSend: vi.fn(), resolvePendingPaymentFate: vi.fn(), sendPrivate: vi.fn(),
     cancelPrivateSend: vi.fn(), resetPrivateSend: vi.fn(), refreshSubmissionLock: vi.fn(),
-    wallet: { hasReceiveKey: vi.fn() },
+    wallet: { hasReceiveKey: vi.fn(), directSends: vi.fn() },
     selfPublication: undefined as unknown,
     progress: undefined as ProveStatus | undefined,
     actionProgress: undefined as { phase: string; message: string } | undefined,
     walletPromptOpen: false,
   },
   ethereumReceipt: vi.fn(), pcashReceipt: vi.fn(),
+  /** What Ethereum shows about an address with no PCASH account. */
+  l1Code: vi.fn(), l1Nonce: vi.fn(),
   quote: undefined as unknown,
   paymentIssuance: undefined as bigint | undefined,
   refreshIssuance: vi.fn(),
@@ -29,7 +31,7 @@ const state = vi.hoisted(() => ({
   namedAddress: { state: "unresolved" } as { state: string; address?: string },
   resolveName: vi.fn(),
 }));
-vi.mock("wagmi/actions", () => ({ getPublicClient: () => ({ getTransactionReceipt: state.ethereumReceipt }) }));
+vi.mock("wagmi/actions", () => ({ getPublicClient: () => ({ getTransactionReceipt: state.ethereumReceipt, getCode: state.l1Code, getTransactionCount: state.l1Nonce }) }));
 vi.mock("@pcash/sdk/clients", async (original) => ({ ...await original<typeof import("@pcash/sdk/clients")>(), pollReceipt: state.pcashReceipt }));
 vi.mock("../../lib/WalletProvider.tsx", () => ({
   errorMessage: (error: unknown) => String(error),
@@ -65,6 +67,9 @@ beforeEach(async () => {
   state.wallet.paymentStage = { state: "idle" };
   state.wallet.refreshSubmissionLock.mockResolvedValue({ waiting: [], released: [] });
   state.wallet.wallet.hasReceiveKey.mockReset().mockResolvedValue(true);
+  state.wallet.wallet.directSends.mockReset().mockResolvedValue([]);
+  state.l1Code.mockReset().mockResolvedValue(undefined);
+  state.l1Nonce.mockReset().mockResolvedValue(3);
   state.wallet.busy = false;
   state.wallet.progress = undefined;
   state.wallet.actionProgress = undefined;
@@ -623,35 +628,118 @@ describe("resolving the recipient while typing", () => {
     expect(text()).toContain(`Pays ${resolved}`);
   });
 
-  it("disables Send for an address with no receive key and never starts preparation", async () => {
+  it("does not send to a smart-contract wallet and says so without an error", async () => {
     state.wallet.wallet.hasReceiveKey.mockResolvedValue(false);
+    state.l1Code.mockResolvedValue("0x6080604052");
     await type(input("Recipient"), RECIPIENT);
     await type(input("Amount"), "10");
     expect(state.wallet.wallet.hasReceiveKey).toHaveBeenCalledWith(RECIPIENT.toLowerCase());
-    expect(text()).toContain("This address hasn't set up PCASH, so it can't receive a private payment yet.");
+    expect(element.querySelector('[data-recipient-reach="smart-contract"]')?.textContent)
+      .toBe("Smart-contract wallets can't receive PCASH yet. Ask for a regular wallet address.");
+    expect(input("Recipient").className).not.toContain("fieldInvalid");
     expect(button("Send")!.disabled).toBe(true);
     expect(state.wallet.preflightPrivateSend).not.toHaveBeenCalled();
   });
 
-  it("checks the receive key of the address a name resolves to", async () => {
+  it("pays a regular wallet without PCASH a direct send, after a note about deposit addresses", async () => {
+    state.wallet.wallet.hasReceiveKey.mockResolvedValue(false);
+    state.wallet.preflightPrivateSend.mockResolvedValue(preflight(PCASH));
+    await type(input("Recipient"), RECIPIENT);
+    await type(input("Amount"), "10");
+    expect(element.querySelector('[data-recipient-reach="regular"]')?.textContent)
+      .toBe("Make sure this is a wallet they can sign with, not an exchange deposit address.");
+    // Its message travels with the payment, readable with the link.
+    expect(element.querySelector("#send-memo-hint")?.textContent).toContain("whoever has the payment link");
+    await type(memoField(), "Dinner, thanks!");
+    expect(button("Send")!.disabled).toBe(false);
+    await act(async () => { button("Send")!.click(); });
+    expect(state.wallet.preflightPrivateSend.mock.calls[0]![0]).toMatchObject({ to: RECIPIENT, directSend: true, memo: "Dinner, thanks!", includeSender: true });
+  });
+
+  it("treats an EIP-7702 delegated account as a regular wallet", async () => {
+    state.wallet.wallet.hasReceiveKey.mockResolvedValue(false);
+    state.l1Code.mockResolvedValue(`0xef0100${"ab".repeat(20)}`);
+    await type(input("Recipient"), RECIPIENT);
+    expect(element.querySelector("[data-recipient-reach]")?.getAttribute("data-recipient-reach")).toBe("regular");
+  });
+
+  it("cautions about an address that has never been used and still sends", async () => {
+    state.wallet.wallet.hasReceiveKey.mockResolvedValue(false);
+    state.l1Nonce.mockResolvedValue(0);
+    await type(input("Recipient"), RECIPIENT);
+    await type(input("Amount"), "10");
+    expect(element.querySelector('[data-recipient-reach="never-used"]')?.textContent)
+      .toBe("This address has never been used. If it is a smart-contract wallet, it can't receive PCASH.");
+    expect(button("Send")!.disabled).toBe(false);
+  });
+
+  it("refuses to send when Ethereum cannot be read for an address without PCASH", async () => {
+    state.wallet.wallet.hasReceiveKey.mockResolvedValue(false);
+    state.l1Code.mockRejectedValue(new Error("rpc down"));
+    await type(input("Recipient"), RECIPIENT);
+    await type(input("Amount"), "10");
+    expect(text()).toContain("Couldn't check this address on Ethereum. Try again in a moment.");
+    expect(button("Send")!.disabled).toBe(true);
+  });
+
+  it("sends an account with PCASH an ordinary payment with no note", async () => {
+    state.wallet.preflightPrivateSend.mockResolvedValue(preflight(PCASH));
+    await review();
+    expect(element.querySelector("[data-recipient-reach]")).toBeNull();
+    expect(state.l1Code).not.toHaveBeenCalled();
+    expect(state.wallet.preflightPrivateSend.mock.calls[0]![0]).not.toHaveProperty("directSend");
+  });
+
+  it("checks the address a name resolves to", async () => {
     const resolved = `0x${"34".repeat(20)}`;
     state.namedAddress = { state: "resolved", address: resolved };
     state.wallet.wallet.hasReceiveKey.mockResolvedValue(false);
+    state.l1Code.mockResolvedValue("0x6080604052");
     await type(input("Recipient"), "alice.eth");
     expect(state.wallet.wallet.hasReceiveKey).toHaveBeenCalledWith(resolved);
-    expect(text()).toContain("hasn't set up PCASH");
+    expect(element.querySelector('[data-recipient-reach="smart-contract"]')).not.toBeNull();
   });
 
-  it("refuses a name whose fresh address has no receive key", async () => {
+  it("refuses a name whose fresh address is a smart-contract wallet", async () => {
     const fresh = `0x${"56".repeat(20)}`;
     state.namedAddress = { state: "resolved", address: RECIPIENT };
     state.resolveName.mockResolvedValue({ name: "alice.eth", address: fresh, system: "ens" });
     state.wallet.wallet.hasReceiveKey.mockImplementation(async (address: string) => address.toLowerCase() !== fresh);
+    state.l1Code.mockResolvedValue("0x6080604052");
     await type(input("Recipient"), "alice.eth");
     await type(input("Amount"), "10");
     await act(async () => { button("Send")!.click(); });
     expect(state.wallet.preflightPrivateSend).not.toHaveBeenCalled();
-    expect(text()).toContain("hasn't set up PCASH");
+    expect(text()).toContain("Smart-contract wallets can't receive PCASH yet.");
+  });
+
+  it("offers no link when the wallet paid the recipient's key after all", async () => {
+    const contentHash = `0x${"ce".repeat(32)}`;
+    state.wallet.wallet.hasReceiveKey.mockResolvedValue(false);
+    state.wallet.preflightPrivateSend.mockResolvedValue(preflight(PCASH));
+    state.wallet.sendPrivate.mockResolvedValue({ contentHash, publication: "open", accepted: false, queued: true, settled: false, retried: false, recovered: false });
+    await review();
+    expect(state.wallet.preflightPrivateSend.mock.calls[0]![0]).toMatchObject({ directSend: true });
+    expect(element.querySelector('[data-testid="direct-send-link"]')).toBeNull();
+  });
+
+  it("gives the sender the link after a direct send", async () => {
+    const contentHash = `0x${"cd".repeat(32)}`;
+    const opening = { chainId: 1n, contentHash, slot: 0, owner: BigInt(RECIPIENT), amount: 10n * PCASH, noteSecret: 7n };
+    state.wallet.wallet.hasReceiveKey.mockResolvedValue(false);
+    state.wallet.wallet.directSends.mockResolvedValue([{ opening, included: false, recipientSetUp: false }]);
+    state.wallet.preflightPrivateSend.mockResolvedValue(preflight(PCASH));
+    state.wallet.sendPrivate.mockResolvedValue({ contentHash, publication: "open", accepted: false, queued: true, settled: false, retried: false, recovered: false });
+    await review();
+    expect(element.querySelector('[data-testid="direct-send-link"]')?.textContent)
+      .toContain(`Sent. ${RECIPIENT.slice(0, 8)}…${RECIPIENT.slice(-6)} hasn't set up PCASH yet. Send them this link so they can receive it.`);
+    const writeText = vi.fn(async () => undefined);
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    await act(async () => { button("Copy link")!.click(); });
+    const { parseDirectSendLink } = await import("@pcash/sdk/delivery");
+    const copied = (writeText.mock.calls[0] as unknown as [string])[0];
+    expect(copied.startsWith(`${location.origin}/receive#`)).toBe(true);
+    expect(parseDirectSendLink(copied)).toEqual(opening);
   });
 });
 

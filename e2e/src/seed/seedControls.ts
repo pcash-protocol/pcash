@@ -16,13 +16,13 @@ import {
   encodePrivateValueTransaction,
   encodeUserAccountCreation,
   encodeUserAccountUpdate,
-  FUNDING_MODE_OFFSET,
   MAX_TX_BYTES,
   privateValuePublicInputs,
   privateValueSectionPublicInputs,
+  WIRE_PROOF_BYTES,
   type BatchVersion,
   type NetworkConfig,
-  type RawContractAccountCreation,
+  type RawContractBody,
   type RawPrivateValueTransaction,
   type RawUserAccountUpdate,
 } from "@pcash/sdk/protocol";
@@ -131,6 +131,7 @@ function editedPrivateValue(template: Uint8Array, label: string, edit: (publicIn
     proof: corruptedProof(decoded.proof),
     outputData: decoded.outputData,
     arena: decoded.arena,
+    ...(decoded.accountCreation === undefined ? {} : { accountCreation: decoded.accountCreation }),
   });
 }
 
@@ -173,7 +174,7 @@ export function publicInputNotInFieldTransfer(template: Uint8Array): Uint8Array 
 /** The output-data items and then the arena close the entry; this edits byte zero of the first item. */
 export function outputByteZeroProofMutationTransfer(template: Uint8Array): Uint8Array {
   const decoded = privateValue(template, "output-data byte-zero control");
-  return flipByte(template, template.length - decoded.arena.length - decoded.outputData.length * OUTPUT_DATA_BYTES);
+  return flipByte(template, ENVELOPE_BYTES + 1 + privateValueProfile(decoded.shape).wireInputs * WORD_BYTES + WIRE_PROOF_BYTES);
 }
 
 export function wrongChainIdTransfer(template: Uint8Array): Uint8Array {
@@ -282,26 +283,34 @@ export function unknownReceiveKeyModeCreation(template: Uint8Array): Uint8Array 
 
 // ------------------------------------------------------------ contracts
 
-function contract(entry: Uint8Array, label: string): RawContractAccountCreation {
+function contract(entry: Uint8Array, label: string): RawContractBody {
   const decoded = decodeTransaction(entry);
-  if (decoded.kind !== 2) throw new Error(`${label} requires a contract creation entry`);
-  return decoded;
+  if (decoded.kind === 2) return decoded;
+  if (decoded.kind === 0 && decoded.accountCreation?.kind === "contract") {
+    const body = decodeTransaction(encodeContractAccountCreation(decoded.pcashChainId, decoded.accountCreation.body, {
+      recentPcashBlockHash: 0n, validUntilTimestamp: 1n,
+    }));
+    if (body.kind !== 2) throw new Error("contract body decoding failed");
+    return body;
+  }
+  throw new Error(`${label} requires a contract creation or attachment`);
 }
 
-/** The body closes the entry, after the funding mode and its payload. */
-function contractBodyOffset(entry: Uint8Array, decoded: RawContractAccountCreation): number {
+/** The standalone body or attachment closes the entry. */
+function contractBodyOffset(entry: Uint8Array, decoded: RawContractBody): number {
   return entry.length - decoded.body.length;
 }
 
 /** Body layout: publishesNkRoot, material word, receive-key mode, key when present, function count, functions. */
-function contractFunctionCountOffset(entry: Uint8Array, decoded: RawContractAccountCreation): number {
+function contractFunctionCountOffset(entry: Uint8Array, decoded: RawContractBody): number {
   return contractBodyOffset(entry, decoded) + 1 + WORD_BYTES + 1 + (decoded.mlKemPublicKey?.length ?? 0);
 }
 
-/** The funding mode at byte 5 outside {unfunded, sponsored}: the item does not decode. */
-export function unknownFundingModeContract(template: Uint8Array): Uint8Array {
-  contract(template, "funding-mode control");
-  return withBytes(template, FUNDING_MODE_OFFSET, Uint8Array.of(2));
+/** An attachment tag outside {none, user, contract}: the item does not decode. */
+export function unknownAttachmentTagContract(template: Uint8Array): Uint8Array {
+  const body = contract(template, "attachment-tag control");
+  if (decodeTransaction(template).kind !== 0) throw new Error("attachment-tag control requires a private-value transaction");
+  return withBytes(template, contractBodyOffset(template, body) - 1, Uint8Array.of(3));
 }
 
 /** publishesNkRoot, the first body byte, outside {0, 1}: the item does not decode. */
@@ -356,7 +365,6 @@ export function unfundedContractCreation(params: {
   validUntilTimestamp: bigint;
 }): Uint8Array {
   return encodeContractAccountCreation(params.network.pcashChainId, params.body, {
-    mode: "unfunded",
     recentPcashBlockHash: params.recentPcashBlockHash,
     validUntilTimestamp: params.validUntilTimestamp,
   });

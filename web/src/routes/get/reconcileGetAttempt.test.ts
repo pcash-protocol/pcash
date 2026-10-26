@@ -18,7 +18,7 @@ function watched(recipient = OWNER, batchHash = OTHER_BATCH, missingReceipt = fa
   const summary: TransactionSummaryResult = {
     transactionId: word(2n), contentHash: word(1n), outcome: "succeeded", failureDetail: null,
     declaredOpenFeeAmount: 0n, declaredIssuanceOwnerCommitment: word(opening.ownerCommitment),
-    issuanceRoute: "designated", kind: "privateValue", fundingMode: null, block: { blockNumber: 7n, blockHash: word(7n) },
+    issuanceRoute: "designated", kind: "privateValue", accountCreation: 0, block: { blockNumber: 7n, blockHash: word(7n) },
     pcashTransactionIndex: 0n, timestamp: 1000n,
     inclusion: { l1BlockNumber: 1n, l1BlockHash: word(8n), l1TransactionIndex: 0n, l1TransactionHash: batchHash, batchItemIndex: 0n },
     l1Sender: `0x${"11".repeat(20)}`, issuanceOwnerCommitment: null, settledOpenFeeAmount: 0n, settledIssuanceAmount: 0n,

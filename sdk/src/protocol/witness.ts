@@ -45,7 +45,7 @@ export function privateValuePublicInputNames(profile: { inputs: number; outputs:
     ...Array.from({ length: profile.outputs }, (_, i) => `output_body_commitment${i}`),
     "delivery_commitment",
     "open_fee_amount", "issuance_owner_commitment", "not_before_timestamp", "valid_until_timestamp",
-    "carrier_context_hash", "events_commitment",
+    "carrier_context_hash", "events_commitment", "account_creation_commitment",
   ];
 }
 
@@ -59,6 +59,7 @@ export function privateValueChoicesMap(value: PrivateValue): WitnessMap {
     carrier_context_hash: fm(value.global.carrierContextHash),
     asset_burn_amount: fm(value.global.assetBurnAmount),
     delivery_commitment: fm(value.global.deliveryCommitment),
+    account_creation_commitment: fm(value.global.accountCreationCommitment),
     input_slot_classes: fieldArrayMap(value.inputs.map((input) => input.slotClass)),
     output_slot_classes: fieldArrayMap(value.outputs.map((output) => output.slotClass)),
   };

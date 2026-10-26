@@ -27,6 +27,9 @@ import { createWalletRuntime, WalletReviewStaleError } from "../../src/wallet/ac
 import { matchingPendingNoteFundedTransfer, noteFundedTransferValidUntil, runNoteFundedTransferClient, selectedPendingNoteFundedTransfer, type NoteFundedProver } from "../../src/wallet/actions/noteFundedClient.ts";
 import {
   decodePayload,
+  buildContractBody,
+  functionSelector,
+  deliveryCommitment,
   decryptEnvelope,
   discloseOutput,
   encodePrivateValueTransaction,
@@ -43,6 +46,7 @@ import {
   WIRE_PROOF_BYTES,
   fullOutputCommitment,
   transactionPublication,
+  transactionIdentity,
 } from "@pcash/sdk/protocol";
 import type { WalletTransferPreflight } from "../../src/wallet/actions/transferReview.ts";
 import { type WalletSaveOptions, type WalletStateStore, walletStore, WalletConflictError } from "../../src/wallet/store.ts";
@@ -328,13 +332,24 @@ async function runWith(
   });
 }
 
+function journalTransaction(discriminator = 1n): string {
+  const profile = PRIVATE_VALUE_PROFILES.S;
+  const outputData = Array.from({ length: profile.outputs }, () => new Uint8Array(OUTPUT_DATA_BYTES));
+  const arena = new Uint8Array(profile.arenaBytes);
+  const publicInputs = Array<bigint>(profile.publicInputs).fill(0n);
+  publicInputs[0] = CHAIN_ID;
+  publicInputs[1] = discriminator;
+  publicInputs[profile.offsets.deliveryCommitment] = deliveryCommitment(outputData, arena);
+  return bytesHex(encodePrivateValueTransaction({ publicInputs, proof: new Uint8Array(WIRE_PROOF_BYTES), outputData, arena }));
+}
+
 describe("shared note-funded client engine contract", () => {
   it("selects the exact pending transaction when identical payment intents coexist", () => {
     const data = initialWalletData();
     const recipient = `0x${wallet.address.toString(16).padStart(40, "0")}`;
     const pending = {
       contentHash: `0x${"11".repeat(32)}`,
-      transactionHex: "0x01",
+      transactionHex: journalTransaction(),
       notBeforeTimestamp: "0",
       validUntilTimestamp: "100",
       kind: "payment" as const,
@@ -352,7 +367,7 @@ describe("shared note-funded client engine contract", () => {
     };
     data.pendingNoteFundedTransfers = [
       pending,
-      { ...pending, contentHash: `0x${"22".repeat(32)}`, transactionHex: "0x02" },
+      { ...pending, contentHash: `0x${"22".repeat(32)}`, transactionHex: journalTransaction(2n) },
     ];
     const intent = {
       to: recipient,
@@ -365,7 +380,7 @@ describe("shared note-funded client engine contract", () => {
     expect(selectedPendingNoteFundedTransfer(data, {
       ...intent,
       retryContentHash: `0x${"22".repeat(32)}`,
-    })?.transactionHex).toBe("0x02");
+    })?.transactionHex).toBe(journalTransaction(2n));
   });
 
   it("resumes a pending payment only under the same memo and sender choice", () => {
@@ -373,7 +388,7 @@ describe("shared note-funded client engine contract", () => {
     const recipient = `0x${wallet.address.toString(16).padStart(40, "0")}`;
     const contentHash = `0x${"11".repeat(32)}`;
     const pending = {
-      contentHash, transactionHex: "0x01", notBeforeTimestamp: "0", validUntilTimestamp: "100", kind: "payment" as const,
+      contentHash, transactionHex: journalTransaction(), notBeforeTimestamp: "0", validUntilTimestamp: "100", kind: "payment" as const,
       transferAmount: "4", openFeeAmount: "1", privateRelayFeeAmount: "0", privateRelayRecipient: null,
       issuanceOwnerCommitment: "0", issuanceRecipient: null, recipient, recipientAddress: recipient,
       data: storeTransactionData(memoIntent(recipient, "rent", true))!, inputs: [], change: null,
@@ -404,7 +419,7 @@ describe("shared note-funded client engine contract", () => {
     const recipient = `0x${wallet.address.toString(16).padStart(40, "0")}`;
     const contentHash = `0x${"12".repeat(32)}`;
     data.pendingNoteFundedTransfers = [{
-      contentHash, transactionHex: "0x01", notBeforeTimestamp: "0", validUntilTimestamp: "100", kind: "payment" as const,
+      contentHash, transactionHex: journalTransaction(), notBeforeTimestamp: "0", validUntilTimestamp: "100", kind: "payment" as const,
       transferAmount: "4", openFeeAmount: "1", privateRelayFeeAmount: "0", privateRelayRecipient: null,
       issuanceOwnerCommitment: "0", issuanceRecipient: null, recipient, recipientAddress: recipient,
       data: storeTransactionData({ self: [{ schema: applicationSchemaId("com.example.record009"), data: Uint8Array.of(1, 2) }] })!, inputs: [], change: null,
@@ -883,9 +898,7 @@ describe("network binding of runtime submissions", () => {
 describe("default publication through the wallet runtime", () => {
   const recipient = `0x${wallet.address.toString(16).padStart(40, "0")}`;
   const prover = {
-    proveAndEncode: async (build: Parameters<NoteFundedProver["proveAndEncode"]>[0]) => encodePrivateValueTransaction({
-      publicInputs: build.publicInputs, proof: new Uint8Array(WIRE_PROOF_BYTES), outputData: build.outputData, arena: build.arena,
-    }),
+    proveAndEncode: async (build: Parameters<NoteFundedProver["proveAndEncode"]>[0]) => build.encodeTransaction(new Uint8Array(WIRE_PROOF_BYTES)),
   };
   /** A node whose issuance quote fee planning never reads. */
   function feeNode() {
@@ -1048,6 +1061,25 @@ describe("default publication through the wallet runtime", () => {
     expect(store.snapshot()?.pendingNoteFundedTransfers).toEqual([
       expect.objectContaining({ contentHash: result.contentHash, data: storeTransactionData(memoIntent(payee, memo, true)) }),
     ]);
+  });
+
+  it("matches attached payment retries from retained transaction bytes", async () => {
+    const store = storeOf();
+    const proveAndEncode = vi.fn(prover.proveAndEncode);
+    const client = createWalletRuntime({ node: feeNode().node, chainId: CHAIN_ID, wallet, signer, store,
+      submission: submissionAdapter([], [], "queued"), provers: { privateValue: { proveAndEncode } },
+      settlePollIntervalMs: 0, settlePollMaxAttempts: 1 });
+    const body = (nkRoot: bigint) => buildContractBody({ nullifierKey: { publishesNkRoot: true, nkRoot },
+      functions: [{ selector: functionSelector(0), applicationVkHash: 71n, configurationCommitment: 81n }] }).body;
+    const accountCreation = { kind: "contract" as const, body: body(51n) };
+    const intent = { to: recipient, amount: 4n, openFeeAmount: 1n, accountCreation };
+    const first = await client.transfer(intent);
+    const retry = await client.transfer({ ...intent, accountCreation: { ...accountCreation, body: accountCreation.body.slice() }, retryContentHash: first.contentHash });
+    expect(retry.transactionHex).toBe(first.transactionHex);
+    expect(proveAndEncode).toHaveBeenCalledTimes(1);
+    const { accountCreation: _attachment, ...withoutAttachment } = intent;
+    await expect(client.transfer({ ...withoutAttachment, retryContentHash: first.contentHash })).rejects.toThrow(/reviewed payment/);
+    await expect(client.transfer({ ...intent, accountCreation: { kind: "contract", body: body(52n) }, retryContentHash: first.contentHash })).rejects.toThrow(/reviewed payment/);
   });
 
   it("binds every data audience into review and durable retry matching", async () => {
@@ -1677,3 +1709,52 @@ describe("registered native self delivery", () => {
 function memoIntent(to: string, memo: string, includeSender = false) {
   return { recipients: [{ to, records: [memoSchema.encode(memo), ...includeSender ? [claimedSenderSchema.encode(wallet.address)] : []] }] };
 }
+
+it.each(["known", "ambiguous", "unrelated"] as const)("resumes an existing native journal through L1 transport observation: %s", async kind => {
+  const store = storeOf();
+  let carrying: import("@pcash/sdk/relay").RelayJournalEntry | undefined;
+  let proofs = 0;
+  let broadcasts = 0;
+  const preflight = vi.fn(async () => {
+    if (carrying !== undefined && kind === "unrelated") throw new Error("adapter capacity is occupied");
+    return null;
+  });
+  const checkpoints: string[] = [];
+  const submission: DurableSubmissionAdapter<null, null> = {
+    mode: "l1", preflight,
+    l1Recovery: async () => ({
+      reconcile: async () => ({ latched: carrying !== undefined, entries: [] }),
+      show: async () => ({ latched: carrying !== undefined, entries: carrying === undefined ? [] : [carrying] }),
+      resolve: async () => { throw new Error("not requested"); },
+    }),
+    submit: async ({ transactionBytes }) => {
+      broadcasts++;
+      const { contentHash } = transactionIdentity(transactionBytes);
+      carrying = { kind: "batch", selected: [contentHash], transactionHash: hex(700n) } as import("@pcash/sdk/relay").RelayJournalEntry;
+      throw new Error("response lost after Ethereum publication");
+    },
+  };
+  const run = () => runNoteFundedTransferClient({
+    node: testNode(), store, wallet, signer, chainId: CHAIN_ID,
+    to: addressHex(wallet.address), amount: 4n, openFeeAmount: 0n,
+    status, deterministicTransactionInput, submission,
+    onPrepared: hash => { checkpoints.push(hash); },
+    prover: { proveAndEncode: async build => { proofs++; return build.encodeTransaction(new Uint8Array(WIRE_PROOF_BYTES)); } },
+  });
+  await expect(run()).rejects.toThrow("response lost after Ethereum publication");
+  const pending = (await store.load())!.pendingNoteFundedTransfers![0]!;
+  expect(pending.l1TxHash).toBeUndefined();
+  checkpoints.length = 0; // The application lost its own checkpoint; the wallet retained the value journal.
+  if (kind === "ambiguous") carrying!.transactionHash = null;
+  if (kind === "unrelated") (carrying as import("@pcash/sdk/relay").RelayBatchJournalEntry).selected = [hex(999n)];
+  if (kind === "known") {
+    expect(await run()).toMatchObject({ contentHash: pending.contentHash, accepted: false, queued: false, retried: true, recovered: true });
+    expect((await store.load())!.pendingNoteFundedTransfers![0]!.l1TxHash).toBe(hex(700n));
+  } else {
+    await expect(run()).rejects.toThrow(kind === "ambiguous" ? "has no known hash" : "adapter capacity is occupied");
+  }
+  expect(checkpoints).toEqual([pending.contentHash]);
+  expect(proofs).toBe(1);
+  expect(broadcasts).toBe(1);
+  expect(preflight).toHaveBeenCalledTimes(kind === "unrelated" ? 2 : 1);
+});

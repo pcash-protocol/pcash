@@ -25,6 +25,7 @@ import { useNetwork } from "../../components/NetworkContext.tsx";
 import { RelativeTime } from "../../components/RelativeTime.tsx";
 import { Tooltip } from "../../components/Tooltip.tsx";
 import { ConfirmInWallet, useConfirmInWallet } from "../../components/WalletSubmissionLock.tsx";
+import { CopyButton } from "../../components/CopyButton.tsx";
 import { useEthereumNetwork } from "../../lib/EthereumProvider.tsx";
 import { marketplaceStoreName, openMarketplaceStore } from "../../lib/MarketplaceStore.ts";
 import { networkInstanceKey } from "../../lib/networks.ts";
@@ -38,6 +39,7 @@ import { activityReceiptHashes, activityRows, shownState, type ActivityKind, typ
 import { saleCandidates, useListingSales } from "../marketplace/sales.ts";
 import { usePurchaseClaims } from "../marketplace/purchases.ts";
 import { useWalletPanel } from "./OwnerPanels.tsx";
+import { directSendLinkOf, useDirectSends } from "./directSends.ts";
 import styles from "./Activity.module.css";
 
 const ICONS: Record<ActivityKind, ReactNode> = {
@@ -123,7 +125,9 @@ function ActivityRowView({ row, postable, awaitingPrompt, highlighted, onNavigat
     {state.state === "expired"
       ? <Tooltip tip="Transaction never confirmed" align="end" className={styles.chipTip}>{(tipId) =>
         <span className={`${styles.chip} ${styles.chipBad}`} tabIndex={0} aria-describedby={tipId}>Expired</span>}</Tooltip>
-      : state.state !== "complete" && <span className={`${styles.chip} ${state.state === "pending" ? "" : styles.chipBad}`}>{state.state === "pending" ? "Pending" : "Failed"}</span>}
+      : state.state !== "complete" ? <span className={`${styles.chip} ${state.state === "pending" ? "" : styles.chipBad}`}>{state.state === "pending" ? "Pending" : "Failed"}</span>
+        : row.directSend !== undefined && <span className={`${styles.chip} ${row.directSend.recipientSetUp ? styles.chipDone : ""}`}
+          data-direct-send={row.directSend.recipientSetUp ? "set-up" : "waiting"}>{row.directSend.recipientSetUp ? "Set up" : "Waiting for setup"}</span>}
     {children !== undefined && children !== null && children !== false && <div className={styles.rowActions}>{children}</div>}
   </div>;
 }
@@ -147,8 +151,7 @@ function OwnerActivity({ owner, compact, onNavigate }: { owner: bigint; compact:
   const post = usePostPending();
   const queryClient = useQueryClient();
   const offers = useLocalOffers(snapshot);
-  const setupMiningContentHash = useMemo(() => activation?.miningTransactionHex === undefined ? undefined
-    : transactionIdentity(fromHex(activation.miningTransactionHex)).contentHash.toLowerCase(), [activation?.miningTransactionHex]);
+  const setupMiningContentHash = useMemo(() => activation?.contentHash.toLowerCase(), [activation?.contentHash]);
   // An action shows once it is committed: confirmed in the Ethereum wallet
   // (Faster) or submitted to the PCASH mempool (More private). A fresh action
   // still waiting on either stays out, and so does setup mining until its setup
@@ -162,6 +165,7 @@ function OwnerActivity({ owner, compact, onNavigate }: { owner: bigint; compact:
   const head = snapshot?.syncedThrough?.pcashHash;
   const session = querySession(node);
   const pendingContentHashes = useMemo(() => new Set(snapshot?.pendingContentHashes ?? []), [snapshot]);
+  const directSends = useDirectSends();
 
   const accountEvents = useQuery({
     queryKey: ["activity-account-events", session, owner.toString(), head],
@@ -213,6 +217,7 @@ function OwnerActivity({ owner, compact, onNavigate }: { owner: bigint; compact:
     tokens,
     receipts,
     pendingContentHashes,
+    directSends,
   });
   if (compact && highlightContentHash !== undefined) {
     const highlighted = rows.findIndex((row) => row.id === highlightContentHash);
@@ -290,9 +295,13 @@ function OwnerActivity({ owner, compact, onNavigate }: { owner: bigint; compact:
         <div className={styles.rowActions}>{lockControls}</div>
       </div>}{rows.map((row) => {
         const contentHash = row.state.state === "pending" ? row.state.contentHash : undefined;
+        const controls = carriedByLock(contentHash) ? lockControls : row.payment !== undefined ? recovery(row.payment) : null;
+        // A direct send's link stays available, before and after its recipient sets up.
+        const link = row.directSend !== undefined && wallet.wallet !== undefined
+          ? <CopyButton label="Copy link" showLabel load={() => directSendLinkOf(wallet.wallet!, row.directSend!.contentHash)} /> : null;
         return <ActivityRowView key={row.id} row={row} highlighted={row.payment !== undefined && row.id === highlightContentHash} onNavigate={onNavigate}
           postable={contentHash !== undefined && pendingContentHashes.has(contentHash.toLowerCase())} awaitingPrompt={contentHash !== undefined && awaitingPrompt(contentHash)}>
-          {carriedByLock(contentHash) ? lockControls : row.payment !== undefined && recovery(row.payment)}
+          {controls === null && link === null ? null : <>{controls}{link}</>}
         </ActivityRowView>;
       })}</div>}
   </section>;

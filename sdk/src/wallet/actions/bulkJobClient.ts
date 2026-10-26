@@ -1,7 +1,9 @@
 import { privateValueProfile, PRIVATE_VALUE_PROFILES, type PrivateValueShape } from "@pcash/sdk/constants";
+import { restoreAccountCreation } from "./accountCreation.ts";
 import { buildAssetAction, openedAssetActionOutput, outOfBandAssetActionOutput, ownerChangeAssetActionOutput, type AssetActionInput, type AssetActionOutput } from "@pcash/sdk/builders";
 import type { PcashNodeClient } from "@pcash/sdk/clients";
 import { resolveRecipientAddress, resolveRecipientDelivery, parseExtendedCode, looksLikeExtendedCode } from "@pcash/sdk/delivery";
+import { directSendsToRecord } from "../directSends.ts";
 import { requestPcashAuthorization, type PcashActionSigner, type SelectedRelayQuoteProvider } from "@pcash/sdk/eip712";
 import { networkConfigFromStatus, ownerCommitment } from "@pcash/sdk/protocol";
 import { addressHex, fromHex, randomFieldEntropy, toHex } from "@pcash/sdk/utils";
@@ -86,7 +88,7 @@ export async function startBulkJob(params: Omit<Parameters<typeof createBulkJob>
   assertWalletStoreMatches(params.store, params.wallet, params.chainId, status);
   const approvedFee = async (shape: PrivateValueShape) => (await planPublication({
     qualifying: true,
-    byteSize: paddedPrivateValueByteSize(shape),
+    byteSize: paddedPrivateValueByteSize(shape, params.accountCreation),
     openFeeAmount: params.openFeeAmount,
     publication: "open",
     node: params.node,
@@ -404,6 +406,7 @@ export async function runBulkJobStep<Prepared, Output>(params: {
     });
     const issuance = selected
       ? await fixPublication({
+        maxTransactionBytes: paddedPrivateValueByteSize(plan.shape, restoreAccountCreation(job.accountCreation)),
         selectedRelayQuote: params.selectedRelayQuote, publication: "selected", owner: params.wallet,
         requestedCommitment: 0n, node: params.node, status: witnesses.status,
         nullifiers: transactionNullifiers(params.wallet.nkRoot, plan.inputs, dummyInputSeed, profile.inputs),
@@ -433,6 +436,7 @@ export async function runBulkJobStep<Prepared, Output>(params: {
     const issuanceOwnerCommitment = issuance.issuanceOwnerCommitment;
     const designatedIssuanceOpening = "designatedIssuanceOpening" in issuance ? issuance.designatedIssuanceOpening : undefined;
     const build = buildAssetAction({ shape: plan.shape, pcashChainId: params.chainId, snapshot: witnesses.snapshot,
+      ...(job.accountCreation === undefined ? {} : { accountCreation: restoreAccountCreation(job.accountCreation)! }),
       owner: witnesses.owner, assetId, inputs, outputs, openFeeAmount, issuanceOwnerCommitment,
       ...(designatedIssuanceOpening === undefined ? {} : { designatedIssuanceOpening }), dummyInputSeed,
       ...(selected ? { privateRelayPayment: {
@@ -442,6 +446,7 @@ export async function runBulkJobStep<Prepared, Output>(params: {
       sender: {
         outgoingKey: params.wallet.outgoingKey,
         ...(recoveryRecord === undefined ? {} : { records: [recoveryRecord] }),
+        directSendOpenings: directSendsToRecord(data, params.wallet.address, plan.inputs),
       },
       validUntilTimestamp });
     const authorization = build.prepareOwnerAuthorization({ wallet: params.wallet,

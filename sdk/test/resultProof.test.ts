@@ -1,3 +1,5 @@
+import { buildNativeTransfer } from "../src/builders/nativeTransfer.ts";
+import { buildUserAccountCreation } from "../src/builders/userAccountCreation.ts";
 import { describe, expect, it } from "vitest";
 import { verifyResultProof, verifySuccessfulTransactionStatement, type AccountUpdateOpeningRpc, type ResultProofRpc } from "../src/clients/resultProof.ts";
 import { DenseMerkleTree } from "../src/crypto/denseMerkleTree.ts";
@@ -6,7 +8,7 @@ import { fieldToHex } from "../src/crypto/field.ts";
 import { historyLeaf, blockHash, blockHeaderTree, stateRoot, transactionResultsRoot, transactionResultLeaf, payoutResultLeaf, transactionStatementHash } from "../src/protocol/block.ts";
 import { noteBodyCommitment, outputCommitment } from "../src/protocol/notes.ts";
 import { accountStateCommitment, accountUpdateCommitment, receiveKeyHash } from "../src/protocol/account.ts";
-import { decodeTransaction, encodeUserAccountUpdate, RECEIVE_KEY_OPERATION_CLEAR, WIRE_PROOF_BYTES, userAccountUpdatePublicInputs, type UserAccountReceiveKeyUpdate } from "../src/protocol/codec.ts";
+import { encodeUserAccountCreation, decodeTransaction, encodeUserAccountUpdate, RECEIVE_KEY_OPERATION_CLEAR, WIRE_PROOF_BYTES, userAccountUpdatePublicInputs, type UserAccountReceiveKeyUpdate } from "../src/protocol/codec.ts";
 import { PRIVATE_VALUE_PROFILES } from "../src/constants/privateValueProfiles.ts";
 import { ACCOUNT_KIND_USER, ML_KEM_768_PUBLIC_KEY_LENGTH, OUTPUT_DATA_BYTES } from "../src/constants/params.ts";
 import { DEFAULT_NETWORK_CONFIG } from "../src/protocol/network.ts";
@@ -15,7 +17,7 @@ const hex = (n: bigint) => `0x${n.toString(16)}`;
 
 function fixture() {
   const payout = { outputIndex: 0n, ownerCommitment: 9n, openFeeAmount: 3n, issuanceAmount: 0n };
-  const result = { txType: 0, fundingMode: 0, l1TransactionIndex: 2n, batchItemIndex: 0n, outcome: "proofRejected" as const, posterOwnerCommitment: 9n, outputStartIndex: 0n, statementHash: 0n };
+  const result = { txType: 0, accountCreation: 0, l1TransactionIndex: 2n, batchItemIndex: 0n, outcome: "proofRejected" as const, posterOwnerCommitment: 9n, outputStartIndex: 0n, statementHash: 0n };
   const results = new DenseMerkleTree(64, [transactionResultLeaf(result), payoutResultLeaf(payout)]);
   const outputs = new DenseMerkleTree(40, [outputCommitment(noteBodyCommitment(9n, 0n, 3n), 0n)]);
   const state = { outputRoot: outputs.root(), outputCount: 1n, issuedSoFar: 0n, lagQ: 0n, accountStateRoot: emptyRoot(40), accountCount: 0n, nullifierRoot: emptyRoot(40), nullifierCount: 0n };
@@ -24,23 +26,23 @@ function fixture() {
   const boundary = { state: { ...Object.fromEntries(Object.entries(state).map(([k,v]) => [k, k === "lagQ" ? v.toString() : hex(v)])) }, header: Object.fromEntries(Object.entries(header).map(([k,v]) => [k, ["number","timestamp"].includes(k) ? hex(v) : fieldToHex(v)])), blockHash: fieldToHex(hash) } as unknown as ResultProofRpc["recentBoundary"];
   // Boundary field roots use fixed-width field words.
   for (const key of ["outputRoot", "accountStateRoot", "nullifierRoot"] as const) boundary.state[key] = fieldToHex(state[key]);
-  const proof: ResultProofRpc = { recentPcashBlockHash: fieldToHex(hash), block: { recentPcashBlockHash: fieldToHex(hash), boundary }, history: null, resultsRootSiblings: blockHeaderTree(header).proof(3).siblings.map(fieldToHex), transactionCount: "0x1", payoutCount: "0x1", resultsTreeRoot: fieldToHex(results.root()), leafIndex: "0x0", siblings: results.path(0).map(fieldToHex), recentBoundary: boundary, leaf: { kind: "transaction", txType: 0, fundingMode: 0, l1TransactionIndex: "0x2", batchItemIndex: "0x0", outcome: 8, posterOwnerCommitment: fieldToHex(9n), outputStartIndex: "0x0", statementHash: fieldToHex(0n), statement: null } };
+  const proof: ResultProofRpc = { recentPcashBlockHash: fieldToHex(hash), block: { recentPcashBlockHash: fieldToHex(hash), boundary }, history: null, resultsRootSiblings: blockHeaderTree(header).proof(3).siblings.map(fieldToHex), transactionCount: "0x1", payoutCount: "0x1", resultsTreeRoot: fieldToHex(results.root()), leafIndex: "0x0", siblings: results.path(0).map(fieldToHex), recentBoundary: boundary, leaf: { kind: "transaction", txType: 0, accountCreation: 0, l1TransactionIndex: "0x2", batchItemIndex: "0x0", outcome: 8, posterOwnerCommitment: fieldToHex(9n), outputStartIndex: "0x0", statementHash: fieldToHex(0n), statement: null } };
   return { proof, hash, results, outputs };
 }
 
 function successfulFixture(
   words: readonly bigint[],
   txType: number,
-  fundingMode: number,
+  accountCreation: number,
   accountUpdateOpening: AccountUpdateOpeningRpc | null = null,
 ) {
   const { proof } = fixture();
   const statementHash = transactionStatementHash(words);
-  const result = { txType, fundingMode, l1TransactionIndex: 2n, batchItemIndex: 0n, outcome: "succeeded" as const, posterOwnerCommitment: 9n, outputStartIndex: 0n, statementHash };
+  const result = { txType, accountCreation, l1TransactionIndex: 2n, batchItemIndex: 0n, outcome: "succeeded" as const, posterOwnerCommitment: 9n, outputStartIndex: 0n, statementHash };
   const results = new DenseMerkleTree(64, [transactionResultLeaf(result)]);
   const header = { parentHash: 0n, number: 0n, timestamp: 1n, transactionResultsRoot: transactionResultsRoot([result], []), stateRoot: BigInt(proof.recentBoundary.header.stateRoot), l1OriginRoot: emptyRoot(40), historyRoot: emptyRoot(40) };
   const hash = blockHash(header);
-  proof.leaf = { kind: "transaction", txType, fundingMode, l1TransactionIndex: "0x2", batchItemIndex: "0x0", outcome: 0, posterOwnerCommitment: fieldToHex(9n), outputStartIndex: "0x0", statementHash: fieldToHex(statementHash), statement: { words: words.map(fieldToHex), accountUpdateOpening } };
+  proof.leaf = { kind: "transaction", txType, accountCreation, l1TransactionIndex: "0x2", batchItemIndex: "0x0", outcome: 0, posterOwnerCommitment: fieldToHex(9n), outputStartIndex: "0x0", statementHash: fieldToHex(statementHash), statement: { words: words.map(fieldToHex), accountUpdateOpening } };
   proof.recentBoundary.header.transactionResultsRoot = fieldToHex(header.transactionResultsRoot);
   proof.recentBoundary.blockHash = fieldToHex(hash);
   proof.block.recentPcashBlockHash = fieldToHex(hash);
@@ -86,10 +88,10 @@ for (const shape of [0, 1] as const) {
     expect(() => verifySuccessfulTransactionStatement(forged, bytes, DEFAULT_NETWORK_CONFIG, trusted)).toThrow(/result path/);
     const changed = bytes.slice(); changed[37] = changed[37]! ^ 1;
     expect(() => verifySuccessfulTransactionStatement(proof, changed, DEFAULT_NETWORK_CONFIG, trusted)).toThrow();
-    const changedArena = bytes.slice(); changedArena[bytes.length - 1] = changedArena[bytes.length - 1]! ^ 1;
+    const changedArena = bytes.slice(); changedArena[bytes.length - 2] = changedArena[bytes.length - 2]! ^ 1;
     expect(() => verifySuccessfulTransactionStatement(proof, changedArena, DEFAULT_NETWORK_CONFIG, trusted)).toThrow(/statement mismatch/);
     const changedProof = bytes.slice();
-    const proofOffset = changedProof.length - WIRE_PROOF_BYTES - build.outputData.length * OUTPUT_DATA_BYTES - build.arena.length;
+    const proofOffset = changedProof.length - WIRE_PROOF_BYTES - build.outputData.length * OUTPUT_DATA_BYTES - build.arena.length - 1;
     changedProof[proofOffset] = changedProof[proofOffset]! ^ 1;
     expect(verifySuccessfulTransactionStatement(proof, changedProof, DEFAULT_NETWORK_CONFIG, trusted)).toMatchObject({ kind: "privateValue", shape });
   });
@@ -214,3 +216,25 @@ it("binds an older result block through history and rejects a different trusted 
   proof.history.historySiblings[0] = fieldToHex(55n);
   expect(() => verifyResultProof(proof, recentHash, 0n, { pcashTransactionIndex: 0n })).toThrow(/history path/);
 });
+
+for (const outcome of [1, 2] as const) {
+  it(`authenticates attached user identity with account outcome ${outcome}`, () => {
+    const { params, wallet } = privateValueProfileFixture({ shape: 0, scenario: "minimal" });
+    const creation = buildUserAccountCreation({ chainId: params.chainId, wallet,
+      authorizationResolver: params.authorizationResolver!, unsafeOpaqueRuleSetCommitment: 77n,
+      recentPcashBlockHash: params.recentPcashBlockHash, validUntilTimestamp: params.validUntilTimestamp });
+    const accountCreation = { kind: "user" as const, transactionBytes: encodeUserAccountCreation(params.chainId, creation.body) };
+    const build = buildNativeTransfer({ ...params, accountCreation });
+    const { proof, trusted } = successfulFixture(build.publicInputs, 0, outcome);
+    const result = verifySuccessfulTransactionStatement(proof, build.encodeTransaction(new Uint8Array(WIRE_PROOF_BYTES)), DEFAULT_NETWORK_CONFIG, trusted);
+    if (result.kind !== "privateValue") throw new Error("private value required");
+    expect(result.accountCreation).toMatchObject({ kind: "user", address: wallet.address,
+      nullifierKeyCommitment: creation.nullifierKeyCommitment, outcome: outcome === 1 ? "inserted" : "reused" });
+    if (outcome === 1) expect(result.accountCreation!.insertedAccount).toMatchObject({ ruleSetCommitment: 77n, revision: 1n });
+    else expect(result.accountCreation!.insertedAccount).toBeNull();
+    const changed = structuredClone(proof);
+    if (changed.leaf.kind !== "transaction") throw new Error("transaction required");
+    changed.leaf.accountCreation = outcome === 1 ? 2 : 1;
+    expect(() => verifySuccessfulTransactionStatement(changed, build.encodeTransaction(new Uint8Array(WIRE_PROOF_BYTES)), DEFAULT_NETWORK_CONFIG, trusted)).toThrow(/result path/);
+  });
+}

@@ -18,8 +18,8 @@ use k256::ecdsa::SigningKey;
 use pcash_derive::private_value_profiles::PrivateValueShape;
 use pcash_derive::{
     eip712::account_signing_hash, user_account_update_commitment, AccountCreationAuthorization,
-    ContractAccountCreation, ContractBody, ContractFunction, ContractFunding, PrivateValueSection,
-    ReceiveKeyUpdate, Transaction, UserAccountCreation, UserAccountUpdate, WIRE_PROOF_BYTES,
+    ContractAccountCreation, ContractBody, ContractFunction, PrivateValueSection, ReceiveKeyUpdate,
+    Transaction, UserAccountCreation, UserAccountUpdate, WIRE_PROOF_BYTES,
 };
 use pcash_l1::{L1BlockData, L1Header, L1Receipt, L1Tx};
 use pcash_metrics::{AdmissionOutcome, AdmissionSource, Metrics, PrometheusMetrics};
@@ -371,10 +371,11 @@ fn zero_open_fee_contract_creation(node: &TestNode, valid_until: u64, nonce: u64
         }],
     )
     .unwrap();
-    Transaction::ContractAccountCreation(ContractAccountCreation {
-        body,
-        funding: ContractFunding::Sponsored(fee),
-    })
+    Transaction::PrivateValue(
+        (fee)
+            .with_account_creation(pcash_derive::AccountCreationAttachment::Contract(body))
+            .unwrap(),
+    )
     .encode(PCASH_CHAIN_ID)
     .unwrap()
 }
@@ -2336,10 +2337,8 @@ fn unfunded_contract_creation(node: &TestNode) -> Vec<u8> {
             }],
         )
         .unwrap(),
-        funding: ContractFunding::Unfunded {
-            recent_pcash_block_hash: recent,
-            valid_until_timestamp: deadline,
-        },
+        recent_pcash_block_hash: recent,
+        valid_until_timestamp: deadline,
     })
     .encode(PCASH_CHAIN_ID)
     .unwrap()
@@ -2387,16 +2386,8 @@ async fn unfunded_contract_gossips_and_prepares_without_a_verifier() {
         .with_p2p(a_p2p.handle.clone(), a_p2p.listen_addresses_watch());
     let admitted = a_api.submit_raw_transaction(raw.clone()).await.unwrap();
     assert_eq!(admitted.kind, TransactionKind::ContractAccount);
-    assert_eq!(
-        admitted.funding_mode,
-        Some(pcash_rpc::ContractFundingMode::Unfunded)
-    );
     wait_for_entry_within(&b_node.mempool, content_hash, Duration::from_secs(3)).await;
     let b_entry = b_node.mempool.transaction(&content_hash).unwrap().unwrap();
-    assert_eq!(
-        b_entry.funding_mode,
-        Some(pcash_rpc::ContractFundingMode::Unfunded)
-    );
     assert_eq!(b_entry.raw_transaction, Some(raw.into()));
     let prepared = b_node
         .mempool

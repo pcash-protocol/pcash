@@ -9,21 +9,22 @@
 //     the profile's arenaBytes.
 //   receiveKey: mode(u8: 0 absent, 1 present) ‖ 1184 key bytes when present
 // Private-value I/O capacities come from the subtype; account fee sections use S.
-// type 0 private value: envelope ‖ shape(u8) ‖ privateValueSection
+// type 0 private value: envelope ‖ shape(u8) ‖ privateValueSection ‖ accountCreationAttachment
 // type 1 user account creation: envelope ‖ authorizationMode ‖ creation fields ‖ optional signature
-// type 2 contract account creation: envelope ‖ fundingMode(u8) ‖ funding ‖ contractBody
-//   mode 0 unfunded: recentPcashBlockHash(32) ‖ validUntilTimestamp(u64)
-//   mode 1 sponsored: privateValueSection
+// type 2 contract account creation: envelope ‖ recentPcashBlockHash(32) ‖ validUntilTimestamp(u64) ‖ contractBody
 // type 3 user account update: envelope ‖ proposedAccountFields ‖ accountUpdateCommitment ‖ privateValueSection
 //   batch calldata: version(1, 0x01) ‖ posterOwnerCommitment(32) ‖ posterContext(32) ‖ count(u16) ‖ count×[len(u32) ‖ txBytes]
 
 import { PRIVATE_VALUE_PROFILES, privateValueProfile, type PrivateValueShape } from "../constants/privateValueProfiles.ts";
 import { type FieldNumberish, toAddressField, toField, toNonnegativeBigInt } from "../crypto/field.ts";
-import { beBytes, bytesToBigInt } from "../utils/bytes.ts";
+import { beBytes, bytesToBigInt, concatBytes } from "../utils/bytes.ts";
 import { ByteReader, ByteWriter } from "../utils/byteCursor.ts";
 import { ML_KEM_768_PUBLIC_KEY_LENGTH, OUTPUT_DATA_BYTES } from "../constants/params.ts";
 import { assertArena, deliveryCommitment } from "./transfer.ts";
 import { assertOutputDataItems } from "./envelope.ts";
+
+import { ACCOUNT_CREATION_ATTACHMENT_DOMAIN } from "../constants/domainTags.ts";
+import { poseidonBytes } from "../crypto/poseidon2.ts";
 
 export const VERSION = 0x01;
 export type BatchVersion = typeof VERSION;
@@ -31,10 +32,6 @@ export const TX_KIND_PRIVATE_VALUE = 0;
 export const TX_KIND_USER_ACCOUNT_CREATION = 1;
 export const TX_KIND_CONTRACT_ACCOUNT_CREATION = 2;
 export const TX_KIND_USER_ACCOUNT_UPDATE = 3;
-export const FUNDING_MODE_UNFUNDED = 0;
-export const FUNDING_MODE_SPONSORED = 1;
-/** A contract creation's funding mode follows the type byte and chain ID. */
-export const FUNDING_MODE_OFFSET = 5;
 export const RECEIVE_KEY_OPERATION_KEEP = 0;
 export const RECEIVE_KEY_OPERATION_CLEAR = 1;
 export const RECEIVE_KEY_OPERATION_REPLACE = 2;
@@ -48,14 +45,12 @@ export type TransactionType =
 export const MAX_BATCH_ENTRIES = 1024;
 
 // Wire sections omit the envelope chain ID at position 0 and the delivery
-// commitment reconstructed from the attached output data and arena. A
-// user-account update and a sponsored contract-account creation verify the S
-// section's statement plus one word: the account update commitment, or the
-// derived contract address.
+// commitment reconstructed from output data and arena, and the account
+// creation commitment reconstructed from the attachment. User-account updates
+// append their account update commitment to the S statement.
 export const PRIVATE_VALUE_PUBLIC_INPUTS = PRIVATE_VALUE_PROFILES.S.publicInputs;
 export const PRIVATE_VALUE_WIRE_PUBLIC_INPUTS = PRIVATE_VALUE_PROFILES.S.wireInputs;
 export const USER_ACCOUNT_UPDATE_PUBLIC_INPUTS = PRIVATE_VALUE_PUBLIC_INPUTS + 1;
-export const CONTRACT_CREATION_PUBLIC_INPUTS = PRIVATE_VALUE_PUBLIC_INPUTS + 1;
 
 export type PrivateValueOutputData = readonly Uint8Array[];
 
@@ -70,7 +65,7 @@ const COMPRESSED_CHONK_FIXED_WORDS = 673;
 export const WIRE_PROOF_BYTES = (HIDING_KERNEL_IO_WORDS + COMPRESSED_CHONK_FIXED_WORDS) * 32;
 
 export type SectionLayout = { kind: "privateValue"; shape: PrivateValueShape }
-  | { kind: "userAccountUpdate" | "contractAccountCreation" };
+  | { kind: "userAccountUpdate" };
 
 function sectionProfile(layout: SectionLayout) {
   return privateValueProfile(layout.kind === "privateValue" ? layout.shape : PRIVATE_VALUE_PROFILES.S.shapeId);
@@ -88,19 +83,17 @@ export function privateValueSectionBytes(
   return sectionWireInputs(layout) * 32 + proofBytes + profile.outputs * OUTPUT_DATA_BYTES + profile.arenaBytes;
 }
 
-export function privateValueTransactionSize(shape: PrivateValueShape = PRIVATE_VALUE_PROFILES.S.shapeId): number {
-  return 6 + privateValueSectionBytes(WIRE_PROOF_BYTES, { kind: "privateValue", shape });
+export function accountCreationAttachmentSize(attachment?: AccountCreationAttachment): number {
+  if (attachment === undefined) return 1;
+  return attachment.kind === "user" ? attachment.transactionBytes.length - 4 : attachment.body.length + 1;
 }
 
-export type ContractFundingMode = "unfunded" | "sponsored";
-
-/** The funding payload after the mode byte: a recent block and deadline, or the sponsor's section. */
-export function contractFundingBytes(funding: ContractFundingMode): number {
-  return funding === "unfunded" ? 32 + 8 : privateValueSectionBytes(WIRE_PROOF_BYTES, { kind: "contractAccountCreation" });
+export function privateValueTransactionSize(shape: PrivateValueShape = PRIVATE_VALUE_PROFILES.S.shapeId, accountCreation?: AccountCreationAttachment): number {
+  return 6 + privateValueSectionBytes(WIRE_PROOF_BYTES, { kind: "privateValue", shape }) + accountCreationAttachmentSize(accountCreation);
 }
 
-export function contractAccountCreationSize(bodyByteSize: number, funding: ContractFundingMode): number {
-  return 5 + 1 + contractFundingBytes(funding) + bodyByteSize;
+export function contractAccountCreationSize(bodyByteSize: number): number {
+  return 5 + 32 + 8 + bodyByteSize;
 }
 
 /** `replacementKeyByteSize` is the ML-KEM key length for REPLACE, else zero. */
@@ -109,8 +102,6 @@ export function userAccountUpdateSize(replacementKeyByteSize: number): number {
     + privateValueSectionBytes(WIRE_PROOF_BYTES, { kind: "userAccountUpdate" });
 }
 
-export const PRIVATE_VALUE_MAX_TX_BYTES = Math.max(...Object.values(PRIVATE_VALUE_PROFILES).map((profile) =>
-  privateValueTransactionSize(profile.shapeId)));
 export const USER_ACCOUNT_AUTH_DIRECT = 0;
 export const USER_ACCOUNT_AUTH_SIGNED = 1;
 export const RECEIVE_KEY_ABSENT = 0;
@@ -140,8 +131,11 @@ export const CONTRACT_MAX_BODY_BYTES =
   ML_KEM_768_PUBLIC_KEY_LENGTH +
   1 +
   255 * CONTRACT_FUNCTION_BYTES;
-/** Maximum type 2 transaction: envelope, sponsored funding, and the contract-account body. */
-export const CONTRACT_MAX_TX_BYTES = contractAccountCreationSize(CONTRACT_MAX_BODY_BYTES, "sponsored");
+/** Maximum type 2 transaction: envelope, recent block, deadline, and body. */
+export const CONTRACT_MAX_TX_BYTES = contractAccountCreationSize(CONTRACT_MAX_BODY_BYTES);
+
+export const PRIVATE_VALUE_MAX_TX_BYTES = Math.max(...Object.values(PRIVATE_VALUE_PROFILES).map((profile) =>
+  privateValueTransactionSize(profile.shapeId))) + CONTRACT_MAX_BODY_BYTES;
 
 export const USER_ACCOUNT_UPDATE_MAX_TX_BYTES = userAccountUpdateSize(ML_KEM_768_PUBLIC_KEY_LENGTH);
 
@@ -218,7 +212,7 @@ function canonicalSection(
 function serializedWordIndex(layout: SectionLayout, index: number): number | null {
   const { offsets } = sectionProfile(layout);
   const account = layout.kind !== "privateValue";
-  if (index === offsets.chainId) return null;
+  if (index === offsets.chainId || index === offsets.accountCreationCommitment) return null;
   if (index < offsets.deliveryCommitment) return index - 1;
   if (index === offsets.deliveryCommitment) return null;
   if (account && index === offsets.issuanceOwner) return null;
@@ -306,6 +300,7 @@ export interface PrivateValueTransactionInput {
    */
   outputData: PrivateValueOutputData;
   arena: Uint8Array;
+  accountCreation?: AccountCreationAttachment;
 }
 
 export function encodePrivateValueTransaction(input: PrivateValueTransactionInput): Uint8Array {
@@ -313,6 +308,7 @@ export function encodePrivateValueTransaction(input: PrivateValueTransactionInpu
   const section = canonicalSection(input, "transfer", WIRE_PROOF_BYTES, undefined, { kind: "privateValue", shape });
   const w = new ByteWriter().u8(TX_KIND_PRIVATE_VALUE).u32(section.pcashChainId).u8(shape);
   writePrivateValueSection(w, section);
+  w.bytes(encodeAccountCreationAttachment(input.accountCreation, section.pcashChainId));
   const transaction = w.done();
   if (transaction.length > MAX_TX_BYTES) throw new Error(`transaction exceeds MAX_TX_BYTES (${MAX_TX_BYTES})`);
   return transaction;
@@ -325,37 +321,45 @@ export function encodeUserAccountCreation(
   return encodeEnvelope(TX_KIND_USER_ACCOUNT_CREATION, pcashChainId, body);
 }
 
-/**
- * How a contract creation is funded. Unfunded creation names a recent block
- * and a deadline. Sponsored creation carries the sponsor's private-value
- * section: its statement is the payment, and the derived contract address is
- * the final verifier input, not serialized. A zero `openFeeAmount`
- * over all-dummy slots is a valid section.
- */
-export type ContractFundingInput =
-  | { mode: "unfunded"; recentPcashBlockHash: FieldNumberish; validUntilTimestamp: FieldNumberish }
-  | { mode: "sponsored"; section: PrivateValueSectionInput };
+export interface ContractCreationContext {
+  recentPcashBlockHash: FieldNumberish;
+  validUntilTimestamp: FieldNumberish;
+}
 
-/** Encode a contract-account creation: the funding mode and its payload, then the unsigned body. */
+/** Encode a proof-free contract creation. */
 export function encodeContractAccountCreation(
   pcashChainId: FieldNumberish,
   body: Uint8Array,
-  funding: ContractFundingInput,
+  context: ContractCreationContext,
 ): Uint8Array {
-  const chainId = pcashChainIdU32(pcashChainId);
-  const w = new ByteWriter().u8(TX_KIND_CONTRACT_ACCOUNT_CREATION).u32(chainId);
-  if (funding.mode === "unfunded") {
-    w.u8(FUNDING_MODE_UNFUNDED)
-      .field(toField(funding.recentPcashBlockHash, "recentPcashBlockHash"))
-      .u64(toNonnegativeBigInt(funding.validUntilTimestamp, "validUntilTimestamp"));
-  } else {
-    const section = canonicalSection(funding.section, "contract creation fee", WIRE_PROOF_BYTES, chainId, { kind: "contractAccountCreation" });
-    w.u8(FUNDING_MODE_SPONSORED);
-    writePrivateValueSection(w, section);
+  return encodeEnvelope(TX_KIND_CONTRACT_ACCOUNT_CREATION, pcashChainId, new ByteWriter()
+    .field(toField(context.recentPcashBlockHash, "recentPcashBlockHash"))
+    .u64(toNonnegativeBigInt(context.validUntilTimestamp, "validUntilTimestamp"))
+    .bytes(body).done());
+}
+
+/** One account to ensure exists atomically with a private-value transaction. */
+export type AccountCreationAttachment =
+  | { kind: "user"; transactionBytes: Uint8Array }
+  | { kind: "contract"; body: Uint8Array };
+
+export function encodeAccountCreationAttachment(attachment: AccountCreationAttachment | undefined, pcashChainId: FieldNumberish): Uint8Array {
+  if (attachment === undefined) return Uint8Array.of(0);
+  if (attachment.kind === "contract") {
+    const r = new ByteReader(attachment.body);
+    decodeRawContractBody(r, 0);
+    if (!r.atEnd()) throw new Error("trailing bytes in attached contract body");
+    return concatBytes(Uint8Array.of(2), attachment.body);
   }
-  const transaction = w.bytes(body).done();
-  if (transaction.length > MAX_TX_BYTES) throw new Error(`contract creation exceeds MAX_TX_BYTES (${MAX_TX_BYTES})`);
-  return transaction;
+  const creation = decodeTransactionForChain(attachment.transactionBytes, pcashChainId);
+  if (creation.kind !== 1 || creation.authorization.kind !== "signed") {
+    throw new Error("user account attachment requires a signed user account creation");
+  }
+  return concatBytes(Uint8Array.of(1), creation.body);
+}
+
+export function accountCreationAttachmentCommitment(attachment: AccountCreationAttachment | undefined, pcashChainId: FieldNumberish): bigint {
+  return attachment === undefined ? 0n : poseidonBytes(ACCOUNT_CREATION_ATTACHMENT_DOMAIN, encodeAccountCreationAttachment(attachment, pcashChainId));
 }
 
 export interface UserAccountUpdateInput {
@@ -429,6 +433,7 @@ export interface RawPrivateValueTransaction extends RawPrivateValueSection {
   kind: 0;
   shape: PrivateValueShape;
   pcashChainId: number;
+  accountCreation?: AccountCreationAttachment;
 }
 
 /**
@@ -465,15 +470,11 @@ export interface RawContractBody {
   functions: RawContractFunction[];
 }
 
-export type RawContractFunding =
-  | { mode: "unfunded"; recentPcashBlockHash: Uint8Array; validUntilTimestamp: bigint }
-  /** The sponsor's fee payment. */
-  | { mode: "sponsored"; section: RawPrivateValueSection };
-
 export interface RawContractAccountCreation extends RawContractBody {
   kind: 2;
   pcashChainId: number;
-  funding: RawContractFunding;
+  recentPcashBlockHash: Uint8Array;
+  validUntilTimestamp: bigint;
 }
 
 export interface RawUserAccountUpdate {
@@ -522,8 +523,17 @@ function decodeReceiveKey(r: ByteReader, label: string): Uint8Array | null {
 function decodePrivateValueTransaction(r: ByteReader, pcashChainId: number): RawPrivateValueTransaction {
   const shape = privateValueProfile(r.u8()).shapeId;
   const section = decodePrivateValueSection(r, WIRE_PROOF_BYTES, { kind: "privateValue", shape });
+  const tag = r.u8();
+  let accountCreation: AccountCreationAttachment | undefined;
+  if (tag === 1) {
+    const user = decodeUserAccountCreation(r, pcashChainId, r.offset);
+    if (user.authorization.kind !== "signed") throw new Error("attached user creation must use signed mode");
+    accountCreation = { kind: "user", transactionBytes: encodeUserAccountCreation(pcashChainId, user.body) };
+  } else if (tag === 2) {
+    accountCreation = { kind: "contract", body: decodeRawContractBody(r, r.offset).body };
+  } else if (tag !== 0) throw new Error(`unknown account creation attachment tag ${tag}`);
   if (!r.atEnd()) throw new Error("trailing bytes in private-value transaction");
-  return { kind: TX_KIND_PRIVATE_VALUE, shape, pcashChainId, ...section };
+  return { kind: TX_KIND_PRIVATE_VALUE, shape, pcashChainId, ...section, ...(accountCreation === undefined ? {} : { accountCreation }) };
 }
 
 /**
@@ -545,10 +555,12 @@ export function sectionPublicInput(section: RawPrivateValueSection, index: numbe
 export function privateValueSectionPublicInputs(
   section: RawPrivateValueSection,
   pcashChainId: number,
+  accountCreation?: AccountCreationAttachment,
 ): bigint[] {
   const { offsets, publicInputs } = sectionProfile(section.layout);
   return Array.from({ length: publicInputs }, (_, index) => {
     if (index === offsets.chainId) return BigInt(pcashChainId);
+    if (index === offsets.accountCreationCommitment) return accountCreationAttachmentCommitment(accountCreation, pcashChainId);
     if (index === offsets.deliveryCommitment) return deliveryCommitment(section.outputData, section.arena);
     return sectionPublicInput(section, index);
   });
@@ -556,7 +568,7 @@ export function privateValueSectionPublicInputs(
 
 /** Construct the complete semantic verifier statement from a raw private-value transaction. */
 export function privateValuePublicInputs(transaction: RawPrivateValueTransaction): bigint[] {
-  return privateValueSectionPublicInputs(transaction, transaction.pcashChainId);
+  return privateValueSectionPublicInputs(transaction, transaction.pcashChainId, transaction.accountCreation);
 }
 
 /** The verifier inputs of a user-account update: the section, then the account update commitment. */
@@ -564,21 +576,6 @@ export function userAccountUpdatePublicInputs(update: RawUserAccountUpdate): big
   return [
     ...privateValueSectionPublicInputs(update.section, update.pcashChainId),
     toField(bytesToBigInt(update.accountUpdateCommitment), "accountUpdateCommitment"),
-  ];
-}
-
-/**
- * The verifier inputs of a sponsored contract-account creation: the section,
- * then the contract address the node derives from the body.
- */
-export function contractCreationPublicInputs(
-  creation: RawContractAccountCreation,
-  contractAddress: FieldNumberish,
-): bigint[] {
-  if (creation.funding.mode !== "sponsored") throw new Error("an unfunded contract creation carries no proof statement");
-  return [
-    ...privateValueSectionPublicInputs(creation.funding.section, creation.pcashChainId),
-    toNonnegativeBigInt(contractAddress, "contractAddress"),
   ];
 }
 
@@ -644,22 +641,16 @@ function decodeRawContractBody(r: ByteReader, bodyStart: number): RawContractBod
 }
 
 function decodeContractAccountCreation(r: ByteReader, pcashChainId: number): RawContractAccountCreation {
-  const mode = r.u8();
-  let funding: RawContractFunding;
-  if (mode === FUNDING_MODE_UNFUNDED) {
-    funding = { mode: "unfunded", recentPcashBlockHash: r.word(), validUntilTimestamp: r.u64() };
-  } else if (mode === FUNDING_MODE_SPONSORED) {
-    funding = { mode: "sponsored", section: decodePrivateValueSection(r, WIRE_PROOF_BYTES, { kind: "contractAccountCreation" }) };
-  } else {
-    throw new Error(`unknown contract creation funding mode ${mode}`);
-  }
+  const recentPcashBlockHash = r.word();
+  const validUntilTimestamp = r.u64();
   const body = decodeRawContractBody(r, r.offset);
   if (!r.atEnd()) throw new Error("trailing bytes in contract creation");
   return {
     kind: TX_KIND_CONTRACT_ACCOUNT_CREATION,
     pcashChainId,
     ...body,
-    funding,
+    recentPcashBlockHash,
+    validUntilTimestamp,
   };
 }
 
@@ -802,9 +793,7 @@ export function transactionPublication(transaction: Uint8Array | RawTransaction)
       section = decoded.section;
       break;
     case TX_KIND_CONTRACT_ACCOUNT_CREATION:
-      if (decoded.funding.mode === "unfunded") return null;
-      section = decoded.funding.section;
-      break;
+      return null;
     case TX_KIND_USER_ACCOUNT_CREATION:
       return null;
   }

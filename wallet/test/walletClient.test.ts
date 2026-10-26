@@ -979,7 +979,7 @@ describe("high-level Wallet", () => {
       inputs: [{ nullifier: `0x${"cc".repeat(32)}`, spentCommitment: null }], change: null,
     }];
     const creation = {
-      contentHash: `0x${"ee".repeat(32)}`, miningTransactionHex, transactionHex: "0x0def", address,
+      contentHash: `0x${"aa".repeat(32)}`, publication: "self" as const, transactionHex: miningTransactionHex, address,
       pcashChainId: "1", pcashGenesisHash: `0x${"01".repeat(32)}`, l1ChainId: "1", inboxAddress: `0x${"02".repeat(20)}`,
       genesisL1Block: "0", genesisL1BlockHash: `0x${"03".repeat(32)}`, ruleSetCommitment: "0", receiveKeyHash: `0x${"04".repeat(32)}`,
       recentPcashBlockNumber: "0", recentPcashBlockHash: `0x${"05".repeat(32)}`, validUntilTimestamp: "100",

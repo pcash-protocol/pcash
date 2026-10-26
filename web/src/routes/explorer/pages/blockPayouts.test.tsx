@@ -30,7 +30,7 @@ const POSTER = `0x${"7a".repeat(20)}`;
 function summary(route: TransactionSummaryResult["issuanceRoute"], declared: string | null): TransactionSummaryResult {
   return {
     transactionId: hash("cd"), contentHash: hash("ab"), outcome: "succeeded", failureDetail: null, declaredOpenFeeAmount: route === "designated" ? 0n : 2n * PCASH,
-    declaredIssuanceOwnerCommitment: declared, issuanceRoute: route, kind: "privateValue", fundingMode: null,
+    declaredIssuanceOwnerCommitment: declared, issuanceRoute: route, kind: "privateValue", accountCreation: 0,
     block: { blockNumber: 7n, blockHash: hash("ef") }, pcashTransactionIndex: 0n, timestamp: 1_000n,
     inclusion: { l1BlockNumber: 1n, l1BlockHash: hash("01"), l1TransactionIndex: 0n, l1TransactionHash: hash("02"), batchItemIndex: 0n },
     l1Sender: POSTER, issuanceOwnerCommitment: declared, settledOpenFeeAmount: route === "designated" ? 0n : 2n * PCASH, settledIssuanceAmount: 5n * PCASH,
@@ -41,7 +41,7 @@ function summary(route: TransactionSummaryResult["issuanceRoute"], declared: str
 function receipt(destination: string, openFeeAmount = 2n * PCASH): ReceiptResult {
   return { inclusion: summary("open", null).inclusion, contentHash: hash("ab"), transactionId: hash("cd"), outcome: "succeeded", failureDetail: null,
     l1Sender: POSTER, issuanceOwnerCommitment: destination, settledOpenFeeAmount: openFeeAmount, settledIssuanceAmount: 5n * PCASH,
-    kind: "privateValue", fundingMode: null, outputLeafStart: null, outputsAdded: 5n, nullifiers: [], account: null };
+    kind: "privateValue", accountCreation: 0, outputLeafStart: null, outputsAdded: 5n, nullifiers: [], account: null };
 }
 
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replaceAll("&lt;", "<").replace(/\s+/g, " ");
@@ -91,21 +91,21 @@ describe("explorer blockPayouts", () => {
   it("links a contract creation to its contract, rounds fees up, and has one details section", () => {
     const contract = `0x${"c0".repeat(20)}`;
     const fee = 14n * PCASH / 10n;
-    const created = { ...summary("open", hash("00")), kind: "contractAccount", fundingMode: "sponsored" as const, declaredOpenFeeAmount: fee, account: { address: contract, accountRevision: 0n } };
-    state.value = { state: "posted", canonical: { summary: { ...created, ...receipt(hash("99"), fee), kind: created.kind, fundingMode: created.fundingMode, account: created.account }, rawTransaction: "0x" } };
+    const created = { ...summary("open", hash("00")), kind: "contractAccount", accountCreation: 1 as const, declaredOpenFeeAmount: fee, account: { address: contract, accountRevision: 0n } };
+    state.value = { state: "posted", canonical: { summary: { ...created, ...receipt(hash("99"), fee), kind: created.kind, accountCreation: created.accountCreation, account: created.account }, rawTransaction: "0x" } };
     const html = renderAt(`/tx/${hash("cd")}`);
     expect(html).toMatch(new RegExp(`<header[^>]*>.*href="${addressPath(contract)}".*</header>`));
-    expect(text(html)).toContain("Contract creation · Sponsored");
+    expect(text(html)).toContain("Contract creation · Account created");
     expect(rows(html)).toMatchObject({ "Declared open fee": "2 PCASH", "Open fee paid": "2 PCASH", "Byte size": "1 B" });
     expect(html).not.toContain("More details");
   });
 
-  it("labels an unfunded contract creation with its funding mode", () => {
+  it("labels standalone contract insertion", () => {
     const contract = `0x${"c1".repeat(20)}`;
-    const created = { ...summary("none", null), kind: "contractAccount", fundingMode: "unfunded" as const, declaredOpenFeeAmount: null, account: { address: contract, accountRevision: 0n } };
+    const created = { ...summary("none", null), kind: "contractAccount", accountCreation: 1 as const, declaredOpenFeeAmount: null, account: { address: contract, accountRevision: 0n } };
     state.value = { state: "posted", canonical: { summary: created, rawTransaction: "0x" } };
     const html = renderAt(`/tx/${hash("cd")}`);
-    expect(text(html)).toContain("Contract creation · Unfunded");
+    expect(text(html)).toContain("Contract creation · Account created");
     expect(rows(html)).toMatchObject({ "Declared open fee": "None" });
   });
 

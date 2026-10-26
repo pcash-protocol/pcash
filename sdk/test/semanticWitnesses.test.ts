@@ -24,7 +24,7 @@ for (const kind of ["asset-burn", "batch-transfer-S", "batch-transfer-L"] as con
   function build(burn: FieldNumberish, outputClass: SlotClassValue, assetNamespaceOpening?: AssetNamespaceOpening) {
     const transaction: PrivateValue = {
       global: { openFeeAmount: 0n, issuanceOwnerCommitment: 0n, notBeforeTimestamp: 0n,
-        validUntilTimestamp: 100n, carrierContextHash: 0n, assetBurnAmount: burn, deliveryCommitment: 0n },
+        validUntilTimestamp: 100n, carrierContextHash: 0n, assetBurnAmount: burn, deliveryCommitment: 0n, accountCreationCommitment: 0n },
       inputs: Array.from({ length: profile.inputs }, (_, i) => ({
         slotClass: i === 0 ? SlotClass.ASSET : SlotClass.DUMMY,
         inputCommitment: i === 0 ? 1n : 0n, nullifier: BigInt(i + 1),
@@ -36,6 +36,7 @@ for (const kind of ["asset-burn", "batch-transfer-S", "batch-transfer-L"] as con
     };
     const message = { pcashChainId, assetId: 11n, openFeeAmount: 0n, issuanceRecipient: 0n,
       issuanceOwnerCommitment: 0n, relayFeeAmount: 0n, relayFeeOwnerCommitment: 0n,
+  accountCreationCommitment: 0n,
       transactionContext: 0n, notBefore: 0n, validUntil: 100n };
     const common = {
       wallet, recentPcashBlockHash: 3n, nkRoot: wallet.nkRoot, transaction,

@@ -2,6 +2,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import assert from "node:assert/strict";
 import { formatUnits } from "viem";
+import { decodeBatch, decodeTransaction } from "@pcash/sdk/protocol";
+import { fromHex } from "@pcash/sdk/utils";
 import { logger } from "../../src/framework/logger.ts";
 import { e2eSettings } from "../../src/settings.ts";
 
@@ -47,8 +49,7 @@ export const wholePcash = (value) => value / PCASH * PCASH;
 
 /** Real funded browser trade, using the wallet journey's isolated Anvil actors. */
 export async function marketplaceTrade({ seller, buyer, amount, fixture }) {
-  // A listing prepares creation and funding together; the existing protocol still
-  // authorizes each PCASH action separately before one Ethereum approval.
+  // One approval and one proof create and fund the listing.
   await route(seller.browser, "/marketplace");
   await openListingForm(seller.browser);
   assert.equal(await seller.browser.evaluate(`[...document.querySelectorAll('main a, main button')].some(element => ['Listings', 'Your trades', 'List PCASH'].includes(element.textContent.trim()))`), false);
@@ -72,8 +73,13 @@ export async function marketplaceTrade({ seller, buyer, amount, fixture }) {
   assert.match(listing, /\/marketplace\?offer=0x[0-9a-f]{40}$/, "published offers use a short listing link");
   const finalizationTransactions = seller.provider.requestLog.filter(({ method }) => method === "eth_sendTransaction").length - registrationsBefore;
   assert.equal(finalizationTransactions, 1, "a listing publishes creation and funding in one Ethereum transaction");
-  assert.equal(seller.provider.requestLog.filter(({ method }) => method === "eth_signTypedData_v4").length - authorizationsBefore, 2,
-    "the current protocol requires one PCASH authorization per action");
+  assert.equal(seller.provider.requestLog.filter(({ method }) => method === "eth_signTypedData_v4").length - authorizationsBefore, 1,
+    "one PCASH approval authorizes creation and funding");
+  const published = decodeBatch(fromHex(seller.provider.sentTransactions.at(-1).data)).items;
+  assert.equal(published.length, 1, "listing creation and funding are one PCASH transaction");
+  const publication = decodeTransaction(published[0]);
+  assert.equal(publication.kind, 0);
+  assert.equal(publication.accountCreation?.kind, "contract");
   await captureMarketplace(seller.browser, "listing-complete");
 
   const listingCount = 2;

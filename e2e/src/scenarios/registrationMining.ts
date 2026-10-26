@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { FileRelayJournal, PrivateKeyRelaySubmitter } from "@pcash/sdk/node";
 import { prepareTransactionForL1, submitPreparedTransactionToL1, type PreparedL1Transaction, type RelaySubmissionResult } from "@pcash/sdk/relay";
-import { decodeBatch, decodeTransaction, transactionIdentity, posterPayoutOpening } from "@pcash/sdk/protocol";
+import { decodeBatch, decodeTransaction, transactionIdentity, posterPayoutOpening, privateValuePublicInputs } from "@pcash/sdk/protocol";
 import { fromHex, randomFieldEntropy, toHex } from "@pcash/sdk/utils";
 import { createWalletProvers } from "@pcash/sdk/wallet/node";
 import { openNodeWallet } from "@pcash/wallet";
 import { createL1SubmissionAdapter, type DurableSubmissionAdapter, type L1SubmissionAdapter } from "@pcash/sdk/wallet";
 import type { ScenarioFixture } from "../fixture/scenarioFixture.ts";
+import { l1Rpc } from "../backends/rpc.ts";
 import { assertSystemPayoutRecovered } from "./payouts.ts";
 
 /**
@@ -15,7 +16,7 @@ import { assertSystemPayoutRecovered } from "./payouts.ts";
  * publishes its own carriers here instead of the harness.
  */
 export async function runRegistrationMiningScenario(fixture: ScenarioFixture): Promise<void> {
-  await fixture.createActors(["S", "R"]);
+  await fixture.createActors(["S", "R", "N"]);
   const actor = fixture.actors.S!;
   const newcomer = fixture.actors.R!;
   // Both inventories are reopened below with this scenario's own transports.
@@ -41,22 +42,25 @@ export async function runRegistrationMiningScenario(fixture: ScenarioFixture): P
     submission, userAccountCreationSubmission: submission });
   let wallet = await open();
   const prepared = await wallet.prepareAccountActivation({ authorizationMode: "direct", mine: true });
-  assert.ok(prepared.miningTransactionHex);
-  const miningContentHash = transactionIdentity(fromHex(prepared.miningTransactionHex)).contentHash;
+  const combined = decodeTransaction(fromHex(prepared.transactionHex));
+  assert.equal(combined.kind, 0);
+  if (combined.kind !== 0) throw new Error("setup must be a value transaction");
+  assert.equal(combined.accountCreation?.kind, "user");
+  const miningContentHash = prepared.contentHash;
   await wallet.close();
   wallet = await open();
   try {
     assert.deepEqual(await wallet.prepareAccountActivation({ authorizationMode: "direct", mine: true }), prepared);
     const result = await wallet.submitAccountActivation();
     assert.equal(result.accepted, true);
-    assert.deepEqual(published.map(toHex), [prepared.transactionHex, prepared.miningTransactionHex]);
-    assert.equal(decodeTransaction(published[0]!).kind, 1);
-    assert.equal(decodeTransaction(published[1]!).kind, 0);
+    assert.deepEqual(published.map(toHex), [prepared.transactionHex]);
+    assert.equal(decodeTransaction(published[0]!).kind, 0);
     const registration = await fixture.waitForAcceptedAcrossNodes(prepared.contentHash, "batch-registration");
     const mining = await fixture.waitForAcceptedAcrossNodes(miningContentHash, "batch-mining");
     assert.equal(registration.nodeA.inclusion.l1TransactionIndex, mining.nodeA.inclusion.l1TransactionIndex);
     assert.equal(registration.nodeA.inclusion.l1BlockHash, mining.nodeA.inclusion.l1BlockHash);
-    assert.equal(BigInt(mining.nodeA.inclusion.batchItemIndex), 1n);
+    assert.equal(BigInt(mining.nodeA.inclusion.batchItemIndex), 0n);
+    assert.equal((await node.getAccountProof(actor.address)).status, "present");
     const { receipt } = await assertSystemPayoutRecovered({ node, chainId: fixture.network.pcashChainId,
       contentHash: miningContentHash, label: "registration mining", sourceKind: "designatedIssuance", recipient: actor.wallet });
     assert.ok(receipt.settledIssuanceAmount > 0n);
@@ -133,4 +137,51 @@ export async function runRegistrationMiningScenario(fixture: ScenarioFixture): P
     fixture.artifacts.record("unregistered-mining-complete", { mining: mined.contentHash, registration: registration.contentHash,
       issuance: reward.receipt.settledIssuanceAmount, payment: spent.contentHash });
   } finally { await unregistered.close(); }
+
+  const noEth = fixture.actors.N!;
+  await noEth.close();
+  assert.equal(BigInt(await l1Rpc<string>(fixture.backend.rpcUrl, "eth_getBalance", [noEth.address, "latest"])), 0n);
+  const relay = fixture.harness.mempool();
+  const openNoEth = () => openNodeWallet({ dataDir: noEth.walletDatabasePath, node,
+    profile: noEth.wallet, signer: noEth.signer, provers: createWalletProvers("native"),
+    submission: relay, userAccountCreationSubmission: relay });
+  let pendingWallet = await openNoEth();
+  const localExpiry = fixture.backend.setNextTimestamp && fixture.backend.mine ? (await node.status()).latestBlockTimestamp + 120n : undefined;
+  let pending = await pendingWallet.prepareAccountActivation({ authorizationMode: "signed", mine: true, publication: "open",
+    ...(localExpiry === undefined ? {} : { validUntilTimestamp: localExpiry }) });
+  let attachment = decodeTransaction(fromHex(pending.transactionHex));
+  assert.equal(attachment.kind, 0);
+  if (attachment.kind !== 0) throw new Error("open setup must be a value transaction");
+  assert.equal(attachment.accountCreation?.kind, "user");
+  await pendingWallet.close();
+  pendingWallet = await openNoEth();
+  try {
+    assert.deepEqual(await pendingWallet.prepareAccountActivation({ authorizationMode: "signed", mine: true, publication: "open" }), pending);
+    if (localExpiry !== undefined && fixture.backend.setNextTimestamp && fixture.backend.mine) {
+      await fixture.backend.setNextTimestamp(localExpiry + 1n);
+      await fixture.backend.mine(3);
+      await fixture.waitForNodesAtL1Head();
+      assert.equal((await node.checkRawTransaction(fromHex(pending.transactionHex), { kind: "inbox", address: `0x${fixture.network.inboxAddress.toString(16).padStart(40, "0")}` })).outcome, "expired");
+      const expired = pending;
+      pending = await pendingWallet.prepareAccountActivation({ authorizationMode: "signed", mine: true, publication: "open" });
+      assert.notEqual(pending.contentHash, expired.contentHash, "an expired attachment needs a fresh signature and proof");
+      assert.notEqual(pending.recentPcashBlockHash, expired.recentPcashBlockHash);
+      attachment = decodeTransaction(fromHex(pending.transactionHex));
+      if (attachment.kind !== 0) throw new Error("renewed setup must be a value transaction");
+      assert.equal(attachment.accountCreation?.kind, "user");
+    }
+    assert.equal((await pendingWallet.submitAccountActivation()).accepted, true);
+    await fixture.waitForAcceptedAcrossNodes(pending.contentHash, "no-eth-attached-setup");
+    const receipt = (await node.getReceipt({ contentHash: pending.contentHash })).find(item => item.outcome === "succeeded")!;
+    assert.equal(receipt.kind, "privateValue");
+    assert.ok(receipt.settledIssuanceAmount > 0n);
+    assert.equal(privateValuePublicInputs(attachment)[13], 0n, "setup uses the open issuance route");
+    assert.equal(receipt.accountCreation, 1);
+    assert.equal((await node.getAccountProof(noEth.address)).status, "present");
+    assert.equal(BigInt(await l1Rpc<string>(fixture.backend.rpcUrl, "eth_getBalance", [noEth.address, "latest"])), 0n);
+    await pendingWallet.sync();
+    assert.equal((await pendingWallet.nativeFunds()).total, 0n, "open setup pays the poster");
+    fixture.artifacts.record("no-eth-attached-setup-complete", { contentHash: pending.contentHash, issuance: receipt.settledIssuanceAmount });
+  } finally { await pendingWallet.close(); }
+
 }

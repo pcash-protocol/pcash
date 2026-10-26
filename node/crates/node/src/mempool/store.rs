@@ -6,15 +6,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use alloy_primitives::{keccak256, Address, B256, U256, U512};
 use pcash_derive::public_records::{read_public_records, PublicRecord};
 use pcash_derive::{
-    admit, contract_funding_mode, AccountCreationAuthorization, AdmissionError,
-    AdmittedTransaction, ContractFunding, ContractFundingMode, ParseError, PrivateValueSection,
-    ProtocolRules, KIND_CONTRACT_ACCOUNT_CREATION, KIND_PRIVATE_VALUE, KIND_USER_ACCOUNT_CREATION,
-    KIND_USER_ACCOUNT_UPDATE, MAX_VALID_TX_BYTES,
+    admit, AccountCreationAuthorization, AdmissionError, AdmittedTransaction, ParseError,
+    PrivateValueSection, ProtocolRules, KIND_CONTRACT_ACCOUNT_CREATION, KIND_PRIVATE_VALUE,
+    KIND_USER_ACCOUNT_CREATION, KIND_USER_ACCOUNT_UPDATE, MAX_VALID_TX_BYTES,
 };
 use pcash_l1::CarrierKind;
-use pcash_rpc::dto::{
-    ContractFundingMode as DtoContractFundingMode, TransactionKind as DtoTransactionKind,
-};
+use pcash_rpc::dto::TransactionKind as DtoTransactionKind;
 use pcash_rpc::{
     BlockId, MempoolApiError, MempoolFilter, MempoolSort, MempoolStatusFilter,
     MempoolTransactionDto,
@@ -180,9 +177,9 @@ impl CachedEntry {
     /// section's delivery commitment or a creation's receive key hash.
     pub(super) fn new(transaction: AdmittedTransaction) -> Self {
         let section = match &transaction {
-            AdmittedTransaction::PrivateValue(section) => Some(section),
+            AdmittedTransaction::PrivateValue(section, _) => Some(section),
             AdmittedTransaction::UserAccountUpdate(update) => Some(&update.section),
-            AdmittedTransaction::ContractAccountCreation(creation, _) => creation.section(),
+            AdmittedTransaction::ContractAccountCreation(..) => None,
             AdmittedTransaction::UserAccountCreation(creation) => {
                 creation.receive_key_hash();
                 None
@@ -190,6 +187,12 @@ impl CachedEntry {
         };
         if let Some(section) = section {
             section.delivery_commitment();
+            section.account_creation_commitment();
+            if let Some(pcash_derive::AccountCreationAttachment::User(creation)) =
+                section.account_creation()
+            {
+                creation.receive_key_hash();
+            }
         }
         Self(Some(Arc::new(transaction)))
     }
@@ -263,11 +266,11 @@ pub(super) fn is_unpaid(kind: u8, open_fee_amount: U256) -> bool {
 }
 
 /// Proof-free registrations need operator opt-in: user-account creation and
-/// unfunded contract creation, told apart from a sponsored creation by the
-/// funding byte rather than by its fee.
+/// standalone contract creation. Attached creations use the value action's
+/// ordinary publication economics.
 pub(super) fn requires_unpaid_registration_opt_in(raw: &[u8]) -> bool {
     raw.first() == Some(&KIND_USER_ACCOUNT_CREATION)
-        || contract_funding_mode(raw) == Some(ContractFundingMode::Unfunded)
+        || raw.first() == Some(&KIND_CONTRACT_ACCOUNT_CREATION)
 }
 
 /// The refusal of a proof-free registration while the operator has not
@@ -303,7 +306,6 @@ impl StoredEntry {
             content_hash: self.content_hash,
             statement_id: self.metadata.statement_id,
             kind: self.metadata.kind.to_dto(),
-            funding_mode: DtoContractFundingMode::of(&self.raw),
             stable_id: self.metadata.stable_id.display(),
             conflict_keys: self
                 .metadata
@@ -386,7 +388,7 @@ pub(super) fn descriptor_admitted(
     source: &DerivationSource,
 ) -> Result<EntryMetadata, MempoolApiError> {
     match transaction {
-        AdmittedTransaction::PrivateValue(pe) => {
+        AdmittedTransaction::PrivateValue(pe, _) => {
             let section = section_descriptor(pe)?;
             Ok(EntryMetadata {
                 statement_id: proof_statement_id(KIND_PRIVATE_VALUE, pe),
@@ -442,50 +444,22 @@ pub(super) fn descriptor_admitted(
                 public_records: section.public_records,
             })
         }
-        // Both funding modes conflict on the derived address; a sponsored
-        // creation also on its payment nullifiers.
         AdmittedTransaction::ContractAccountCreation(ce, check) => {
             let address = check
                 .address()
                 .ok_or_else(|| MempoolApiError::Invalid("invalid contract body".to_owned()))?;
-            match &ce.funding {
-                ContractFunding::Unfunded {
-                    valid_until_timestamp,
-                    ..
-                } => Ok(EntryMetadata {
-                    statement_id: keccak256(raw),
-                    kind: TransactionKind::ContractAccountCreation,
-                    stable_id: StableId::Contract(address),
-                    conflict_keys: vec![ConflictKey::Contract(address)],
-                    open_fee_amount: U256::ZERO,
-                    issuance_owner_commitment: B256::ZERO,
-                    has_publication_section: false,
-                    valid_until_timestamp: Some(*valid_until_timestamp),
-                    recent_pcash_block_hash: None,
-                    public_records: Vec::new(),
-                }),
-                ContractFunding::Sponsored(fee) => {
-                    let section = section_descriptor(fee)?;
-                    let mut conflict_keys = vec![ConflictKey::Contract(address)];
-                    conflict_keys.extend(section.conflict_keys);
-                    Ok(EntryMetadata {
-                        statement_id: proof_statement_id_with(
-                            KIND_CONTRACT_ACCOUNT_CREATION,
-                            fee,
-                            address.as_slice(),
-                        ),
-                        kind: TransactionKind::ContractAccountCreation,
-                        stable_id: StableId::Contract(address),
-                        conflict_keys,
-                        open_fee_amount: section.open_fee_amount,
-                        issuance_owner_commitment: section.issuance_owner_commitment,
-                        has_publication_section: true,
-                        valid_until_timestamp: Some(section.valid_until_timestamp),
-                        recent_pcash_block_hash: Some(section.recent_pcash_block_hash),
-                        public_records: section.public_records,
-                    })
-                }
-            }
+            Ok(EntryMetadata {
+                statement_id: keccak256(raw),
+                kind: TransactionKind::ContractAccountCreation,
+                stable_id: StableId::Contract(address),
+                conflict_keys: vec![ConflictKey::Contract(address)],
+                open_fee_amount: U256::ZERO,
+                issuance_owner_commitment: B256::ZERO,
+                has_publication_section: false,
+                valid_until_timestamp: Some(ce.valid_until_timestamp),
+                recent_pcash_block_hash: Some(ce.recent_pcash_block_hash),
+                public_records: Vec::new(),
+            })
         }
     }
 }

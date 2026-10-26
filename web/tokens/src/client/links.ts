@@ -52,7 +52,6 @@ import {
 } from "./action.ts";
 import { TokensError } from "./errors.ts";
 import {
-  ensureContract,
   fundContractNotes,
   ownRecords,
   patchRecord,
@@ -170,9 +169,8 @@ export async function advanceLinkSet<Prepared, Output>(
   const plan = linkSetPlan(record, await walletNkRoot(rt));
   if (record.funding === undefined) {
     const openFeeAmount = record.openFeeAmount === undefined ? undefined : BigInt(record.openFeeAmount);
-    await ensureContract(rt, key, plan.contract, openFeeAmount, onProgress);
     const funding = await fundContractNotes(rt, key, {
-      contract: plan.contract.address,
+      contract: plan.contract,
       assetId: BigInt(record.assetId),
       notes: plan.links.map((link) => ({ noteSecret: link.noteSecret, amount: link.amount })),
       jobId: record.fundingJobId,

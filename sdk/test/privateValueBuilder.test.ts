@@ -8,13 +8,12 @@ import { ownerChangeNoteSecret } from "../src/protocol/notes.ts";
 import { privateValueProfileFixture } from "./privateValueProfileFixtures.ts";
 import {
   ACCOUNT_UPDATE_PUBLIC_INPUT_NAMES,
-  CONTRACT_CREATION_PUBLIC_INPUT_NAMES,
   TYPE0_PUBLIC_INPUT_NAMES,
 } from "../src/browser-prover/proverClient.ts";
 
 describe("shared native S/L builder", () => {
   it("maps browser prover statements through open fee and issuance before account extras", () => {
-    expect(TYPE0_PUBLIC_INPUT_NAMES).toHaveLength(18);
+    expect(TYPE0_PUBLIC_INPUT_NAMES).toHaveLength(19);
     expect(TYPE0_PUBLIC_INPUT_NAMES[11]).toBe("delivery_commitment");
     expect(TYPE0_PUBLIC_INPUT_NAMES.slice(12)).toEqual([
       "open_fee_amount",
@@ -23,9 +22,9 @@ describe("shared native S/L builder", () => {
       "valid_until_timestamp",
       "carrier_context_hash",
       "events_commitment",
+      "account_creation_commitment",
     ]);
-    expect(ACCOUNT_UPDATE_PUBLIC_INPUT_NAMES[18]).toBe("account_update_commitment");
-    expect(CONTRACT_CREATION_PUBLIC_INPUT_NAMES[18]).toBe("contract_address");
+    expect(ACCOUNT_UPDATE_PUBLIC_INPUT_NAMES[19]).toBe("account_update_commitment");
   });
 
   it.each(["minimal", "consolidation", "distribution"] as const)("builds an L %s", (scenario) => {
@@ -64,7 +63,7 @@ describe("shared native S/L builder", () => {
     const entry = build.encodeTransaction(new Uint8Array(WIRE_PROOF_BYTES));
     expect(entry[0]).toBe(0);
     expect(entry[5]).toBe(1);
-    expect(entry.length).toBe(80_198);
+    expect(entry.length).toBe(80_199);
     expect(entry.length).toBe(privateValueTransactionSize(1));
     const decoded = decodeTransaction(entry);
     if (decoded.kind !== 0) throw new Error("kind");

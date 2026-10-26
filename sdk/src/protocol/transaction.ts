@@ -30,6 +30,7 @@ export interface PrivateValueGlobal {
   assetBurnAmount: FieldNumberish;
   /** Commits every output-data item and the arena of the posted section. */
   deliveryCommitment: FieldNumberish;
+  accountCreationCommitment: FieldNumberish;
 }
 
 export interface PrivateValueInput {
@@ -95,6 +96,7 @@ function globalOperands(global: PrivateValueGlobal): bigint[] {
     toField(global.carrierContextHash, "carrierContextHash"),
     uintBelow(global.assetBurnAmount, 1n << BigInt(ASSET_AGGREGATE_BITS), "assetBurnAmount"),
     toField(global.deliveryCommitment, "deliveryCommitment"),
+    toField(global.accountCreationCommitment, "accountCreationCommitment"),
   ];
 }
 

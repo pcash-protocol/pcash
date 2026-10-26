@@ -154,6 +154,7 @@ function l1Submitted() {
     recentPcashBlockHash: `0x${"77".repeat(32)}`,
     validUntilTimestamp: "9999999999",
     preparedAtUnixMs: "0",
+    publication: "self" as const,
     state: "l1-submitted" as const,
     l1TxHash: `0x${"88".repeat(32)}` as `0x${string}`,
   };
@@ -163,8 +164,8 @@ const node = { getReceipt: async () => [] } as unknown as Parameters<typeof adva
 const readyProbe = async () => true;
 
 describe("advanceAccountActivation", () => {
-  it("reports a failed registration independently of its batch's mining action", async () => {
-    const pending = { ...l1Submitted(), miningTransactionHex: "0x00" };
+  it("reports failure of the one registration and mining transaction", async () => {
+    const pending = l1Submitted();
     const { wallet } = fakeWallet(pending);
     const getReceipt = vi.fn(async () => [{ outcome: "expired", inclusion: { l1TransactionHash: l1Submitted().l1TxHash } }]);
     const result = await advanceAccountActivation({ wallet, profile: PROFILE,
@@ -175,7 +176,6 @@ describe("advanceAccountActivation", () => {
     expect((result as { message: string }).message).toContain("expired");
     expect(getReceipt).toHaveBeenCalledWith({ contentHash: pending.contentHash });
     expect(wallet.resetAccountActivationSubmission).toHaveBeenCalledOnce();
-    expect(pending.miningTransactionHex).toBe("0x00");
   });
   it("keeps polling after a transient PCASH receipt query failure", async () => {
     const { wallet } = fakeWallet(l1Submitted());

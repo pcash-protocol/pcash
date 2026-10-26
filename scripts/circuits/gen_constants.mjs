@@ -68,6 +68,7 @@ noirProtocol += "// PCASH protocol domain tags.\n\n";
 const offCircuitProtocolTags = new Set([
   "GENESIS_PARENT_DOMAIN",
   "CONTRACT_ADDRESS_DOMAIN",
+  "ACCOUNT_CREATION_ATTACHMENT_DOMAIN",
   "ARENA_HASH_DOMAIN",
   "OUTPUT_DATA_HASH_DOMAIN",
   "NULLIFIER_LEAF_DOMAIN",

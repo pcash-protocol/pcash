@@ -29,6 +29,7 @@ pub struct PrivateValue<let N_IN: u32, let N_OUT: u32, let SHAPE: u32> {
     pub carrier_context_hash: Field,
     pub asset_burn_amount: Field,
     pub delivery_commitment: Field,
+    pub account_creation_commitment: Field,
     pub input_slot_classes: [Field; N_IN],
     pub input_commitments: [Field; N_IN],
     pub nullifiers: [Field; N_IN],
@@ -48,6 +49,7 @@ pub struct PrivateValueChoices<let N_IN: u32, let N_OUT: u32> {
     pub carrier_context_hash: Field,
     pub asset_burn_amount: Field,
     pub delivery_commitment: Field,
+    pub account_creation_commitment: Field,
     pub input_slot_classes: [Field; N_IN],
     pub output_slot_classes: [Field; N_OUT],
 }
@@ -84,7 +86,7 @@ pub fn private_value_commitment<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
     assert_timestamp(value.not_before_timestamp);
     assert_timestamp(value.valid_until_timestamp);
 
-    let mut operands = [0; 3 * N_IN + 2 * N_OUT + 11];
+    let mut operands = [0; 3 * N_IN + 2 * N_OUT + 12];
     operands[0] = PRIVATE_VALUE_COMMITMENT_DOMAIN;
     operands[1] = SHAPE as Field;
     operands[2] = N_IN as Field;
@@ -96,16 +98,17 @@ pub fn private_value_commitment<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
     operands[8] = value.carrier_context_hash;
     operands[9] = value.asset_burn_amount;
     operands[10] = value.delivery_commitment;
+    operands[11] = value.account_creation_commitment;
     for i in 0..N_IN {
         assert_input_slot_class(value.input_slot_classes[i]);
-        operands[11 + 3 * i] = value.input_slot_classes[i];
-        operands[12 + 3 * i] = value.input_commitments[i];
-        operands[13 + 3 * i] = value.nullifiers[i];
+        operands[12 + 3 * i] = value.input_slot_classes[i];
+        operands[13 + 3 * i] = value.input_commitments[i];
+        operands[14 + 3 * i] = value.nullifiers[i];
     }
     for i in 0..N_OUT {
         assert_output_slot_class(value.output_slot_classes[i]);
-        operands[11 + 3 * N_IN + 2 * i] = value.output_slot_classes[i];
-        operands[12 + 3 * N_IN + 2 * i] = value.output_body_commitments[i];
+        operands[12 + 3 * N_IN + 2 * i] = value.output_slot_classes[i];
+        operands[13 + 3 * N_IN + 2 * i] = value.output_body_commitments[i];
     }
     pcash_hash(operands)
 }
@@ -130,8 +133,8 @@ pub fn transaction_statement<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
     recent_pcash_block_hash: Field,
     private_value: PrivateValue<N_IN, N_OUT, SHAPE>,
     events_commitment: Field,
-) -> [Field; N_IN + N_OUT + 9] {
-    let mut statement = [0; N_IN + N_OUT + 9];
+) -> [Field; N_IN + N_OUT + 10] {
+    let mut statement = [0; N_IN + N_OUT + 10];
     statement[0] = pcash_chain_id;
     statement[1] = recent_pcash_block_hash;
     for i in 0..N_IN {
@@ -147,30 +150,30 @@ pub fn transaction_statement<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
     statement[6 + N_IN + N_OUT] = private_value.valid_until_timestamp;
     statement[7 + N_IN + N_OUT] = private_value.carrier_context_hash;
     statement[8 + N_IN + N_OUT] = events_commitment;
+    statement[9 + N_IN + N_OUT] = private_value.account_creation_commitment;
     statement
 }
 
-/// An account action publishes the ordinary S fee statement followed by its
-/// extra data: the account update commitment (update) or the derived contract
-/// address (creation).
+/// An account update publishes the ordinary S fee statement followed by its
+/// account update commitment.
 pub fn account_action_statement<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
     pcash_chain_id: Field,
     recent_pcash_block_hash: Field,
     private_value: PrivateValue<N_IN, N_OUT, SHAPE>,
     events_commitment: Field,
     extra_data: Field,
-) -> [Field; N_IN + N_OUT + 10] {
+) -> [Field; N_IN + N_OUT + 11] {
     let value_statement = transaction_statement(
         pcash_chain_id,
         recent_pcash_block_hash,
         private_value,
         events_commitment,
     );
-    let mut statement = [0; N_IN + N_OUT + 10];
-    for i in 0..N_IN + N_OUT + 9 {
+    let mut statement = [0; N_IN + N_OUT + 11];
+    for i in 0..N_IN + N_OUT + 10 {
         statement[i] = value_statement[i];
     }
-    statement[N_IN + N_OUT + 9] = extra_data;
+    statement[N_IN + N_OUT + 10] = extra_data;
     statement
 }
 
@@ -195,6 +198,7 @@ mod tests {
             carrier_context_hash: 0,
             asset_burn_amount: 0,
             delivery_commitment: 0,
+            account_creation_commitment: 0,
             input_slot_classes: [SLOT_CLASS_DUMMY; N_IN],
             input_commitments: [0; N_IN],
             nullifiers: [1; N_IN],
@@ -218,6 +222,9 @@ mod tests {
         let mut changed_carrier_context = all_dummy_private_value::<32, 32, 1>();
         changed_carrier_context.carrier_context_hash = 7;
         assert(base != private_value_commitment(changed_carrier_context));
+        let mut changed_creation = all_dummy_private_value::<32, 32, 1>();
+        changed_creation.account_creation_commitment = 8;
+        assert(base != private_value_commitment(changed_creation));
         // Shapes with equal dimensions still have distinct identities.
         assert(base != private_value_commitment(all_dummy_private_value::<32, 32, 0>()));
     }
@@ -232,6 +239,7 @@ mod tests {
             carrier_context_hash: 15,
             asset_burn_amount: 12,
             delivery_commitment: 13,
+            account_creation_commitment: 0,
             input_slot_classes: [
                 SLOT_CLASS_ASSET,
                 SLOT_CLASS_NATIVE,
@@ -263,6 +271,7 @@ mod tests {
                     15,
                     12,
                     13,
+                    0,
                     SLOT_CLASS_ASSET,
                     20,
                     30,
@@ -310,11 +319,11 @@ mod tests {
         value.output_body_commitments = [40, 41, 42, 43, 44];
         assert(
             transaction_statement(6, 7, value, 14)
-                == [6, 7, 30, 31, 32, 33, 40, 41, 42, 43, 44, 13, 8, 9, 10, 11, 12, 14],
+                == [6, 7, 30, 31, 32, 33, 40, 41, 42, 43, 44, 13, 8, 9, 10, 11, 12, 14, 0],
         );
         assert(
             account_action_statement(6, 7, value, 14, 15)
-                == [6, 7, 30, 31, 32, 33, 40, 41, 42, 43, 44, 13, 8, 9, 10, 11, 12, 14, 15],
+                == [6, 7, 30, 31, 32, 33, 40, 41, 42, 43, 44, 13, 8, 9, 10, 11, 12, 14, 0, 15],
         );
     }
 

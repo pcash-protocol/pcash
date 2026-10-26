@@ -151,7 +151,7 @@ export async function advanceAccountActivation(
         await wallet.resetAccountActivationSubmission();
         return {
           kind: "reset-to-prepared",
-          message: `PCASH did not accept account setup (${failed.outcome}). Mining is tracked separately in your transaction history.`,
+          message: `PCASH did not accept account setup (${failed.outcome}). Review the transaction before retrying.`,
         };
       }
       return {

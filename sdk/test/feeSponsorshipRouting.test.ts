@@ -17,6 +17,7 @@ const transaction: PrivateValue = {
     carrierContextHash: 0n,
     assetBurnAmount: 0n,
     deliveryCommitment: 0n,
+      accountCreationCommitment: 0n,
   },
   inputs: [
     { slotClass: SlotClass.ASSET, inputCommitment: 1n, nullifier: 11n },

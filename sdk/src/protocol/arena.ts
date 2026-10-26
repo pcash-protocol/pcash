@@ -25,7 +25,8 @@ import { type FieldNumberish, toAddressField, toField } from "../crypto/field.ts
 import { beBytes, bytesEqual, bytesToBigInt, concatBytes, field32, utf8 } from "../utils/bytes.ts";
 import { arenaRandom } from "./arenaRandom.ts";
 import { decodeAssetDefinition, encodeAssetDefinition, type AssetDefinition } from "./assetDefinition.ts";
-import { TX_KIND_CONTRACT_ACCOUNT_CREATION, TX_KIND_PRIVATE_VALUE, TX_KIND_USER_ACCOUNT_UPDATE } from "./codec.ts";
+import { TX_KIND_PRIVATE_VALUE, TX_KIND_USER_ACCOUNT_UPDATE } from "./codec.ts";
+import { DIRECT_SEND_OPENING_BYTES, decodeDirectSendOpening, encodeDirectSendOpening, type DirectSendOpening } from "./directSend.ts";
 
 export const ARENA_SALT_BYTES = 32;
 export const ARENA_CELL_BYTES = 65;
@@ -51,16 +52,16 @@ export type ArenaRole = "recipient" | "sender";
 export const ARENA_RECORD = RECORD_SCHEMA;
 /** slot (1) ‖ sharedSecret (32) ‖ recipientAddress (20). */
 const SENT_ENVELOPE_BYTES = 1 + KEY_BYTES + ADDRESS_BYTES;
-/** slot (1) ‖ recipientAddress (20) ‖ assetId (32) ‖ amount (16) ‖ noteSecret (32). */
+/** slotAndFlags (1) ‖ recipientAddress (20) ‖ assetId (32) ‖ amount (16) ‖ noteSecret (32). */
 const SENT_OPENING_BYTES = 1 + ADDRESS_BYTES + 32 + 16 + 32;
 /** Standard records an application supplies and a recipient region carries. */
 const DATA_TYPES: ReadonlySet<string> = new Set([ARENA_RECORD.memo, ARENA_RECORD.assetDefinition, ARENA_RECORD.sender]);
-const SENDER_TYPES: ReadonlySet<string> = new Set([...DATA_TYPES, ARENA_RECORD.sentEnvelopes, ARENA_RECORD.sentOpenings]);
+const SENDER_TYPES: ReadonlySet<string> = new Set([...DATA_TYPES, ARENA_RECORD.sentEnvelopes, ARENA_RECORD.sentOpenings, ARENA_RECORD.directSendOpenings]);
+const RECOVERY_TYPES: ReadonlySet<string> = new Set([ARENA_RECORD.sentEnvelopes, ARENA_RECORD.sentOpenings, ARENA_RECORD.directSendOpenings]);
 
-const ARENA_TRANSACTION_TYPES: ReadonlySet<number> = new Set([TX_KIND_PRIVATE_VALUE, TX_KIND_CONTRACT_ACCOUNT_CREATION, TX_KIND_USER_ACCOUNT_UPDATE]);
+const ARENA_TRANSACTION_TYPES: ReadonlySet<number> = new Set([TX_KIND_PRIVATE_VALUE, TX_KIND_USER_ACCOUNT_UPDATE]);
 export type ArenaTransactionType =
   | typeof TX_KIND_PRIVATE_VALUE
-  | typeof TX_KIND_CONTRACT_ACCOUNT_CREATION
   | typeof TX_KIND_USER_ACCOUNT_UPDATE;
 
 // ===========================================================================
@@ -205,6 +206,8 @@ export interface SentEnvelope {
 /** An output delivered out of band, owned by `recipientAddress`. */
 export interface SentOpening {
   slot: number;
+  /** A direct send: the opening reaches its owner by a link the sender shares. */
+  directSend?: true;
   recipientAddress: bigint;
   assetId: bigint;
   amount: bigint;
@@ -216,6 +219,8 @@ export interface SenderRecovery {
   records: DataRecord[];
   sentEnvelopes: SentEnvelope[];
   sentOpenings: SentOpening[];
+  /** Direct sends this wallet received, recorded so a restore finds them. */
+  directSendOpenings: DirectSendOpening[];
 }
 
 function addressBytes(address: FieldNumberish, label: string): Uint8Array {
@@ -246,17 +251,22 @@ function bySlot<T extends { slot: number }>(entries: readonly T[], label: string
   return sorted;
 }
 
+function sentSlot(slot: number, label: string): number {
+  if (!Number.isInteger(slot) || slot < 0 || slot >= 32) throw new Error(`${label} slot must be below 32`);
+  return slot;
+}
+
 function encodeSentEnvelopes(entries: readonly SentEnvelope[]): Uint8Array {
   return concatBytes(...bySlot(entries, "sent envelopes").map(({ slot, sharedSecret, recipientAddress, recordsOnly }) => {
     // Codec callers supply slots; leave the high bit exclusively for the recovery flag.
-    if (!Number.isInteger(slot) || slot < 0 || slot >= 32) throw new Error("sent envelope slot must be below 32");
     assertKey(sharedSecret, "sent envelope shared secret");
-    return concatBytes(beBytes(slot | (recordsOnly ? 0x80 : 0), 1), sharedSecret, addressBytes(recipientAddress, "recipientAddress"));
+    return concatBytes(beBytes(sentSlot(slot, "sent envelope") | (recordsOnly ? 0x80 : 0), 1), sharedSecret, addressBytes(recipientAddress, "recipientAddress"));
   }));
 }
 function encodeSentOpenings(entries: readonly SentOpening[]): Uint8Array {
   return concatBytes(...bySlot(entries, "sent openings").map(opening => concatBytes(
-    beBytes(opening.slot, 1), addressBytes(opening.recipientAddress, "recipientAddress"),
+    // Codec callers supply slots; leave the high bit exclusively for the direct-send flag.
+    beBytes(sentSlot(opening.slot, "sent opening") | (opening.directSend ? 0x80 : 0), 1), addressBytes(opening.recipientAddress, "recipientAddress"),
     field32(toField(opening.assetId, "assetId")), beBytes(opening.amount, 16), field32(toField(opening.noteSecret, "noteSecret")),
   )));
 }
@@ -316,7 +326,8 @@ function decodeSentEnvelopes(data: Uint8Array, outputs = 32): SentEnvelope[] {
 }
 function decodeSentOpenings(data: Uint8Array, outputs = 32): SentOpening[] {
   return slotEntries(data, SENT_OPENING_BYTES, outputs, (entry) => ({
-    slot: entry[0]!,
+    slot: entry[0]! & 0x7f,
+    ...(entry[0]! & 0x80 ? { directSend: true as const } : {}),
     recipientAddress: bytesToBigInt(entry.subarray(1, 21)),
     assetId: toField(bytesToBigInt(entry.subarray(21, 53)), "sent opening assetId"),
     amount: bytesToBigInt(entry.subarray(53, 69)),
@@ -324,13 +335,44 @@ function decodeSentOpenings(data: Uint8Array, outputs = 32): SentOpening[] {
   }));
 }
 
+/** Openings in strictly ascending byte order, so each list has one encoding. */
+function encodeDirectSendOpenings(openings: readonly DirectSendOpening[]): Uint8Array {
+  const encoded = openings.map(encodeDirectSendOpening).sort(compareBytes);
+  encoded.forEach((opening, index) => {
+    if (index > 0 && compareBytes(opening, encoded[index - 1]!) === 0) throw new Error("direct send openings repeat an opening");
+  });
+  return concatBytes(...encoded);
+}
+
+function decodeDirectSendOpenings(data: Uint8Array): DirectSendOpening[] {
+  if (data.length % DIRECT_SEND_OPENING_BYTES !== 0) throw new Error("direct send openings are malformed");
+  const openings: DirectSendOpening[] = [];
+  for (let offset = 0; offset < data.length; offset += DIRECT_SEND_OPENING_BYTES) {
+    const entry = data.subarray(offset, offset + DIRECT_SEND_OPENING_BYTES);
+    if (offset > 0 && compareBytes(entry, data.subarray(offset - DIRECT_SEND_OPENING_BYTES, offset)) <= 0) {
+      throw new Error("direct send openings must be strictly ascending");
+    }
+    openings.push(decodeDirectSendOpening(entry));
+  }
+  return openings;
+}
+
+function compareBytes(left: Uint8Array, right: Uint8Array): number {
+  for (let index = 0; index < Math.min(left.length, right.length); index++) {
+    if (left[index] !== right[index]) return left[index]! - right[index]!;
+  }
+  return left.length - right.length;
+}
+
 export function decodeSenderPayload(payload: Uint8Array, shape: PrivateValueShape): SenderRecovery {
   const { outputs } = privateValueProfile(shape);
   const records = decodeRecordList(payload, SENDER_TYPES);
+  const data = (schema: string) => records.find((record) => record.schema === schema)?.data ?? new Uint8Array(0);
   return {
-    records: validDataRecords(records.filter(({ schema }) => schema !== ARENA_RECORD.sentEnvelopes && schema !== ARENA_RECORD.sentOpenings)),
-    sentEnvelopes: decodeSentEnvelopes(records.find(({ schema }) => schema === ARENA_RECORD.sentEnvelopes)?.data ?? new Uint8Array(0), outputs),
-    sentOpenings: decodeSentOpenings(records.find(({ schema }) => schema === ARENA_RECORD.sentOpenings)?.data ?? new Uint8Array(0), outputs),
+    records: validDataRecords(records.filter(({ schema }) => !RECOVERY_TYPES.has(schema))),
+    sentEnvelopes: decodeSentEnvelopes(data(ARENA_RECORD.sentEnvelopes), outputs),
+    sentOpenings: decodeSentOpenings(data(ARENA_RECORD.sentOpenings), outputs),
+    directSendOpenings: decodeDirectSendOpenings(data(ARENA_RECORD.directSendOpenings)),
   };
 }
 
@@ -659,4 +701,11 @@ export const sentOpeningsSchema: import("./records.ts").RecordSchema<readonly Se
     return { schema: ARENA_RECORD.sentOpenings, data: encodeSentOpenings(value) };
   },
   decode: decodeSentOpenings,
+};
+export const directSendOpeningsSchema: import("./records.ts").RecordSchema<readonly DirectSendOpening[]> = {
+  id: ARENA_RECORD.directSendOpenings,
+  encode(value) {
+    return { schema: ARENA_RECORD.directSendOpenings, data: encodeDirectSendOpenings(value) };
+  },
+  decode: decodeDirectSendOpenings,
 };

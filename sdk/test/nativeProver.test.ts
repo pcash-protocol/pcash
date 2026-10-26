@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { copyFileSync, cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, expect, test } from "vitest";
@@ -9,6 +10,7 @@ import {
   TOOLCHAIN,
   pinnedComponents,
   platformKey,
+  primaryRepositoryRoot,
   staleToolchainComponents,
   toolPaths,
   toolRoot,
@@ -67,6 +69,36 @@ test("PCASH_TOOL_ROOT is the one override of the checkout-local tool root", () =
   expect(toolPaths().bb).toBe("/somewhere/tools/bb/bb");
 });
 
+test.each(["unset", "absolute", "relative"])("worktree tool root stays local with %s PCASH_TOOL_ROOT", (override) => {
+  const fixture = realpathSync(mkdtempSync(join(tmpdir(), "pcash-worktree-tools-")));
+  directories.push(fixture);
+  const primary = join(fixture, "primary");
+  const worktree = join(fixture, "worktree");
+  const gitDir = join(primary, ".git", "worktrees", "wt");
+  mkdirSync(gitDir, { recursive: true });
+  mkdirSync(join(primary, ".pcash-tools"));
+  mkdirSync(join(worktree, "sdk", "src", "node"), { recursive: true });
+  mkdirSync(join(worktree, "assets"));
+  writeFileSync(join(gitDir, "commondir"), "../..\n");
+  writeFileSync(join(worktree, ".git"), `gitdir: ${gitDir}\n`);
+  writeFileSync(join(worktree, "package.json"), '{"type":"module"}\n');
+  copyFileSync(new URL("../src/node/toolchain.ts", import.meta.url), join(worktree, "sdk", "src", "node", "toolchain.ts"));
+  cpSync(new URL("../src/bcfg", import.meta.url), join(worktree, "sdk", "src", "bcfg"), { recursive: true });
+  copyFileSync(new URL("../../assets/prover-toolchain.json", import.meta.url), join(worktree, "assets", "prover-toolchain.json"));
+
+  const localTools = join(worktree, ".pcash-tools");
+  const env = { ...process.env };
+  delete env.PCASH_TOOL_ROOT;
+  if (override === "absolute") env.PCASH_TOOL_ROOT = localTools;
+  if (override === "relative") env.PCASH_TOOL_ROOT = ".pcash-tools";
+  const selectedRoot = execFileSync(process.execPath, [
+    "--input-type=module", "-e",
+    'import { toolRoot } from "./sdk/src/node/toolchain.ts"; console.log(toolRoot());',
+  ], { cwd: worktree, env, encoding: "utf8" }).trim();
+
+  expect(selectedRoot).toBe(localTools);
+});
+
 test("names the supported prover platforms", () => {
   expect(platformKey("darwin", "arm64")).toBe("darwin-arm64");
   expect(platformKey("linux", "x64")).toBe("linux-x64");
@@ -105,4 +137,25 @@ test("a binary with other bytes is stale whatever it reports and whatever its re
   expect(() => proverReleaseConfig()).toThrow(/not the pinned release \(barretenberg\); run `just tools`/);
   useToolRoot({ replaced: "nargo" });
   expect(staleToolchainComponents()).toEqual(["nargo"]);
+});
+
+test("primaryRepositoryRoot returns repo root when not in a linked worktree", () => {
+  const root = mkdtempSync(join(tmpdir(), "pcash-regular-repo-"));
+  directories.push(root);
+  expect(primaryRepositoryRoot(root)).toBe(root);
+  mkdirSync(join(root, ".git"));
+  expect(primaryRepositoryRoot(root)).toBe(root);
+});
+
+test("primaryRepositoryRoot identifies primary checkout from a worktree .git file", () => {
+  const primary = mkdtempSync(join(tmpdir(), "pcash-primary-"));
+  const worktree = mkdtempSync(join(tmpdir(), "pcash-worktree-"));
+  directories.push(primary, worktree);
+
+  const gitDir = join(primary, ".git", "worktrees", "wt1");
+  mkdirSync(gitDir, { recursive: true });
+  writeFileSync(join(gitDir, "commondir"), "../..\n");
+  writeFileSync(join(worktree, ".git"), `gitdir: ${gitDir}\n`);
+
+  expect(primaryRepositoryRoot(worktree)).toBe(primary);
 });

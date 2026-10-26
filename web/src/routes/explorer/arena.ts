@@ -4,7 +4,6 @@ import {
   ARENA_SALT_BYTES,
   decodeTransaction,
   readPublicRecords,
-  TX_KIND_CONTRACT_ACCOUNT_CREATION,
   TX_KIND_PRIVATE_VALUE,
   TX_KIND_USER_ACCOUNT_UPDATE,
   type DataRecord,
@@ -16,7 +15,6 @@ export function transactionArena(rawTransaction: string): Uint8Array | null {
   const transaction = decodeTransaction(fromHex(rawTransaction, "raw transaction"));
   if (transaction.kind === TX_KIND_PRIVATE_VALUE) return transaction.arena;
   if (transaction.kind === TX_KIND_USER_ACCOUNT_UPDATE) return transaction.section.arena;
-  if (transaction.kind === TX_KIND_CONTRACT_ACCOUNT_CREATION && transaction.funding.mode === "sponsored") return transaction.funding.section.arena;
   return null;
 }
 

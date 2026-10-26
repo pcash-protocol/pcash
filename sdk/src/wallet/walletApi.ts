@@ -14,6 +14,7 @@ export {
   type WalletBulkRecoveryChunk,
   type WalletBulkRecoveryRecipient,
   type WalletClientOptions,
+  type WalletDirectSend,
   type WalletExecutionContext,
   type WalletNoteFilter,
   type WalletNoteSummary,
@@ -67,6 +68,12 @@ export {
   type PublicationPlan,
   type PublicationMode,
 } from "./actions/publication.ts";
+export {
+  DirectSendOwnerError,
+  inspectDirectSend,
+  type DirectSendFunding,
+  type WalletReceivedDirectSend,
+} from "./directSends.ts";
 export {
   isWalletSyncConflict,
   retryWhileSyncConflict,
@@ -145,3 +152,5 @@ export { keyedResourcePool } from "./resourcePool.ts";
 export type { WalletSystemPayoutActivity, WalletNativeActivity, WalletNativeActivityEntry, WalletReceivedMessage, WalletSentOutput } from "./actions/nativeActivity.ts";
 
 export { planNativeConsolidation, ConsolidationRequiredError, type ConsolidationPlan } from "./consolidation.ts";
+
+export type { ResumeValueTransactionIntent, ResumeValueTransactionResult } from "./actions/resumeValueTransaction.ts";

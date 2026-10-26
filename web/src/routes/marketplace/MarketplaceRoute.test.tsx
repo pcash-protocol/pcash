@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   publicCreated: false, publishSource: vi.fn(),
   publicationIdentity: vi.fn(),
   openOffers: vi.fn(), list: vi.fn(), onProgress: undefined as ((progress: import("@pcash/marketplace/app").MarketplaceProgress) => void) | undefined,
-  refresh: vi.fn(), verify: vi.fn(), create: vi.fn(), buy: vi.fn(), resume: vi.fn(), reclaim: vi.fn(), restoreContract: vi.fn(), discard: vi.fn(),
+  refresh: vi.fn(), verify: vi.fn(), create: vi.fn(), buy: vi.fn(), resume: vi.fn(), reclaim: vi.fn(), discard: vi.fn(),
   verifyRouter: vi.fn(),
   pollReceipt: vi.fn(), copy: vi.fn(), finalizePending: vi.fn(),
   openWallet: vi.fn(), connect: vi.fn(), signIn: vi.fn(), switchNetwork: vi.fn(), setupAccount: vi.fn(), checkActivation: vi.fn(),
@@ -52,7 +52,7 @@ vi.mock("@pcash/marketplace/app", async original => ({
     constructor(options: { onProgress: (progress: import("@pcash/marketplace/app").MarketplaceProgress) => void }) { mocks.onProgress = options.onProgress; }
     buyMany = mocks.buyMany; quotePurchases = mocks.quotePurchases; checkPaymentBalance = mocks.checkPaymentBalance; paymentGas = mocks.paymentGas;
     refresh = mocks.refresh; verify = mocks.verify; createAndPublish = mocks.create; buy = mocks.buy;
-    resumePublication = mocks.resume; reclaim = mocks.reclaim; restoreContract = mocks.restoreContract; discardUnfundedPublication = mocks.discard;
+    resumePublication = mocks.resume; reclaim = mocks.reclaim; discardUnfundedPublication = mocks.discard;
   },
   publicationIdentity: (pub: { terms: { id: string } }) => mocks.publicationIdentity(pub),
   escrowCommitments: (pub: { terms: { id: string } }) => ({ nullifier: `nullifier-${pub.terms.id}` }),
@@ -130,8 +130,8 @@ async function openListing() { await click("Create listing"); }
 function ready() { mocks.wallet.walletClient = {}; mocks.wallet.phase = "ready"; mocks.wallet.profile = { address: 1n }; }
 const CONTRACT_TX = `0x${"ab".repeat(32)}`;
 /** The store's record of this owner's saved listing. */
-function storeListing(phase: "contract-submitted" | "funding-submitted" | "finalizing" | "funded", contentHash?: string, pub = publication) {
-  const saved = { key: "saved", pub, publish: { submissionMode: "fast", phase: phase === "contract-submitted" ? "l2-contract-submitted" : phase, updatedAt: 1 },
+function storeListing(phase: "draft" | "funding-submitted" | "finalizing" | "funded", contentHash?: string, pub = publication) {
+  const saved = { key: "saved", pub, publish: { submissionMode: "fast", phase, updatedAt: 1 },
     activity: { key: "saved:seller", offerKey: "saved", role: "seller", phase, status: phase === "funded" ? "ready" : "pending", publication: pub, ...(contentHash === undefined ? {} : { contentHash }) } };
   mocks.list.mockResolvedValue([saved]);
   mocks.refresh.mockResolvedValue({ catalogOffers: [publication], localOffers: [saved] });
@@ -324,7 +324,7 @@ describe("marketplace click-through trades", () => {
     await act(async () => navigate("/get")); await act(async () => navigate("/marketplace#list-pcash"));
     const submit = container.querySelector<HTMLButtonElement>('[role="dialog"] button[type="submit"]')!;
     await act(async () => submit.click());
-    expect(mocks.create).toHaveBeenCalledWith({ assetId: 0n, amount: 12n * 10n ** 18n, ethPriceWei: 10n ** 17n, purchaseMinutes: 10080n, creationOpenFeeAmount: 0n, fundingOpenFeeAmount: 0n }, expect.objectContaining({ submission: expect.objectContaining({ mode: "l1" }), assertActive: expect.any(Function) }));
+    expect(mocks.create).toHaveBeenCalledWith({ assetId: 0n, amount: 12n * 10n ** 18n, ethPriceWei: 10n ** 17n, purchaseMinutes: 10080n, fundingOpenFeeAmount: 0n }, expect.objectContaining({ submission: expect.objectContaining({ mode: "l1" }), assertActive: expect.any(Function) }));
     expect(container.textContent).toContain("Your PCASH is listed");
     expect(container.querySelector("#list-pcash form")).toBeNull();
     expect(button("View listing progress")).toBeDefined();
@@ -592,12 +592,12 @@ describe("marketplace click-through trades", () => {
   it("offers Continue, not a second listing, when a failure follows a saved listing transaction", async () => {
     ready();
     const contentHash = `0x${"ab".repeat(32)}`;
-    const saved = { pub: publication, activity: { key: "seller:1", role: "seller", phase: "contract-submitted", status: "pending", publication, contentHash } };
+    const saved = { pub: publication, activity: { key: "seller:1", role: "seller", phase: "funding-submitted", status: "pending", publication, contentHash } };
     mocks.list.mockResolvedValue([saved]);
     mocks.refresh.mockResolvedValue({ catalogOffers: [], localOffers: [saved] });
     mocks.create.mockImplementationOnce(async () => {
       mocks.onProgress?.({ action: "publish", phase: "preparing", message: "Your listing creation transaction is ready.", elapsedMs: 0,
-        publication: { step: "contract", contentHash, offerAddress: publication.l2Contract.bodyHex } });
+        publication: { step: "funding", contentHash, offerAddress: publication.l2Contract.bodyHex } });
       throw new Error("User rejected the request");
     });
     mocks.resume.mockResolvedValue({ offer: { terms: { id: 1n } }, publication, catalogPublished: true });
@@ -885,7 +885,7 @@ describe("marketplace click-through trades", () => {
     expect(container.textContent).not.toContain("Open fee per action");
     const tip = document.getElementById(button("Publish listing").getAttribute("aria-describedby")!);
     expect(tip?.getAttribute("role")).toBe("tooltip");
-    expect(tip?.textContent).toContain("Approve two free signatures");
+    expect(tip?.textContent).toContain("Approve one free signature");
     expect(tip?.hidden).toBe(true);
   });
 
@@ -906,7 +906,7 @@ describe("marketplace click-through trades", () => {
 
   it.each([
     ["retries only the catalog publication of a canonically funded Faster listing, which needs no ETH", { phase: "funded", fundingAcceptedBlock: "5" }, false],
-    ["checks for Ethereum gas before continuing a Faster listing whose funding is not canonical", { phase: "l2-contract-submitted" }, true],
+    ["checks for Ethereum gas before continuing a Faster listing whose funding is not canonical", { phase: "funding-submitted" }, true],
   ])("%s", async (_, publish, needsGas) => {
     ready();
     const saved = { key: "saved", pub: publication, publish: { submissionMode: "fast", catalogError: "Catalog offline", updatedAt: 1, ...publish }, activity: {
@@ -1062,7 +1062,7 @@ it("publishes every listing from the Ethereum wallet with no relayer fees, whate
   expect(container.textContent).not.toContain("fee (PCASH)");
   await fill("PCASH amount", "1"); await fill("Total price in ETH", "0.001");
   await click("Publish listing");
-  expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ creationOpenFeeAmount: 0n, fundingOpenFeeAmount: 0n }),
+  expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ fundingOpenFeeAmount: 0n }),
     expect.objectContaining({ submission: expect.objectContaining({ mode: "l1" }) }));
   expect(mocks.fasterGas).toHaveBeenCalledOnce();
 });
@@ -1234,12 +1234,12 @@ it("retains listings when availability refresh fails and replaces them on a succ
 
 it("waits for Continue before resuming a listing saved in an earlier session", async () => {
   vi.useFakeTimers(); ready();
-  storeListing("contract-submitted", CONTRACT_TX);
+  storeListing("funding-submitted", CONTRACT_TX);
   mocks.resume.mockResolvedValue({ offer: { terms: { id: 1n } }, publication, catalogPublished: true });
   await render(offerPath);
   await act(async () => vi.advanceTimersByTimeAsync(30_000));
   expect(mocks.resume).not.toHaveBeenCalled();
-  expect(pendingRow()?.textContent).toContain("Needs submission");
+  expect(pendingRow()?.textContent).toContain("Not posted yet");
   await click("Continue");
   expect(mocks.resume).toHaveBeenCalledOnce();
   expect(mocks.resume).toHaveBeenCalledWith(publication, expect.objectContaining({ submission: expect.objectContaining({ mode: "l1" }) }));
@@ -1247,7 +1247,7 @@ it("waits for Continue before resuming a listing saved in an earlier session", a
 
 it("discards a listing whose funding never started once the seller confirms", async () => {
   vi.useFakeTimers(); ready();
-  storeListing("contract-submitted", CONTRACT_TX);
+  storeListing("draft");
   mocks.pollReceipt.mockResolvedValue({ outcome: "succeeded" });
   mocks.discard.mockImplementation(async () => {
     mocks.list.mockResolvedValue([]);
@@ -1270,7 +1270,7 @@ it("discards a listing whose funding never started once the seller confirms", as
 it("restores a listing after reload without approving until Continue", async () => {
   vi.useFakeTimers(); ready();
   const saved = { key: "offer", pub: publication, publish: { submissionMode: "fast" }, activity: {
-    key: "seller", offerKey: "offer", role: "seller", phase: "contract-submitted", status: "pending", publication,
+    key: "seller", offerKey: "offer", role: "seller", phase: "funding-submitted", status: "pending", publication,
   } };
   mocks.refresh.mockResolvedValue({ catalogOffers: [], localOffers: [saved] });
   mocks.resume.mockResolvedValue({ offer: { terms: { id: 1n } }, publication, catalogPublished: true });
@@ -1393,7 +1393,7 @@ it("counts an expired listing only once the node shows no buyer took it", async 
   ready();
   const expired = { ...publication, terms: { ...publication.terms, id: "2", deadlineT: "1" }, l2Contract: { bodyHex: `0x${"34".repeat(20)}` } };
   const local = [
-    { pub: publication, activity: { key: "interrupted", role: "seller", phase: "contract-submitted", status: "pending", publication } },
+    { pub: publication, activity: { key: "interrupted", role: "seller", phase: "funding-submitted", status: "pending", publication } },
     { pub: expired, activity: { key: "expired", role: "seller", phase: "funded", status: "ready", publication: expired } },
   ];
   mocks.refresh.mockResolvedValue({ catalogOffers: [], localOffers: local });
@@ -1937,20 +1937,13 @@ it("retries restoration on later syncs at the same tip without looping on its ow
   expect(mocks.refresh).toHaveBeenCalledTimes(before + 2);
 });
 
-it("offers contract recovery for restored funding without requiring a catalog or funding again", async () => {
-  ready(); settings.setDefaultSubmissionMode("slow");
-  mocks.wallet.funds = { spendablePrivate: 10n * 10n ** 18n };
-  const expired = { ...publication, terms: { ...publication.terms, amount: (1n * 10n ** 18n).toString(), deadlineT: "1" } };
-  mocks.refresh.mockResolvedValue({ catalogOffers: [], catalogError: "Catalog offline", localOffers: [{ key: "offer", pub: expired, activity: {
-    key: "seller", offerKey: "offer", role: "seller", phase: "contract-missing", status: "action-required", publication: expired,
+it("waits for restored funding to reappear without offering another payment", async () => {
+  ready();
+  mocks.refresh.mockResolvedValue({ catalogOffers: [], localOffers: [{ key: "offer", pub: publication, activity: {
+    key: "seller", offerKey: "offer", role: "seller", phase: "recovery-unavailable", status: "pending", publication,
   } }] });
-  mocks.restoreContract.mockResolvedValue("0xcreation");
   await render(offerPath);
-  expect(container.querySelector('[aria-label="Trade PCASH"] input[type="radio"]')).toBeNull();
-  expect(container.textContent).not.toContain("Relayer fee");
-  await click("Recover escrow contract");
-  expect(mocks.restoreContract).toHaveBeenCalledWith(expired, 0n, expect.objectContaining({ submission: expect.objectContaining({ mode: "l1" }) }));
+  expect(container.textContent).toContain("Waiting for escrow funding");
   expect(mocks.create).not.toHaveBeenCalled();
   expect(mocks.resume).not.toHaveBeenCalled();
-  expect(mocks.reclaim).not.toHaveBeenCalled();
 });

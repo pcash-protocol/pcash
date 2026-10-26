@@ -26,8 +26,8 @@ use signature_common::secp256k1::{Secp256k1PubKey, Signature};
 
 // keccak256 of the SDK ASSET_BURN_EIP712_TYPE, written by scripts/circuits/gen_reference_message_types.mjs.
 global ASSET_BURN_TYPE_HASH: [u8; 32] = [
-    0x13, 0x73, 0x50, 0xc2, 0xc3, 0x20, 0x9b, 0x9a, 0xa0, 0x60, 0x12, 0xf4, 0x26, 0x09, 0xbb, 0x55,
-    0x54, 0x92, 0xea, 0x0d, 0x67, 0xc6, 0x83, 0xab, 0xad, 0xb9, 0x36, 0x19, 0xa3, 0x7e, 0xc7, 0xac,
+    0x69, 0x9a, 0x03, 0x43, 0x1a, 0x76, 0xae, 0xa4, 0xb9, 0xec, 0x69, 0x5c, 0x79, 0xc4, 0x1b, 0xd4,
+    0xf8, 0x30, 0xc7, 0xe6, 0x10, 0x0d, 0x3f, 0x8f, 0xce, 0xb2, 0x9c, 0x2a, 0xa8, 0xd7, 0xb9, 0xc7,
 ];
 
 pub fn asset_burn_relation<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
@@ -170,6 +170,7 @@ mod tests {
             carrier_context_hash: 0,
             asset_burn_amount: TEST_BURN,
             delivery_commitment: 0x61,
+            account_creation_commitment: 0,
             input_slot_classes: [
                 SLOT_CLASS_ASSET,
                 SLOT_CLASS_NATIVE,
@@ -349,17 +350,18 @@ mod tests {
     // TEST_SIGNING_KEY's signature over the full burn `run_signed_burn` proves on
     // TEST_PCASH_CHAIN_ID.
     global SIGNED_BURN_SIGNATURE: [u8; 64] = [
-        0x58, 0x7b, 0x1a, 0xc6, 0x3a, 0xd1, 0x32, 0x15, 0x6d, 0x70, 0x53, 0xa5, 0x7f, 0x5f, 0x6a,
-        0xff, 0x52, 0xa2, 0x2c, 0xc2, 0xf9, 0x26, 0xd3, 0xd9, 0xcf, 0x2f, 0x06, 0x6e, 0x15, 0x99,
-        0xbd, 0xed, 0x41, 0xa6, 0xc8, 0x97, 0xbc, 0xa9, 0x46, 0x25, 0x33, 0x5f, 0x31, 0xcf, 0xe9,
-        0x8a, 0x47, 0xa1, 0xf1, 0xbc, 0x9a, 0x2a, 0xc9, 0xec, 0xca, 0xb0, 0x83, 0xb2, 0x01, 0xd2,
-        0xe8, 0x46, 0xa6, 0xb2,
+        0x3f, 0xcd, 0x12, 0xbf, 0x79, 0x7f, 0xc2, 0x5d, 0xb8, 0xcf, 0xca, 0x40, 0x4f, 0x3b, 0x28,
+        0x85, 0x5c, 0xe1, 0x36, 0x6e, 0x51, 0x44, 0x98, 0x79, 0x47, 0xd0, 0x45, 0x75, 0xbb, 0xaa,
+        0x9f, 0x1c, 0x60, 0xe5, 0xba, 0xc7, 0xf7, 0x24, 0xb1, 0x6c, 0x9c, 0xe5, 0x00, 0x4a, 0x40,
+        0x1a, 0xc1, 0x59, 0x78, 0x7a, 0x04, 0x31, 0x74, 0x2d, 0xd1, 0x81, 0x48, 0x4d, 0x0c, 0xde,
+        0xb2, 0x42, 0xff, 0xb4,
     ];
 
     fn run_signed_burn(
         pcash_chain_id: Field,
         burn_amount: Field,
         event_entry: Field,
+        account_creation_commitment: Field,
     ) -> [Field; RULE_STATEMENT_LENGTH] {
         let opening =
             AssetNamespaceOpening { owner_commitment: 0x77, amount: TEST_BURN, output_index: 3 };
@@ -368,6 +370,7 @@ mod tests {
         tx.input_slot_classes[0] = SLOT_CLASS_ASSET;
         tx.input_commitments[0] =
             output_commitment(note_body_commitment(0x77, TEST_ASSET_ID, TEST_BURN), 3);
+        tx.account_creation_commitment = account_creation_commitment;
         main(
             pcash_chain_id,
             TEST_RECENT_BLOCK,
@@ -389,20 +392,25 @@ mod tests {
 
     #[test]
     fn test_asset_burn_accepts_the_owner_signature() {
-        let _ = run_signed_burn(TEST_PCASH_CHAIN_ID, TEST_BURN, 0);
+        let _ = run_signed_burn(TEST_PCASH_CHAIN_ID, TEST_BURN, 0, 0);
     }
 
     // The message signs the chain ID the action commitment binds, so a burn
     // signed for one chain cannot be proved on another.
     #[test(should_fail_with = "signature must be valid")]
     fn test_asset_burn_rejects_a_signature_for_another_chain() {
-        let _ = run_signed_burn(TEST_PCASH_CHAIN_ID + 1, TEST_BURN, 0);
+        let _ = run_signed_burn(TEST_PCASH_CHAIN_ID + 1, TEST_BURN, 0, 0);
     }
 
     // The message signs the private value's burn amount, so a signature does not
     // authorize another burn of the same input.
     #[test(should_fail_with = "signature must be valid")]
     fn test_asset_burn_rejects_a_signature_for_another_burn_amount() {
-        let _ = run_signed_burn(TEST_PCASH_CHAIN_ID, TEST_BURN - 1, 0);
+        let _ = run_signed_burn(TEST_PCASH_CHAIN_ID, TEST_BURN - 1, 0, 0);
     }
+    #[test(should_fail_with = "signature must be valid")]
+    fn test_burn_rejects_an_unsigned_attachment() {
+        let _ = run_signed_burn(TEST_PCASH_CHAIN_ID, TEST_BURN, 0, 1);
+    }
+
 }

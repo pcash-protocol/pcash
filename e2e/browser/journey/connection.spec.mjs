@@ -261,7 +261,7 @@ test("restores sign-ins and pending submissions across browser navigation", asyn
     const setupSignatures = provider.requestLog.slice(setupOffset)
       .filter(({ method }) => method === "eth_signTypedData_v4")
       .map(({ params }) => JSON.parse(params[1]).primaryType);
-    assert.deepEqual(setupSignatures, [], "setup mining reuses the key signature without requesting payment authorization");
+    assert.deepEqual(setupSignatures, ["PcashUserAccountCreation"], "setup signs the account creation carried by its mining action");
     assert.equal(requestMethods(provider, setupOffset).filter((method) => method === "eth_sendTransaction").length, 1);
     assert.equal(provider.sentTransactions.length, 0);
     assert.equal(new URL(await browser.evaluate("location.href")).pathname, "/");
@@ -312,11 +312,14 @@ test("restores sign-ins and pending submissions across browser navigation", asyn
     assert.equal(sent.from.toLowerCase(), FIXED_ACCOUNT.toLowerCase());
     assert.equal(sent.to.toLowerCase(), TEST_STATUS.inboxAddress.toLowerCase());
     assert.equal(sent.value, "0x0");
-    assert.equal(decodeBatch(fromHex(sent.data)).items.length, 2);
-    assert.equal(decodeTransaction(decodeBatch(fromHex(sent.data)).items[1]).kind, 0);
-    const creation = decodeTransaction(decodeBatch(fromHex(sent.data)).items[0]);
+    const entries = decodeBatch(fromHex(sent.data)).items;
+    assert.equal(entries.length, 1);
+    const action = decodeTransaction(entries[0]);
+    assert.equal(action.kind, 0);
+    assert.equal(action.accountCreation?.kind, "user");
+    const creation = decodeTransaction(action.accountCreation.transactionBytes);
     assert.equal(creation.kind, 1);
-    assert.deepEqual(creation.authorization, { kind: "direct" });
+    assert.equal(creation.authorization.kind, "signed");
 
     await browser.openWallet();
     assert.equal(await browser.evaluate(`document.querySelector('[data-testid="wallet-panel"] a[href="/get"]') !== null`), false, "mining waits for account confirmation");

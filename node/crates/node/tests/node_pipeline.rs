@@ -20,14 +20,11 @@ use alloy_primitives::{b256, Address, Bytes, B256, U256};
 use pcash_derive::private_value_profiles::PrivateValueShape;
 use pcash_derive::{
     AccountCreationAuthorization, ContractAccountCreation, ContractBody, ContractFunction,
-    ContractFunding, PrivateValueSection, SectionLayout, Transaction, UserAccountCreation,
+    PrivateValueSection, SectionLayout, Transaction, UserAccountCreation,
 };
 use pcash_l1::{L1BlockData, L1Header, L1Receipt, L1Tx};
 use pcash_node::{build_node, NetworkConfig, NodeHandle, DEFAULT_INBOX, L1_CHAIN_ID};
-use pcash_rpc::{
-    BlockId, ContractFundingMode, NodeApi, OutputLimits, OutputRequest, ReceiptQuery,
-    TransactionKind,
-};
+use pcash_rpc::{BlockId, NodeApi, OutputLimits, OutputRequest, ReceiptQuery, TransactionKind};
 use pcash_state::{CircuitWord, StateDb, TransactionOutcome};
 use pcash_verify::{Verifier, VerifyError};
 
@@ -162,26 +159,30 @@ fn synthetic_private_value_block(
     inbox_batch_block(number, hash, parent_hash, vec![private_value])
 }
 
-/// A sponsored contract creation paying through `fee`, the private-value
+/// A attached contract creation paying through `fee`, the private-value
 /// section of a type `0x00` fixture with its proof resized to the type's.
 fn contract_txbytes(nullifier_key_commitment: u64, mut fee: PrivateValueSection) -> Vec<u8> {
-    fee.proof
-        .resize(SectionLayout::ContractAccountCreation.proof_bytes(), 0x01);
-    Transaction::ContractAccountCreation(ContractAccountCreation {
-        // Publishes a nullifier-key commitment, not nkRoot; no receive key.
-        body: ContractBody::new(
-            false,
-            word(nullifier_key_commitment),
-            None,
-            vec![ContractFunction {
-                selector: 0,
-                application_vk_hash: word(0x52),
-                configuration_commitment: word(0x53),
-            }],
-        )
-        .unwrap(),
-        funding: ContractFunding::Sponsored(fee),
-    })
+    fee.proof.resize(
+        SectionLayout::PrivateValue(PrivateValueShape::S).proof_bytes(),
+        0x01,
+    );
+    Transaction::PrivateValue(
+        (fee)
+            .with_account_creation(pcash_derive::AccountCreationAttachment::Contract(
+                ContractBody::new(
+                    false,
+                    word(nullifier_key_commitment),
+                    None,
+                    vec![ContractFunction {
+                        selector: 0,
+                        application_vk_hash: word(0x52),
+                        configuration_commitment: word(0x53),
+                    }],
+                )
+                .unwrap(),
+            ))
+            .unwrap(),
+    )
     .encode(PCASH_CHAIN_ID)
     .unwrap()
 }
@@ -1229,7 +1230,7 @@ fn receipts_and_payouts_follow_each_issuance_route() {
             reward,
             IssuanceRoute::Designated,
         ),
-        (None, open, 4, U256::ZERO, IssuanceRoute::None),
+        (Some(poster), open, 4, reward, IssuanceRoute::Open),
     ];
     let mut transaction_ids = Vec::new();
     for (index, (resolved, declared, fee, issuance, route)) in expected.into_iter().enumerate() {
@@ -1241,9 +1242,9 @@ fn receipts_and_payouts_follow_each_issuance_route() {
         assert_eq!(receipts[0].settled_open_fee_amount, U256::from(fee));
         assert_eq!(receipts[0].settled_issuance_amount, issuance);
         let summary = handle.get_transaction(tx_id).unwrap().unwrap().summary;
-        let funding = (index == 4).then_some(ContractFundingMode::Sponsored);
-        assert_eq!(receipts[0].funding_mode, funding);
-        assert_eq!(summary.funding_mode, funding);
+        let creation = u8::from(index == 4);
+        assert_eq!(receipts[0].account_creation, creation);
+        assert_eq!(summary.account_creation, creation);
         assert_eq!(summary.issuance_route, route);
         assert_eq!(summary.declared_issuance_owner_commitment, Some(declared));
         assert_eq!(summary.declared_open_fee_amount, Some(U256::from(fee)));
@@ -1255,7 +1256,7 @@ fn receipts_and_payouts_follow_each_issuance_route() {
     };
     let payout = handle.get_block_payouts(first).unwrap().unwrap();
     assert_eq!(payout.open_fees_total, U256::from(9));
-    assert_eq!(payout.issuance_total, reward * U256::from(4));
+    assert_eq!(payout.issuance_total, reward * U256::from(5));
     let summary = payout
         .payouts
         .iter()
@@ -1296,7 +1297,7 @@ fn receipts_and_payouts_follow_each_issuance_route() {
                 },
                 poster,
                 pcash_state::PayoutComponent::Issuance,
-                reward * U256::from(2),
+                reward * U256::from(3),
             ),
         ]
     );
@@ -1546,13 +1547,124 @@ fn unfunded_contract_txbytes(recent: B256, receive_key: &[u8], material: u64) ->
             }],
         )
         .unwrap(),
-        funding: ContractFunding::Unfunded {
-            recent_pcash_block_hash: recent,
-            valid_until_timestamp: 1_800_000_500,
-        },
+        recent_pcash_block_hash: recent,
+        valid_until_timestamp: 1_800_000_500,
     })
     .encode(PCASH_CHAIN_ID)
     .unwrap()
+}
+
+#[tokio::test]
+async fn reused_attachment_preserves_creation_provenance_through_rebuild_and_reorg() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("state.redb");
+    let cfg = NetworkConfig::new(
+        PCASH_CHAIN_ID,
+        L1_CHAIN_ID,
+        DEFAULT_INBOX,
+        GENESIS,
+        genesis_block().header.hash,
+    );
+    let inner = build_node(&path, &cfg).unwrap();
+    inner
+        .lock()
+        .unwrap()
+        .apply_block(&genesis_block(), &NoVerify)
+        .unwrap();
+    let recent = inner.lock().unwrap().state.canonical_tip().unwrap().hash;
+    let make = |seed| {
+        contract_txbytes(
+            0x914,
+            paid_private_value_section(recent, word(seed), 1_800_000_500, 0, CircuitWord::ZERO, 1),
+        )
+    };
+    let first = make(0x9140);
+    let second = make(0x9150);
+    let pcash_derive::AdmittedTransaction::PrivateValue(_, Some(check)) =
+        pcash_derive::AdmittedTransaction::decode(&first, PCASH_CHAIN_ID).unwrap()
+    else {
+        panic!("contract attachment")
+    };
+    let address = check.address().unwrap();
+    let first_block = inbox_batch_block(
+        GENESIS + 1,
+        B256::repeat_byte(0xd1),
+        genesis_block().header.hash,
+        vec![first.clone()],
+    );
+    let second_block = inbox_batch_block(
+        GENESIS + 2,
+        B256::repeat_byte(0xd2),
+        first_block.header.hash,
+        vec![second.clone()],
+    );
+    let first_result = inner
+        .lock()
+        .unwrap()
+        .apply_block(&first_block, &AcceptVerify)
+        .unwrap();
+    let second_result = inner
+        .lock()
+        .unwrap()
+        .apply_block(&second_block, &AcceptVerify)
+        .unwrap();
+    assert_eq!(
+        first_result.committed_boundary.block.transaction_results[0].account_creation,
+        1
+    );
+    assert_eq!(
+        second_result.committed_boundary.block.transaction_results[0].account_creation,
+        2
+    );
+    assert!(second_result.transaction_effects[0]
+        .accepted()
+        .unwrap()
+        .account
+        .is_none());
+    assert_eq!(inner.lock().unwrap().state.account_count(), 1);
+    let handle = NodeHandle::new(inner.clone());
+    let assert_original = || {
+        let pcash_rpc::ContractResultDto::Contract(contract) =
+            handle.get_contract(address).unwrap()
+        else {
+            panic!("contract material")
+        };
+        assert_eq!(contract.transaction.as_ref(), first.as_slice());
+    };
+    assert_original();
+    inner
+        .lock()
+        .unwrap()
+        .set_index_lifecycle(pcash_node::index::DerivedIndexLifecycle::Unavailable);
+    pcash_node::catch_up_derived_index(&path, &inner)
+        .await
+        .unwrap();
+    assert_original();
+    inner.lock().unwrap().rollback_to(GENESIS + 1).unwrap();
+    assert_original();
+    assert_eq!(inner.lock().unwrap().state.account_count(), 1);
+    inner.lock().unwrap().rollback_to(GENESIS).unwrap();
+    assert!(handle.get_account(address).unwrap().is_none());
+    let replacement = inbox_batch_block(
+        GENESIS + 1,
+        B256::repeat_byte(0xd3),
+        genesis_block().header.hash,
+        vec![second.clone()],
+    );
+    let result = inner
+        .lock()
+        .unwrap()
+        .apply_block(&replacement, &AcceptVerify)
+        .unwrap();
+    assert_eq!(
+        result.committed_boundary.block.transaction_results[0].account_creation,
+        1
+    );
+    let pcash_rpc::ContractResultDto::Contract(contract) = handle.get_contract(address).unwrap()
+    else {
+        panic!("replacement contract material")
+    };
+    assert_eq!(contract.transaction.as_ref(), second.as_slice());
 }
 
 #[tokio::test]
@@ -1617,7 +1729,7 @@ async fn unfunded_contract_material_receipts_rebuild_and_reorg_without_issuance(
         .unwrap();
     assert_eq!(transactions.items.len(), 2);
     for summary in &transactions.items {
-        assert_eq!(summary.funding_mode, Some(ContractFundingMode::Unfunded));
+        assert_eq!(summary.account_creation, 1);
         assert_eq!(summary.declared_open_fee_amount, None);
         assert_eq!(summary.declared_issuance_owner_commitment, None);
         assert_eq!(summary.issuance_route, pcash_rpc::IssuanceRoute::None);
@@ -1628,7 +1740,7 @@ async fn unfunded_contract_material_receipts_rebuild_and_reorg_without_issuance(
             .unwrap()
             .remove(0);
         assert!(receipt.accepted());
-        assert_eq!(receipt.funding_mode, Some(ContractFundingMode::Unfunded));
+        assert_eq!(receipt.account_creation, 1);
         assert_eq!(receipt.issuance_owner_commitment, None);
         assert_eq!(receipt.settled_open_fee_amount, U256::ZERO);
         assert_eq!(receipt.settled_issuance_amount, U256::ZERO);

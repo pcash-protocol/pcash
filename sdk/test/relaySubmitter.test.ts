@@ -129,7 +129,7 @@ function acceptedReceipt(): ReceiptResult {
     settledOpenFeeAmount: 0n,
     settledIssuanceAmount: 0n,
     kind: "privateValue",
-    fundingMode: null,
+    accountCreation: 0 as const,
     inclusion: {
       l1BlockNumber: 9n,
       l1BlockHash: L1_BLOCK_HASH,
@@ -430,7 +430,7 @@ describe("PrivateKeyRelaySubmitter", () => {
           settledOpenFeeAmount: 0n,
           settledIssuanceAmount: 0n,
           kind: "privateValue",
-          fundingMode: null,
+          accountCreation: 0 as const,
           inclusion: {
             l1BlockNumber: 9n,
             l1BlockHash: L1_BLOCK_HASH,
@@ -517,7 +517,7 @@ describe("PrivateKeyRelaySubmitter", () => {
           settledOpenFeeAmount: 0n,
           settledIssuanceAmount: 0n,
           kind: "privateValue",
-          fundingMode: null,
+          accountCreation: 0 as const,
           inclusion: {
             l1BlockNumber: 8n,
             l1BlockHash: ANCHOR_HASH,
@@ -546,7 +546,7 @@ describe("PrivateKeyRelaySubmitter", () => {
         settledOpenFeeAmount: 0n,
         settledIssuanceAmount: 0n,
         kind: "privateValue",
-        fundingMode: null,
+        accountCreation: 0 as const,
         inclusion: {
           l1BlockNumber: 9n,
           l1BlockHash: L1_BLOCK_HASH,

@@ -208,6 +208,7 @@ const senderView = (records: readonly DataRecord[]) => ({
   records: orderedRecords(records.filter(record => record.schema !== RECORD_SCHEMA.sentEnvelopes && record.schema !== RECORD_SCHEMA.sentOpenings)),
   sentEnvelopes: recordValue(records, sentEnvelopesSchema) ?? [],
   sentOpenings: recordValue(records, sentOpeningsSchema) ?? [],
+  directSendOpenings: [],
 });
 
 describe("arena writer input graph", () => {
@@ -295,7 +296,7 @@ describe("arena record lists", () => {
     const records: readonly DataRecord[] = [{ schema: RECORD_SCHEMA.memo, data: utf8("hello") }, assetDefinitionSchema.encode(definition), claimedSenderSchema.encode(0xabcdefn), ...applicationRecords];
     expect(decodeRecipientPayload(encodeRecords(records))).toEqual(orderedRecords(records));
     expect(decodeSenderPayload(encodeRecords(senderRecords), S).sentEnvelopes.map(entry => entry.slot)).toEqual([0, 3]);
-    expect(decodeSenderPayload(encodeRecords([]), S)).toEqual({ records: [], sentEnvelopes: [], sentOpenings: [] });
+    expect(decodeSenderPayload(encodeRecords([]), S)).toEqual({ records: [], sentEnvelopes: [], sentOpenings: [], directSendOpenings: [] });
     expect(decodeRecipientPayload(encodeRecords([{ schema: RECORD_SCHEMA.memo, data: new Uint8Array(0) }]))).toEqual([{ schema: RECORD_SCHEMA.memo, data: new Uint8Array(0) }]);
   });
 
@@ -369,7 +370,7 @@ describe("arena record lists", () => {
 
   it("drops an asset definition that does not decode, not the region", () => {
     expect(decodeRecipientPayload(recordsTogether(record(1, [9]), record(2, [0xff])))).toEqual(orderedRecords([{ schema: RECORD_SCHEMA.memo, data: Uint8Array.of(9) }]));
-    expect(decodeSenderPayload(record(2, [0xff]), S)).toEqual({ records: [], sentEnvelopes: [], sentOpenings: [] });
+    expect(decodeSenderPayload(record(2, [0xff]), S)).toEqual({ records: [], sentEnvelopes: [], sentOpenings: [], directSendOpenings: [] });
   });
 
   it("rejects malformed fixed-size records", () => {
@@ -669,6 +670,12 @@ describe("arena regions", () => {
 describe("arena binding", () => {
   const records: readonly DataRecord[] = [sentEnvelopesSchema.encode([{ slot: 0, sharedSecret: key(1), recipientAddress: 1n }])];
 
+  it("rejects contract creation as an arena context", () => {
+    // @ts-expect-error A proof-free contract creation has no arena.
+    const context = contextFor(S, { transactionType: 2 });
+    expect(() => arenaContextBytes(S, context)).toThrow("arena transaction type must be one of 0, 3");
+  });
+
   it("encodes the transaction context and derives an anchor and a body key from it per role", () => {
     const context = contextFor(S, { chainId: 0x01020304n, transactionType: 3, nullifiers: [1n, 2n, 3n, BN254_SCALAR_MODULUS - 1n] });
     const contextBytes = arenaContextBytes(S, context);
@@ -715,7 +722,6 @@ describe("arena binding", () => {
       contextFor(S, { nullifiers: [nullifiers[0]!, nullifiers[1]!, nullifiers[2]!, 1n] }),
       contextFor(S, { nullifiers: [nullifiers[1]!, nullifiers[0]!, nullifiers[2]!, nullifiers[3]!] }),
       contextFor(S, { transactionType: 3 }),
-      contextFor(S, { transactionType: 2 }),
       contextFor(S, { chainId: 8183n }),
     ]) {
       expect(openSenderRecords({ arena: built.arena, shape: S, context: other, outgoingKey })).toBeNull();
@@ -853,7 +859,7 @@ describe("arena allocation", () => {
     const cells = regionCells(built.arena, S, context, { role: "recipient", ikm: key(1), anchor: built.recipientAnchors.get(0)! });
     expect(new Set([...cells, 39]).size).toBe(40);
     expect(openRecipientRecords({ arena: built.arena, shape: S, context, sharedSecret: key(1), anchor: built.recipientAnchors.get(0)! })).toEqual(orderedRecords(recipient(exact)[0]!.records));
-    expect(openSenderRecords({ arena: built.arena, shape: S, context, outgoingKey })).toEqual({ records: [], sentEnvelopes: [], sentOpenings: [] });
+    expect(openSenderRecords({ arena: built.arena, shape: S, context, outgoingKey })).toEqual({ records: [], sentEnvelopes: [], sentOpenings: [], directSendOpenings: [] });
     expect(planArena({ shape: S, sender: 0, regions: [2498] }).fits).toBe(false);
     expect(() => buildArena({ shape: S, context, sender: { outgoingKey, records: [] }, recipients: recipient(exact + 1) }))
       .toThrow(/need 41 cells; the S arena has 40/);
@@ -1023,7 +1029,7 @@ describe("public segment", () => {
         expect(plan.allocation.publicCells).toBe(cells);
         const built = writeArena(plan);
         expect(readPublicRecords(built.arena)).toEqual(records);
-        if (sender !== undefined) expect(openSenderRecords({ ...built, shape: S, context, outgoingKey })).toEqual({ records: [], sentEnvelopes: [], sentOpenings: [] });
+        if (sender !== undefined) expect(openSenderRecords({ ...built, shape: S, context, outgoingKey })).toEqual({ records: [], sentEnvelopes: [], sentOpenings: [], directSendOpenings: [] });
       }
       expect(prepareArena({ shape: S, context, ...(sender === undefined ? {} : { sender }), recipients: [], public: publicOf(2526) }).allocation.fits).toBe(false);
     }

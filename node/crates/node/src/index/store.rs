@@ -69,6 +69,10 @@ fn write_contract_verification(
 fn replaced_receive_key(transaction: &Transaction) -> &[u8] {
     let key = match transaction {
         Transaction::UserAccountCreation(creation) => creation.receive_key(),
+        Transaction::PrivateValue(section) => match section.account_creation() {
+            Some(pcash_derive::AccountCreationAttachment::User(creation)) => creation.receive_key(),
+            _ => None,
+        },
         Transaction::UserAccountUpdate(UserAccountUpdate {
             receive_key_update: ReceiveKeyUpdate::Replace(key),
             ..
@@ -545,7 +549,7 @@ impl DerivedIndexStore {
                     has_open_fee: receipt.has_open_fee,
                     byte_size: receipt.byte_size,
                     kind: receipt.kind,
-                    funding_mode: receipt.funding_mode,
+                    account_creation: receipt.account_creation,
                     lifecycle_address: receipt.lifecycle_address,
                     output_leaf_start: receipt.output_leaf_start,
                     outputs_added: receipt.outputs_added,

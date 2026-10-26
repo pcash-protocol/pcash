@@ -27,7 +27,7 @@ describe.each([0, 1] as const)("ordinary all-dummy transfer profile %s", (shape)
   it.each([false, true])("accepts an ordinary all-dummy action (registered: %s)", async (registered) => {
     const { build } = allDummyFixture({ shape, registered });
     await expect(execute(build.buildKernelWitnessMap(application))).resolves.toBeDefined();
-    expect(build.publicInputs).toHaveLength(shape === 0 ? 18 : 73);
+    expect(build.publicInputs).toHaveLength(shape === 0 ? 19 : 74);
   });
   it("retains real spending and rejects unregistered mixed real/dummy inputs", async () => {
     const valid = allDummyFixture({ shape, registered: true, inputAmounts: [5n] }).build;

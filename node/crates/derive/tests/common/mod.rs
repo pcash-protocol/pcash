@@ -249,7 +249,7 @@ pub fn uniform_delivery_commitment(shape: PrivateValueShape, data: &[u8]) -> Cir
 
 /// Launch rules with empty stub VKs, for use with a scripted verifier.
 pub fn stub_rules() -> ProtocolRules {
-    ProtocolRules::new([vec![], vec![]], vec![], vec![])
+    ProtocolRules::new([vec![], vec![]], vec![])
 }
 
 /// A network anchored at L1 block 0 with the header hash every
@@ -312,6 +312,7 @@ fn section_txbytes(
         .all(|data| data.len() == OUTPUT_DATA_BYTES));
     let omitted = |offset: usize| {
         offset == 0
+            || offset == profile.public_inputs - 1
             || offset == profile.delivery_commitment_offset
             || (layout.omits_issuance_owner() && offset == profile.issuance_owner_offset)
     };
@@ -370,10 +371,6 @@ pub fn account_txbytes(
 /// the [`dummy_arena`]. `proof` must have the account-action size (both
 /// account layouts pin the same one) and every item `OUTPUT_DATA_BYTES`.
 pub fn private_value_section(pis: &[CircuitWord], proof: &[u8], output_data: &[&[u8]]) -> Vec<u8> {
-    assert_eq!(
-        SectionLayout::UserAccountUpdate.section_bytes(),
-        SectionLayout::ContractAccountCreation.section_bytes()
-    );
     section_txbytes(
         SectionLayout::UserAccountUpdate,
         pis,
@@ -418,6 +415,7 @@ pub fn section_words(
     pis.push(word(valid_until_timestamp));
     pis.push(CircuitWord::ZERO);
     pis.push(tagged_word(0x10, salt));
+    pis.push(CircuitWord::ZERO);
     pis
 }
 
@@ -442,29 +440,27 @@ pub fn zero_fee_section(
     )
 }
 
-/// An unfunded contract-account creation: the envelope, funding mode `0`,
-/// the recent block and deadline, then `body`.
+/// A standalone contract creation: envelope, recent block, deadline and body.
 pub fn unfunded_contract_txbytes(body: &[u8], recent: CircuitWord, deadline: u64) -> Vec<u8> {
     let mut b = vec![KIND_CONTRACT_ACCOUNT_CREATION];
     b.extend_from_slice(&PCASH_CHAIN_ID.to_be_bytes());
-    b.push(0);
     b.extend_from_slice(recent.as_slice());
     b.extend_from_slice(&deadline.to_be_bytes());
     b.extend_from_slice(body);
     b
 }
 
-/// A sponsored contract-account creation: the envelope, funding mode `1`, the
-/// sponsor's section (see [`private_value_section`]), then `body`.
-pub fn sponsored_contract_txbytes(body: &[u8], section: &[u8]) -> Vec<u8> {
-    assert_eq!(
-        section.len(),
-        SectionLayout::ContractAccountCreation.section_bytes()
-    );
-    let mut b = vec![KIND_CONTRACT_ACCOUNT_CREATION];
+/// A contract attachment on a private-value transaction. The fee-section
+/// fixture supplies zero issuance; the body follows the attachment tag.
+pub fn attached_contract_txbytes(body: &[u8], section: &[u8]) -> Vec<u8> {
+    let mut b = vec![KIND_PRIVATE_VALUE];
     b.extend_from_slice(&PCASH_CHAIN_ID.to_be_bytes());
-    b.push(1);
-    b.extend_from_slice(section);
+    b.push(0);
+    let issuance = (PrivateValueShape::S.profile().issuance_owner_offset - 2) * 32;
+    b.extend_from_slice(&section[..issuance]);
+    b.extend_from_slice(CircuitWord::ZERO.as_slice());
+    b.extend_from_slice(&section[issuance..]);
+    b.push(2);
     b.extend_from_slice(body);
     b
 }
@@ -472,12 +468,11 @@ pub fn sponsored_contract_txbytes(body: &[u8], section: &[u8]) -> Vec<u8> {
 /// The static body check of the contract creation `raw`, decoded as bytes
 /// admitted earlier.
 pub fn contract_body_check(raw: &[u8]) -> ContractBodyCheck {
-    let Ok(AdmittedTransaction::ContractAccountCreation(_, check)) =
-        AdmittedTransaction::decode(raw, PCASH_CHAIN_ID)
-    else {
-        panic!("a contract creation");
-    };
-    check
+    match AdmittedTransaction::decode(raw, PCASH_CHAIN_ID).unwrap() {
+        AdmittedTransaction::ContractAccountCreation(_, check)
+        | AdmittedTransaction::PrivateValue(_, Some(check)) => check,
+        _ => panic!("a contract creation"),
+    }
 }
 
 pub fn account_update_txbytes(
@@ -683,5 +678,6 @@ pub fn profile_txbytes_with_arena(
         output_data,
         arena,
     ));
+    b.push(0);
     b
 }

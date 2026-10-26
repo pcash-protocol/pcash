@@ -8,7 +8,7 @@ import type { RichSeedResult } from "./richSeed.ts";
 export async function verifySeedResultProofs(node: PcashNodeClient, seed: RichSeedResult): Promise<void> {
   const status = await node.status();
   const recent = BigInt(status.latestBlockHash);
-  const required = new Set(["S", "L", "update", "sponsored", "signed", "unfunded", "failed", "designatedIssuance", "posterOpenFee", "posterIssuance"]);
+  const required = new Set(["S", "L", "update", "attached", "signed", "unfunded", "failed", "designatedIssuance", "posterOpenFee", "posterIssuance"]);
   const numbers = new Set(seed.waves.flatMap((wave) => wave.carriers.map((carrier) => carrier.l1BlockNumber - seed.network.genesisL1Block)));
   const representatives = new Map(seed.canonicalEntries.filter(entry => entry.transactionId !== null).map(entry => [entry.l1BlockHash, entry.transactionId!]));
   for (const transactionId of representatives.values()) {
@@ -31,7 +31,10 @@ export async function verifySeedResultProofs(node: PcashNodeClient, seed: RichSe
       // Direct creations need carrier sender evidence; the seed's signed creations are self-contained.
       if (tx.kind === 1 && tx.authorization.kind === "direct") continue;
       verifySuccessfulTransactionStatement(proof, bytes, seed.network, { recentHash: recent, blockNumber: number, pcashTransactionIndex: BigInt(index) });
-      if (tx.kind === 0) required.delete(tx.shape === 0 ? "S" : "L");
+      if (tx.kind === 0) {
+        required.delete(tx.shape === 0 ? "S" : "L");
+        if (tx.accountCreation?.kind === "contract") required.delete("attached");
+      }
       else if (tx.kind === 3) {
         const substituted = bytes.slice();
         substituted[5] = substituted[5]! ^ 1;
@@ -39,7 +42,7 @@ export async function verifySeedResultProofs(node: PcashNodeClient, seed: RichSe
         required.delete("update");
       }
       else if (tx.kind === 1) required.delete("signed");
-      else required.delete(tx.funding.mode);
+      else required.delete("unfunded");
     }
     const payouts = await node.getBlockPayouts({ blockNumber: number, blockHash: block.hash });
     if (payouts === null) throw new Error("missing seeded payouts");

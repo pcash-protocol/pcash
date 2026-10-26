@@ -9,6 +9,7 @@ import { Config } from "../../sdk/src/bcfg/index.ts";
 import { Logger } from "../../sdk/src/blgr/index.ts";
 import { PCASH_CHAIN_ID, INBOX_ADDRESS } from "../../sdk/src/constants/networkProfile.ts";
 import { toolRoot } from "../../sdk/src/node/toolchain.ts";
+import { prepareWorktree } from "./worktree.mts";
 
 const logger = new Logger("info");
 await logger.open();
@@ -436,6 +437,7 @@ export async function assertBrowserL1Identity(
 
 async function prepare(service: DevService, env: NodeJS.ProcessEnv): Promise<void> {
   if (settings(env).bool("dev-prepared", false) || service === "anvil") return;
+  prepareWorktree(REPO_ROOT);
   if (service === "node" || service === "wallet") await runChecked("just", ["tools"], env);
   if (service === "wallet" || service === "relayer" || service === "web") {
     await runChecked("npm", ["run", "build:packages"], env);

@@ -57,9 +57,7 @@ function savedTransactionAnchor(entry: Uint8Array): bigint {
   const decoded = decodeTransaction(entry);
   if (decoded.kind === TX_KIND_PRIVATE_VALUE) return sectionPublicInput(decoded, 1);
   if (decoded.kind === TX_KIND_CONTRACT_ACCOUNT_CREATION) {
-    return decoded.funding.mode === "sponsored"
-      ? sectionPublicInput(decoded.funding.section, 1)
-      : bytesToBigInt(decoded.funding.recentPcashBlockHash);
+    return bytesToBigInt(decoded.recentPcashBlockHash);
   }
   if (decoded.kind === TX_KIND_USER_ACCOUNT_UPDATE) return sectionPublicInput(decoded.section, 1);
   return bytesToBigInt(decoded.recentPcashBlockHash);

@@ -4,10 +4,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use pcash_derive::{
-    contract_funding_mode, ContractFundingMode, KIND_CONTRACT_ACCOUNT_CREATION, KIND_PRIVATE_VALUE,
-    KIND_USER_ACCOUNT_UPDATE,
-};
+use pcash_derive::{KIND_PRIVATE_VALUE, KIND_USER_ACCOUNT_UPDATE};
 use pcash_metrics::{AdmissionOutcome, AdmissionSource, Metrics};
 use pcash_p2p::{
     CandidateOrigin, CanonicalHead, InventoryEntry, P2pConfig, P2pEvent, P2pHandle, PeerInfo,
@@ -201,15 +198,13 @@ impl PeerAdmissionBudgets {
     }
 }
 
-/// Whether the transaction may carry a proof, decided by the type tag and, for
-/// a contract creation, the funding byte alone, so a malformed candidate cannot
-/// bypass the proof budget. Only a contract creation that states the unfunded
-/// mode is exempt: it either decodes without a proof or fails to decode.
+/// Whether the transaction type carries a proof. The type tag charges the
+/// budget before decoding untrusted bytes.
 fn requires_expensive_proof(tx_bytes: &[u8]) -> bool {
     matches!(
         tx_bytes.first().copied(),
-        Some(KIND_PRIVATE_VALUE | KIND_USER_ACCOUNT_UPDATE | KIND_CONTRACT_ACCOUNT_CREATION)
-    ) && contract_funding_mode(tx_bytes) != Some(ContractFundingMode::Unfunded)
+        Some(KIND_PRIVATE_VALUE | KIND_USER_ACCOUNT_UPDATE)
+    )
 }
 
 pub struct RunningP2p {
@@ -897,26 +892,12 @@ mod tests {
         assert!(requires_expensive_proof(&[
             pcash_derive::KIND_PRIVATE_VALUE
         ]));
-        // A contract creation is classified by its funding byte at offset 5
-        // alone. Sponsored, unknown, and missing modes charge a token whether
-        // or not the rest decodes; only a stated unfunded mode is exempt.
-        let contract = |mode: &[u8], rest: &[u8]| {
-            let mut raw = vec![pcash_derive::KIND_CONTRACT_ACCOUNT_CREATION];
-            raw.extend_from_slice(&0u32.to_be_bytes());
-            raw.extend_from_slice(mode);
-            raw.extend_from_slice(rest);
-            raw
-        };
+        // Every standalone contract creation is proof-free, including malformed bytes.
         for rest in [&[][..], &[0x11; 40], &[0x22; 1000]] {
-            assert!(requires_expensive_proof(&contract(&[1], rest)));
-            assert!(requires_expensive_proof(&contract(&[2], rest)));
-            assert!(requires_expensive_proof(&contract(&[0xff], rest)));
-            assert!(!requires_expensive_proof(&contract(&[0], rest)));
+            let mut contract = vec![pcash_derive::KIND_CONTRACT_ACCOUNT_CREATION];
+            contract.extend_from_slice(rest);
+            assert!(!requires_expensive_proof(&contract));
         }
-        assert!(requires_expensive_proof(&contract(&[], &[])));
-        assert!(requires_expensive_proof(&[
-            pcash_derive::KIND_CONTRACT_ACCOUNT_CREATION
-        ]));
         assert!(!requires_expensive_proof(&[]));
         assert!(!requires_expensive_proof(&[0xff]));
     }

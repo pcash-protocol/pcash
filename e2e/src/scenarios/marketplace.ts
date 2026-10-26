@@ -1,3 +1,5 @@
+import { buildAuthorizedReferenceUserAccountCreation } from "@pcash/sdk/builders";
+import { encodeUserAccountCreation } from "@pcash/sdk/protocol";
 import { transactionIdentity as submissionIdentity } from "@pcash/sdk/protocol";
 import { setupPaymentRouter } from "@pcash/marketplace/tooling/paymentRouterSetup";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -15,6 +17,7 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import {
   addressHex,
+  buildExtendedCode,
   BN254_SCALAR_MODULUS,
   awaitAcceptedReceipt,
   awaitReceipt,
@@ -143,8 +146,7 @@ export interface MarketplaceScenarioContext {
   submitAndWait: (entry: Uint8Array, label: string) => Promise<MarketplaceSubmission>;
   /**
    * Publish exact bytes on Ethereum as the seller's own action and wait for
-   * canonical acceptance. A zero-fee contract creation pays no publisher, so
-   * the seller's wallet publishes it this way.
+   * canonical acceptance. Zero-fee seed fixtures use this route.
    */
   selfPublish: (entry: Uint8Array, label: string) => Promise<MarketplaceSubmission>;
   /** Persist irreversible-action identifiers before waiting for their receipts. */
@@ -467,20 +469,21 @@ async function openBuyer(context: MarketplaceScenarioContext, profile: PcashProf
 }
 
 async function publishContract(runtime: Runtime, offer: Offer, label: string): Promise<MarketplaceSubmission> {
-  const submission = await publishSponsoredContract(runtime, offer, label);
-  if (submission.kind !== "contractAccount") {
-    throw new Error(`${label} contract was accepted as ${submission.kind}, expected contractAccount`);
+  const submission = await publishAttachedContract(runtime, offer, label);
+  if (submission.kind !== "privateValue") {
+    throw new Error(`${label} contract was accepted as ${submission.kind}, expected privateValue`);
   }
   await waitForContract(runtime, offer);
   return submission;
 }
 
-/** A positive creation fee from the seller's notes pays whoever publishes it.
- * A zero-fee creation pays no publisher, so the seller publishes it itself. */
-async function publishSponsoredContract(runtime: Runtime, offer: Offer, label: string): Promise<MarketplaceSubmission> {
+/** Seed fixtures publish bodies separately; zero-fee fixtures self-publish. */
+async function publishAttachedContract(runtime: Runtime, offer: Offer, label: string): Promise<MarketplaceSubmission> {
   const selfPublished = runtime.context.openFeeAmount === 0n;
-  const created = await runtime.sellerWallet.sponsorContractCreation({
-    contract: { body: offer.l2ContractBody, address: offer.l2ContractAddress },
+  const created = await runtime.sellerWallet.send({
+    to: addressHex(runtime.context.seller.address),
+    amount: 0n,
+    accountCreation: { kind: "contract", body: offer.l2ContractBody },
     openFeeAmount: runtime.context.openFeeAmount,
     submission: {
       mode: selfPublished ? "l1" : "mempool",
@@ -490,16 +493,13 @@ async function publishSponsoredContract(runtime: Runtime, offer: Offer, label: s
 
         const accepted = await (selfPublished ? runtime.context.selfPublish : runtime.context.submitAndWait)(entry, `${label}:contract`);
         if (accepted.contentHash.toLowerCase() !== contentHash.toLowerCase()) {
-          throw new Error(`${label} sponsored contract submission returned the wrong content hash`);
+          throw new Error(`${label} attached contract submission returned the wrong content hash`);
         }
         return { accepted: true, queued: false, output: accepted };
       },
     },
     onPrepared: (contentHash, transactionHex) => runtime.context.checkpoint?.(`${label}:contract-prepared`, { contentHash, transactionHex }),
   });
-  if (BigInt(created.contractAddress) !== offer.l2ContractAddress) {
-    throw new Error(`${label} sponsored creation derived a different contract address`);
-  }
   const receipt = await awaitAcceptedReceipt(runtime.context.node, created.contentHash);
   const submission = (created.submission?.output as MarketplaceSubmission | undefined) ?? {
     contentHash: created.contentHash,
@@ -509,14 +509,15 @@ async function publishSponsoredContract(runtime: Runtime, offer: Offer, label: s
     outputLeafStart: receipt.outputLeafStart,
   };
   if (receipt.settledOpenFeeAmount !== runtime.context.openFeeAmount) {
-    throw new Error(`${label} sponsored contract creation did not settle the relayer fee`);
+    throw new Error(`${label} attached contract creation did not settle the relayer fee`);
   }
   return submission;
 }
 
-async function fundOffer(runtime: Runtime, offer: Offer, contractSubmission: MarketplaceSubmission, amount: bigint, label: string, verificationTarget: Exclude<VerificationTarget, "spent">): Promise<FundedOffer> {
+async function fundOffer(runtime: Runtime, offer: Offer, contractSubmission: MarketplaceSubmission | undefined, amount: bigint, label: string, verificationTarget: Exclude<VerificationTarget, "spent">): Promise<FundedOffer> {
   const funding = await runtime.sellerWallet.send({
-      to: addressHex(offer.l2ContractAddress),
+      to: buildExtendedCode({ chainId: runtime.network.pcashChainId, address: offer.l2ContractAddress, mlKemPublicKey: offer.l2ContractWallet.mlKemPublicKey! }),
+      accountCreation: { kind: "contract", body: offer.l2ContractBody },
       amount,
       openFeeAmount: runtime.context.openFeeAmount,
       validUntilTimestamp: MAX_TRANSFER_TIMESTAMP,
@@ -564,7 +565,7 @@ async function fundOffer(runtime: Runtime, offer: Offer, contractSubmission: Mar
     amount: bytes32Hex(escrow.amount),
   };
   const { catalogPublication, verification } = await publishFetchAndVerify(runtime, publication, label, verificationTarget);
-  return { offer, publication, contractSubmission, fundingSubmission, escrow, catalogPublication, verification };
+  return { offer, publication, contractSubmission: contractSubmission ?? fundingSubmission, fundingSubmission, escrow, catalogPublication, verification };
 }
 
 async function fetchCatalogPublication(runtime: Runtime, expected: OfferPublication): Promise<OfferPublication> {
@@ -682,6 +683,31 @@ async function routerCarriedClaim(
   return receipt;
 }
 
+/** An escrow claim registers its fresh recipient in the same result. */
+async function buyAndRegister(runtime: Runtime, publication: OfferPublication): Promise<{ claimContentHash: Hex; paymentHash: Hex }> {
+  const { context } = runtime;
+  const { node, buyer } = context;
+  const snapshot = await readClaimSnapshot(node, publication);
+  const validUntilTimestamp = BigInt(publication.terms.deadlineT);
+  const creation = await buildAuthorizedReferenceUserAccountCreation({
+    chainId: runtime.network.pcashChainId, network: runtime.network, wallet: buyer,
+    defaultRuleSecrets: buyer.defaultUserRuleSecrets, mlKemPublicKey: buyer.mlKemPublicKey!,
+    recentPcashBlockHash: snapshot.account.boundary.blockHash, validUntilTimestamp,
+  }, context.buyerSigner);
+  const accountCreation = { kind: "user" as const, transactionBytes: encodeUserAccountCreation(runtime.network.pcashChainId, creation.body) };
+  const proved = await proveCarriedClaim({ node, offer: publication, buyer, snapshot, accountCreation,
+    buyerReceiveKey: async () => buyer.mlKemPublicKey!, prover: nativeMarketplaceProver() });
+  const dryRun = await node.checkRawTransaction(hexToBytes(proved.transactionHex), paymentCarrier(publication, purchaseCommitment(publication, buyer)));
+  if (dryRun.outcome !== "succeeded") throw new Error(`fresh-recipient claim dry-ran as ${dryRun.outcome}`);
+  const call = buildBuyCall(publication, buyer, { anchor: snapshot.anchor,
+    notAfter: claimNotAfter(snapshot.timestamp, validUntilTimestamp), batch: claimBatch(await node.status(), buyer, proved.transactionHex) });
+  const payment = await sendRouterCall(node, [context.l1RpcUrl], privateKeyL1Signer(context.buyerL1PrivateKey, context.l1RpcUrl, {
+    maxFeePerGas: context.maxFeePerGas, maxPriorityFeePerGas: context.maxPriorityFeePerGas,
+  }), call);
+  await awaitAcceptedReceipt(node, proved.contentHash);
+  return { claimContentHash: proved.contentHash, paymentHash: payment.hash };
+}
+
 async function runPaidLifecycle(runtime: Runtime, funded: FundedOffer): Promise<{
   evidence: MarketplaceScenarioEvidence["paidOffer"];
   duplicateClaimOutcome: string;
@@ -694,7 +720,14 @@ async function runPaidLifecycle(runtime: Runtime, funded: FundedOffer): Promise<
   const { node, buyer } = runtime.context;
   // The client proves the claim, dry-runs it with the router's carrier context,
   // and sends one buy() that pays and carries it.
-  const bought = await runtime.buyer.controller.buy(publication);
+  const unregistered = (await node.getAccountProof(addressHex(buyer.address))).status === "notFound";
+  const bought = unregistered
+    ? await buyAndRegister(runtime, publication)
+    : await runtime.buyer.controller.buy(publication);
+  if (unregistered) {
+    if ((await node.getAccountProof(addressHex(buyer.address))).status !== "present") throw new Error("claim did not register its recipient");
+    await runtime.buyer.wallet.sync();
+  }
   const claim = await routerCarriedClaim(runtime, bought.claimContentHash, "buy");
   if (claim.inclusion.l1TransactionHash.toLowerCase() !== bought.paymentHash.toLowerCase()) {
     throw new Error("the marketplace claim was not carried by the payment that bought it");
@@ -1056,9 +1089,7 @@ export async function runPaidMarketplaceTrade(
     claimApplicationVkHash: CLAIM_APPLICATION_VK_HASH,
     reclaimApplicationVkHash: RECLAIM_APPLICATION_VK_HASH,
   });
-  const contract = await publishContract(runtime, offer, "trade");
-  await synchronizeSellerInventory(runtime);
-  const funded = await fundOffer(runtime, offer, contract, amount, "trade", "payable");
+  const funded = await fundOffer(runtime, offer, undefined, amount, "trade", "payable");
   return (await runPaidLifecycle(runtime, funded)).evidence;
 }
 
@@ -1172,17 +1203,15 @@ export async function runMarketplaceScenarioFlow(context: MarketplaceScenarioCon
         })
       : undefined;
 
-    // Every creation carries a proof, so the publications are sequential:
-    // concurrent ones contend for the node's verifier, and a paid creation
-    // spends notes the next one needs back as change.
-    const paidContractSubmission = await publishContract(runtime, paidOffer, "paid-offer");
-    await synchronizeSellerInventory(runtime);
-    const unpaidContractSubmission = await publishContract(runtime, unpaidOffer, "unpaid-offer");
-    await synchronizeSellerInventory(runtime);
-    const recoveredContractSubmission = recoveredOffer === undefined
-      ? undefined
-      : await publishContract(runtime, recoveredOffer, "recovered-offer");
-    if (recoveredOffer !== undefined) await synchronizeSellerInventory(runtime);
+    // Seed waves and source-only runs publish bodies before funding is released.
+    const publishBeforeFunding = context.sourceVerificationOnly === true || context.deferFundingInventory === true;
+    const paidContractSubmission = publishBeforeFunding ? await publishContract(runtime, paidOffer, "paid-offer") : undefined;
+    if (publishBeforeFunding) await synchronizeSellerInventory(runtime);
+    const unpaidContractSubmission = publishBeforeFunding ? await publishContract(runtime, unpaidOffer, "unpaid-offer") : undefined;
+    if (publishBeforeFunding) await synchronizeSellerInventory(runtime);
+    const recoveredContractSubmission = publishBeforeFunding && recoveredOffer !== undefined
+      ? await publishContract(runtime, recoveredOffer, "recovered-offer") : undefined;
+    if (publishBeforeFunding && recoveredOffer !== undefined) await synchronizeSellerInventory(runtime);
     if (context.publishSourceVerification !== undefined) {
       await context.publishSourceVerification(paidOffer);
       await context.publishSourceVerification(unpaidOffer);
@@ -1205,7 +1234,7 @@ export async function runMarketplaceScenarioFlow(context: MarketplaceScenarioCon
       ? Promise.resolve(undefined)
       : fundedUnpaidPromise.then(async () => {
           await synchronizeSellerInventory(runtime);
-          return fundOffer(runtime, recoveredOffer, recoveredContractSubmission!, amount, "recovered-offer", "payable");
+          return fundOffer(runtime, recoveredOffer, recoveredContractSubmission, amount, "recovered-offer", "payable");
         });
     const paidLifecyclePromise = runPaidLifecycle(runtime, fundedPaid);
     const [fundedUnpaid, fundedRecovered, paidLifecycle] = await Promise.all([
@@ -1273,11 +1302,10 @@ export async function runMarketplaceScenario(
     sourceVerificationOnly?: boolean;
   } = {},
 ): Promise<void> {
-  // Publishing a contract proves a sponsorship, so the seller needs an
-  // account even when this variant funds no notes and pays no fee.
+  // Source-only fixtures publish bodies; ordinary offers create and fund atomically.
   await setupUserWallets(fixture, options.sourceVerificationOnly === true
     ? { actors: ["S", "M"], accounts: ["S"], funded: [] }
-    : { actors: ["S", "M"], accounts: ["M"], funded: ["S"] });
+    : { actors: ["S", "M"], accounts: [], funded: ["S"] });
   const S = fixture.actors.S!;
   const M = fixture.actors.M!;
   if (options.sourceVerificationOnly !== true) {

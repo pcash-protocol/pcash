@@ -17,9 +17,7 @@ export function marketplaceActivityStatus(item: MarketplaceActivityItem, transac
   if (transaction === "absent") return "Needs submission";
   switch (item.phase) {
     case "recovery-unavailable": return "Waiting for escrow funding to reappear";
-    case "contract-missing": return "Escrow needs contract recovery";
     case "draft": return "Needs proving";
-    case "contract-submitted": return "Needs submission";
     case "funding-submitted":
     case "finalizing": return "Needs publishing";
     case "publication-failed": return item.publication.escrow ? "Needs publishing" : "Needs retry";
@@ -39,7 +37,7 @@ export function marketplaceActivityStatus(item: MarketplaceActivityItem, transac
   }
 }
 
-export type MarketplaceUiAction = "restore-contract" | "resume-purchase" | "check-payment" | "resume-publication" | "reclaim" | "refresh";
+export type MarketplaceUiAction = "resume-purchase" | "check-payment" | "resume-publication" | "reclaim" | "refresh";
 
 /**
  * A saved trade that waits on its owner: an unfinished listing or purchase,
@@ -68,7 +66,6 @@ export function marketplaceActivityAction(
   nowSeconds = BigInt(Math.floor(Date.now() / 1_000)),
 ): MarketplaceUiAction | undefined {
   if (item.phase === "recovery-unavailable") return "refresh";
-  if (item.phase === "contract-missing") return "restore-contract";
   if (item.role === "buyer") {
     if (item.phase === "payment-ambiguous") return "check-payment";
     // A purchase whose payment was never sent cannot start once buying closes.
@@ -82,7 +79,7 @@ export function marketplaceActivityAction(
     && item.publication.escrow !== undefined
     && marketplaceReclaimAvailable(item.publication, nowSeconds)
   ) return "reclaim";
-  if (["draft", "contract-submitted", "funding-submitted", "finalizing", "publication-failed"].includes(item.phase)) return "resume-publication";
+  if (["draft", "funding-submitted", "finalizing", "publication-failed"].includes(item.phase)) return "resume-publication";
   return item.phase === "reclaim-accepted" ? "refresh" : undefined;
 }
 
@@ -90,7 +87,6 @@ export function marketplaceActionLabel(
   item: MarketplaceActivityItem,
   action: MarketplaceUiAction,
 ): string {
-  if (action === "restore-contract") return "Recover escrow contract";
   if (action === "resume-purchase") return "Continue";
   if (action === "check-payment") return "Continue";
   if (action === "resume-publication") return "Continue";

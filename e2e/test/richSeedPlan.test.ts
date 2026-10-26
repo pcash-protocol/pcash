@@ -44,11 +44,11 @@ describe("rich seed wave plan", () => {
     expect(() => seedWave(SEED_WAVE_COUNT)).toThrow(/unknown rich seed wave/);
   });
 
-  it("creates contracts in both funding modes", () => {
+  it("creates contracts standalone and as value attachments", () => {
     const outcomes = new Map(seedWave(0).entries.map((entry) => [entry.label, entry.expectedOutcome]));
     expect(outcomes.get("private-vault:contract")).toBe("succeeded");
     expect(outcomes.get("unfunded-vault:contract")).toBe("succeeded");
-    expect(outcomes.get("control-contract-funding-mode")).toBe("unknownFundingMode");
+    expect(outcomes.get("control-contract-attachment-tag")).toBe("unknownAccountCreationTag");
   });
 
   it("waits for actor O before constructing its duplicate-account control", () => {
@@ -76,6 +76,7 @@ describe("rich seed wave plan", () => {
       "outputCapacity",
       "accountCapacity",
       "accountRevisionExhausted",
+      "accountCreationMismatch",
     ];
     const expected = [
       "succeeded", "publicInputNotInField", "recentPcashBlockNotInWindow", "expired", "notYetValid",
@@ -89,7 +90,7 @@ describe("rich seed wave plan", () => {
     for (const outcome of notSeeded) expect(outcomes.has(outcome as never), outcome).toBe(false);
     const exclusions = [...outcomes].filter(isItemExclusion);
     expect(exclusions.sort()).toEqual([
-      "empty", "itemTooLarge", "trailingBytes", "truncated", "unknownFundingMode", "unknownKind", "unknownPublishesNkRootFlag",
+      "empty", "itemTooLarge", "trailingBytes", "truncated", "unknownAccountCreationTag", "unknownKind", "unknownPublishesNkRootFlag",
       "unknownReceiveKeyMode", "unknownYParity", "wrongChainId",
     ]);
     expect(seedWave(2).entries.find((entry) => entry.label === "control-item-too-large")?.carrier).toBe("blobs");

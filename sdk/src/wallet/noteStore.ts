@@ -10,7 +10,7 @@ import { PRIVATE_VALUE_PROFILES } from "@pcash/sdk/constants";
 // live only in wallet persistence and are never printed.
 
 import { maxSpendable, selectNotes } from "./coinSelect.ts";
-import type { AssetDefinition, PayoutComponent, PayoutSourceKind } from "@pcash/sdk/protocol";
+import { decodeDirectSendOpening, directSendOutputKey, type AssetDefinition, type PayoutComponent, type PayoutSourceKind } from "@pcash/sdk/protocol";
 import { numberToHex } from "viem";
 import { fixedHex, fromHex, sameHex, toHex } from "@pcash/sdk/utils";
 import { fieldToHex } from "@pcash/sdk/crypto";
@@ -86,6 +86,8 @@ export interface StoredSentOutput {
   memo?: string;
   /** The recipient's note named this wallet as its sender. */
   senderIncluded: boolean;
+  /** A direct send: this wallet delivers the opening to its owner by link. */
+  directSend?: true;
   /** The transaction's sender-region application records, repeated on each output it sent. */
   senderRecords?: StoredSenderRecords;
   blockNumber: string;
@@ -154,6 +156,8 @@ export interface PendingNoteFundedTransfer {
     owner: string;
     noteSecret: string;
   } | null;
+  /** A direct send's slot-0 note secret, until scanning recovers it from the sender region. */
+  directSendNoteSecret?: string;
   /** The Ethereum transaction carrying these exact bytes, once the connected
    *  wallet returned its hash. Absent while the transfer awaits approval. */
   l1TxHash?: string;
@@ -207,9 +211,6 @@ export interface PendingAssetAction {
   /** The authenticated selected issuance recipient; absent on the open
    *  route. A resumed action reports this saved destination. */
   issuanceRecipient?: string;
-  /** Receipt kind that settles this action; a sponsored contract creation
-   *  spends notes like an asset action but lands as a contractAccount receipt. */
-  receiptKind?: "privateValue" | "contractAccount";
   inputs: Array<{
     nullifier: string;
     spentCommitment: string | null;
@@ -272,12 +273,10 @@ export interface PendingUserAccountUpdate {
   } | null;
 }
 
-/** Exact type-0x01 bytes retained before the browser requests an irreversible
- * Ethereum broadcast. These bytes and their content hash are public. */
+/** Exact standalone creation or attached setup action retained before submission. */
 export interface PendingUserAccountCreation {
   contentHash: string;
-  /** Exact ordinary mining transaction, also tracked independently in pending transfers. */
-  miningTransactionHex?: string;
+  publication: "self" | "open";
   transactionHex: string;
   address: string;
   pcashChainId: string;
@@ -291,7 +290,7 @@ export interface PendingUserAccountCreation {
   recentPcashBlockNumber: string;
   recentPcashBlockHash: string;
   validUntilTimestamp: string;
-  state: "prepared" | "broadcast-requested" | "l1-submitted";
+  state: "prepared" | "mempool-submitted" | "broadcast-requested" | "l1-submitted";
   l1TxHash: string | null;
   preparedAtUnixMs: string;
 }
@@ -332,7 +331,17 @@ export interface StoredTransactionRecords {
   public: StoredSenderRecords;
 }
 
+/** A direct send this wallet owns, imported from its link or read back from the wallet's own record. */
+export interface StoredDirectSendOpening {
+  /** The encoded opening (0x-hex). */
+  opening: string;
+  /** The canonical transaction whose sender region records this opening, while one is known. */
+  record?: { leafIndex: string; blockNumber: string; blockHash: string };
+}
+
 export interface WalletFileData {
+  /** Cancels setup work already signing or proving in another browser tab. */
+  accountActivationRevision?: string;
   /** The address of the wallet account this file belongs to (0x-hex). */
   address: string;
   /** Immutable chain/genesis identity. A file is never silently rebound. */
@@ -358,6 +367,8 @@ export interface WalletFileData {
   paymentHistory?: StoredPaymentHistory[];
   sentOutputs?: StoredSentOutput[];
   transactionRecords?: StoredTransactionRecords[];
+  /** Notes without an envelope, which scanning cannot find: it matches their funding outputs instead. */
+  directSendOpenings?: StoredDirectSendOpening[];
   pendingAssetActions?: PendingAssetAction[];
   bulkJobs?: BulkJob[];
   /** First/current canonical observation of each recoverable bulk-job chunk set. */
@@ -392,6 +403,7 @@ export const WALLET_SECTION_KEYS: Partial<Record<WalletArrayField, (value: never
   },
   paymentHistory: (value) => (value as StoredPaymentHistory).contentHash.toLowerCase(),
   transactionRecords: (value) => (value as StoredTransactionRecords).transactionId.toLowerCase(),
+  directSendOpenings: (value) => directSendOutputKey(decodeDirectSendOpening(fromHex((value as StoredDirectSendOpening).opening))),
   sentOutputs: (value) => {
     const output = value as StoredSentOutput;
     return `${output.transactionId.toLowerCase()}:${output.slot}`;
@@ -534,7 +546,7 @@ export function markPendingNoteFundedTransferL1Submitted(data: WalletFileData, c
 /** Setup mining of a pending activation that no Ethereum transaction has carried yet. */
 export function unsentSetupMining(data: WalletFileData, transfer: PendingNoteFundedTransfer): boolean {
   return transfer.l1TxHash === undefined && (data.pendingUserAccountCreations ?? [])
-    .some((creation) => creation.miningTransactionHex !== undefined && sameHex(creation.miningTransactionHex, transfer.transactionHex));
+    .some((creation) => sameHex(creation.transactionHex, transfer.transactionHex));
 }
 
 /** Reserve every private input nullifier for one exact asset action. */
@@ -581,9 +593,7 @@ export function addPendingUserAccountCreation(
 
 /** The setup mining transfer carried in the activation's Ethereum transaction. */
 function setupMiningTransfer(data: WalletFileData, creation: PendingUserAccountCreation): PendingNoteFundedTransfer | undefined {
-  const transactionHex = creation.miningTransactionHex;
-  return transactionHex === undefined ? undefined
-    : data.pendingNoteFundedTransfers?.find((transfer) => sameHex(transfer.transactionHex, transactionHex));
+  return data.pendingNoteFundedTransfers?.find((transfer) => sameHex(transfer.transactionHex, creation.transactionHex));
 }
 
 export function markPendingUserAccountCreationBroadcastRequested(
@@ -627,6 +637,7 @@ export function markPendingUserAccountCreationSubmitted(
  * with it; once broadcast, the mine settles or expires on its own nullifiers.
  */
 export function removePendingUserAccountCreation(data: WalletFileData, address: string): void {
+  data.accountActivationRevision = (BigInt(data.accountActivationRevision ?? "0") + 1n).toString();
   const pending = pendingUserAccountCreation(data, address);
   if (pending === null) return;
   const mining = setupMiningTransfer(data, pending);

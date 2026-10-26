@@ -97,12 +97,10 @@ pub const ACCOUNT_KIND_USER: u8 = 0;
 pub const ACCOUNT_KIND_CONTRACT: u8 = 1;
 
 /// Number of 32-byte public inputs consumed by each proof verifier. A
-/// user-account update and a sponsored contract-account creation verify the
-/// profile-S private-value statement plus one word: the account update
-/// commitment, or the derived contract address.
+/// user-account update verifies the profile-S private-value statement plus
+/// its account update commitment.
 pub const PRIVATE_VALUE_PUBLIC_INPUTS: usize = S.public_inputs;
 pub const USER_ACCOUNT_UPDATE_PUBLIC_INPUTS: usize = PRIVATE_VALUE_PUBLIC_INPUTS + 1;
-pub const CONTRACT_CREATION_PUBLIC_INPUTS: usize = PRIVATE_VALUE_PUBLIC_INPUTS + 1;
 
 /// Number of verifier-input words a profile-S private-value section serializes;
 /// a fee section omits the issuance owner and serializes one fewer. The
@@ -123,14 +121,13 @@ pub const WIRE_PROOF_BYTES: usize = 22_432;
 pub enum SectionLayout {
     PrivateValue(PrivateValueShape),
     UserAccountUpdate,
-    ContractAccountCreation,
 }
 
 impl SectionLayout {
     pub const fn shape(self) -> PrivateValueShape {
         match self {
             Self::PrivateValue(shape) => shape,
-            Self::UserAccountUpdate | Self::ContractAccountCreation => PrivateValueShape::S,
+            Self::UserAccountUpdate => PrivateValueShape::S,
         }
     }
 
@@ -157,14 +154,13 @@ impl SectionLayout {
     }
 }
 
-/// `txBytes` of a type-`0x00` transaction: the envelope, the profile byte, and the
-/// section.
+/// Type-`0x00` bytes with no attachment: envelope, profile, section and zero tag.
 pub const fn private_value_tx_bytes(shape: PrivateValueShape) -> usize {
-    6 + SectionLayout::PrivateValue(shape).section_bytes()
+    7 + SectionLayout::PrivateValue(shape).section_bytes()
 }
 pub const PRIVATE_VALUE_MAX_TX_BYTES: usize = {
-    let small = private_value_tx_bytes(PrivateValueShape::S);
-    let large = private_value_tx_bytes(PrivateValueShape::L);
+    let small = private_value_tx_bytes(PrivateValueShape::S) + CONTRACT_MAX_BODY_BYTES;
+    let large = private_value_tx_bytes(PrivateValueShape::L) + CONTRACT_MAX_BODY_BYTES;
     if small > large {
         small
     } else {
@@ -199,11 +195,9 @@ pub const CONTRACT_FUNCTION_BYTES: usize = 1 + 32 * 2;
 /// selectors populated. `functionSetCommitment` is derived, never serialized.
 pub const CONTRACT_MAX_BODY_BYTES: usize =
     1 + 32 + 1 + ML_KEM768_PUBLIC_KEY_LEN + 1 + 255 * CONTRACT_FUNCTION_BYTES;
-/// Worst-case `txBytes` for a contract-account creation, which is sponsored:
-/// the envelope, the funding mode, the sponsor's private-value section, and
-/// the body.
-pub const CONTRACT_MAX_TX_BYTES: usize =
-    1 + 4 + 1 + SectionLayout::ContractAccountCreation.section_bytes() + CONTRACT_MAX_BODY_BYTES;
+/// Worst-case standalone contract creation: envelope, recent block, deadline,
+/// and body.
+pub const CONTRACT_MAX_TX_BYTES: usize = 1 + 4 + 32 + 8 + CONTRACT_MAX_BODY_BYTES;
 
 /// Largest valid transaction shape understood by this binary, used by RPC and
 /// P2P transport guards. This is narrower than the consensus parsing-sanity
@@ -326,8 +320,6 @@ pub struct ProtocolRules {
     pub private_value_hiding_kernel_vks: [Vec<u8>; 2],
     /// Compiled user-account-update hiding-kernel VK for type `0x03`.
     pub user_account_update_hiding_kernel_vk: Vec<u8>,
-    /// Compiled contract-creation hiding-kernel VK for a sponsored type `0x02`.
-    pub contract_creation_hiding_kernel_vk: Vec<u8>,
     /// Forks this binary compiles, ascending by activation timestamp. Empty
     /// keeps the node on the launch transaction-type set alone.
     pub fork_schedule: Vec<ForkActivation>,
@@ -338,13 +330,11 @@ impl ProtocolRules {
     pub fn new(
         private_value_hiding_kernel_vks: [Vec<u8>; 2],
         user_account_update_hiding_kernel_vk: Vec<u8>,
-        contract_creation_hiding_kernel_vk: Vec<u8>,
     ) -> Self {
         validate_base_schedule_invariants();
         Self {
             private_value_hiding_kernel_vks,
             user_account_update_hiding_kernel_vk,
-            contract_creation_hiding_kernel_vk,
             fork_schedule: Vec::new(),
         }
     }
@@ -496,9 +486,7 @@ impl ProtocolRules {
                     KIND_USER_ACCOUNT_UPDATE => {
                         Some(keccak256(&self.user_account_update_hiding_kernel_vk))
                     }
-                    KIND_CONTRACT_ACCOUNT_CREATION => {
-                        Some(keccak256(&self.contract_creation_hiding_kernel_vk))
-                    }
+                    KIND_CONTRACT_ACCOUNT_CREATION => None,
                     KIND_USER_ACCOUNT_CREATION => None,
                     other => Some(keccak256(self.fork_hiding_kernel_vk(other).unwrap_or_else(
                         || panic!("accepted transaction type {other} has no VK mapping"),
@@ -572,7 +560,7 @@ mod tests {
     const FORK_KIND: u8 = 0x40;
 
     fn base_rules() -> ProtocolRules {
-        ProtocolRules::new([vec![0xaa], vec![]], vec![0xcc], vec![0xdd])
+        ProtocolRules::new([vec![0xaa], vec![]], vec![0xcc])
     }
 
     #[test]
@@ -584,10 +572,9 @@ mod tests {
     fn launch_prefix_commits_to_every_launch_hiding_kernel_vk() {
         let launch = base_rules().base_fork_schedule_prefix_hash();
         for rules in [
-            ProtocolRules::new([vec![0xab], vec![]], vec![0xcc], vec![0xdd]),
-            ProtocolRules::new([vec![0xaa], vec![0x01]], vec![0xcc], vec![0xdd]),
-            ProtocolRules::new([vec![0xaa], vec![]], vec![0xcd], vec![0xdd]),
-            ProtocolRules::new([vec![0xaa], vec![]], vec![0xcc], vec![0xde]),
+            ProtocolRules::new([vec![0xab], vec![]], vec![0xcc]),
+            ProtocolRules::new([vec![0xaa], vec![0x01]], vec![0xcc]),
+            ProtocolRules::new([vec![0xaa], vec![]], vec![0xcd]),
         ] {
             assert_ne!(rules.base_fork_schedule_prefix_hash(), launch);
         }
@@ -693,16 +680,15 @@ mod tests {
     #[test]
     fn fork_schedule_prefix_distinguishes_addition_from_replacement() {
         let activation_timestamp = 100;
-        let rules =
-            ProtocolRules::new([vec![0xaa], vec![]], vec![0xcc], vec![0xdd]).with_fork(fork_at(
-                activation_timestamp,
-                vec![
-                    KIND_USER_ACCOUNT_CREATION,
-                    KIND_CONTRACT_ACCOUNT_CREATION,
-                    KIND_USER_ACCOUNT_UPDATE,
-                    FORK_KIND,
-                ],
-            ));
+        let rules = ProtocolRules::new([vec![0xaa], vec![]], vec![0xcc]).with_fork(fork_at(
+            activation_timestamp,
+            vec![
+                KIND_USER_ACCOUNT_CREATION,
+                KIND_CONTRACT_ACCOUNT_CREATION,
+                KIND_USER_ACCOUNT_UPDATE,
+                FORK_KIND,
+            ],
+        ));
         let base = rules.transaction_type_vk_mapping(&BASE_TRANSACTION_TYPES);
         let replacement = rules.transaction_type_vk_mapping(&[
             KIND_USER_ACCOUNT_CREATION,
@@ -755,9 +741,9 @@ mod tests {
             KIND_USER_ACCOUNT_UPDATE,
             FORK_KIND,
         ];
-        let one = ProtocolRules::new([vec![0xaa], vec![]], vec![0xcc], vec![0xdd])
+        let one = ProtocolRules::new([vec![0xaa], vec![]], vec![0xcc])
             .with_fork(fork_at(100, first_types.clone()));
-        let two = ProtocolRules::new([vec![0xaa], vec![]], vec![0xcc], vec![0xdd])
+        let two = ProtocolRules::new([vec![0xaa], vec![]], vec![0xcc])
             .with_fork(fork_at(100, first_types))
             // Only the first fork introduces FORK_KIND; a second one that
             // rebound its verifier would be an invalid schedule.
@@ -802,7 +788,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "strictly ascending")]
     fn fork_schedule_rejects_a_non_ascending_activation() {
-        ProtocolRules::new([vec![0xaa], vec![]], vec![0xcc], vec![0xdd])
+        ProtocolRules::new([vec![0xaa], vec![]], vec![0xcc])
             .with_fork(fork_at(200, BASE_TRANSACTION_TYPES.to_vec()))
             .with_fork(fork_at(100, BASE_TRANSACTION_TYPES.to_vec()));
     }
@@ -823,7 +809,7 @@ mod tests {
         let mut second = fork_at(200, second_types);
         second.hiding_kernel_vks = vec![(0x41, vec![0xbb])];
 
-        let rules = ProtocolRules::new([vec![0x01], vec![]], vec![0x03], vec![0x02])
+        let rules = ProtocolRules::new([vec![0x01], vec![]], vec![0x03])
             .with_fork(first)
             .with_fork(second);
 
@@ -841,7 +827,7 @@ mod tests {
         let mut second = fork_at(200, accepted);
         second.hiding_kernel_vks = vec![(0x40, vec![0xbb])];
 
-        let _ = ProtocolRules::new([vec![0x01], vec![]], vec![0x03], vec![0x02])
+        let _ = ProtocolRules::new([vec![0x01], vec![]], vec![0x03])
             .with_fork(first)
             .with_fork(second);
     }
@@ -857,13 +843,13 @@ mod tests {
     /// stop.
     #[test]
     fn the_checkpoint_prefix_commits_to_batch_encodings_only_once_activated() {
-        let base_only = ProtocolRules::new([vec![0xaa], vec![]], vec![0xcc], vec![0xdd])
+        let base_only = ProtocolRules::new([vec![0xaa], vec![]], vec![0xcc])
             .with_fork(fork_at(100, BASE_TRANSACTION_TYPES.to_vec()));
 
         let mut retired = fork_at(100, BASE_TRANSACTION_TYPES.to_vec());
         retired.accepted_batch_versions = Vec::new();
         let without_encoding =
-            ProtocolRules::new([vec![0xaa], vec![]], vec![0xcc], vec![0xdd]).with_fork(retired);
+            ProtocolRules::new([vec![0xaa], vec![]], vec![0xcc]).with_fork(retired);
 
         for ts in [0, 50, 99] {
             assert_eq!(

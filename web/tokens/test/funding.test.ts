@@ -36,7 +36,7 @@ function fakeChain(notes: number, options: { accepted?: boolean; landAfterReads?
   let started = chunks.length > 0;
   const wallet = {
     bulkJobs: async () => started ? [{ jobId: "job", assetId: 5n, recipients, chunks: structuredClone(chunks) }] : [],
-    startBulkJob: async () => { started = true; return { jobId: "job" }; },
+    startBulkJob: async (intent: { accountCreation: { kind: string; body: Uint8Array } }) => { assert.deepEqual(intent.accountCreation, { kind: "contract", body: Uint8Array.of(1, 2, 3) }); started = true; return { jobId: "job" }; },
     sync: async () => undefined,
     runBulkJobStep: async ({ chunkIndex }: { chunkIndex?: number }) => {
       steps.push(chunkIndex);
@@ -68,7 +68,7 @@ async function fund(chain: ReturnType<typeof fakeChain>, notes: number, jobId?: 
   await store.update("drop", () => ({ kind: "drop", key: "drop" } as DropRecord));
   const rt = { wallet: chain.wallet, node: chain.node, prover: {}, store, pollIntervalMs: 0, pollMaxAttempts: 10, now: () => 0 } as unknown as TokensRuntime;
   return fundContractNotes(rt, "drop", {
-    contract: CONTRACT,
+    contract: { address: CONTRACT, body: Uint8Array.of(1, 2, 3) },
     assetId: 5n,
     notes: Array.from({ length: notes }, (_, index) => ({ noteSecret: BigInt(index + 1), amount: 1n })),
     jobId,

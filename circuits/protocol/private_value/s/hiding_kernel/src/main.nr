@@ -26,6 +26,7 @@ fn main(
     valid_until_timestamp: pub Field,
     carrier_context_hash: pub Field,
     events_commitment: pub Field,
+    account_creation_commitment: pub Field,
     transaction_statement: call_data(0) [Field; S_PUBLIC_INPUTS],
     kernel_vk: KernelVerificationKey,
 ) {
@@ -49,6 +50,7 @@ fn main(
             valid_until_timestamp,
             carrier_context_hash,
             events_commitment,
+            account_creation_commitment,
         ],
         transaction_statement,
         kernel_vk,

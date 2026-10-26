@@ -6,7 +6,6 @@ import {
   RECEIVE_KEY_OPERATION_CLEAR,
   RECEIVE_KEY_OPERATION_KEEP,
   RECEIVE_KEY_OPERATION_REPLACE,
-  TX_KIND_CONTRACT_ACCOUNT_CREATION,
   TX_KIND_PRIVATE_VALUE,
   TX_KIND_USER_ACCOUNT_UPDATE,
   WIRE_PROOF_BYTES,
@@ -123,8 +122,8 @@ describe("user account update builder", () => {
     expect(build.publicInputs[14]).toBe(0n);
     expect(build.publicInputs[15]).toBe(1_000_000n);
     expect(build.publicInputs[16]).toBe(0n);
-    expect(build.publicInputs[18]).toBe(build.accountUpdateCommitment);
-    expect(build.payment.publicInputs).toHaveLength(18);
+    expect(build.publicInputs[19]).toBe(build.accountUpdateCommitment);
+    expect(build.payment.publicInputs).toHaveLength(19);
     expect(build.actionCommitment).toBe(accountUpdateActionCommitment(
       DEFAULT_NETWORK_CONFIG.pcashChainId,
       build.payment.privateValueCommitment,
@@ -240,16 +239,15 @@ describe("user account update builder", () => {
     });
     const build = prepareUserAccountUpdate({ ...params(), sender: { outgoingKey } });
     // The change returns to the account, so nothing is recorded as paid.
-    expect(read(build, TX_KIND_USER_ACCOUNT_UPDATE)).toEqual({ records: [], sentEnvelopes: [], sentOpenings: [] });
+    expect(read(build, TX_KIND_USER_ACCOUNT_UPDATE)).toEqual({ records: [], sentEnvelopes: [], sentOpenings: [], directSendOpenings: [] });
     expect(read(build, TX_KIND_PRIVATE_VALUE)).toBeNull();
-    expect(read(build, TX_KIND_CONTRACT_ACCOUNT_CREATION)).toBeNull();
     expect(decodePayload(decryptEnvelope(wallet.mlKemSecretKey!, build.payment.outputData[0]!)!, {
       chainId: DEFAULT_NETWORK_CONFIG.pcashChainId,
     }).amount).toBe(900n);
     expect(read(prepareUserAccountUpdate(params()), TX_KIND_USER_ACCOUNT_UPDATE)).toBeNull();
     const zeroFee = { ...params(), sender: { outgoingKey } };
     delete zeroFee.fee;
-    expect(read(prepareUserAccountUpdate(zeroFee), TX_KIND_USER_ACCOUNT_UPDATE)).toEqual({ records: [], sentEnvelopes: [], sentOpenings: [] });
+    expect(read(prepareUserAccountUpdate(zeroFee), TX_KIND_USER_ACCOUNT_UPDATE)).toEqual({ records: [], sentEnvelopes: [], sentOpenings: [], directSendOpenings: [] });
   });
 
   it("rebuilds the fee section only from the prior arena and output data together", () => {

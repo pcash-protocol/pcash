@@ -5,8 +5,7 @@
     reason = "tests use direct assertions for fixture setup"
 )]
 //! Transaction codec tests: frozen byte layouts, every structural edge case,
-//! and encode/decode round trips for every transaction type and contract
-//! funding mode.
+//! and encode/decode round trips for every transaction type and attachment.
 //!
 //! A round trip alone cannot catch the encoder and decoder agreeing on a wrong
 //! layout, so the frozen tests place every field at a literal offset and the
@@ -22,11 +21,10 @@ use alloy_primitives::Address;
 use pcash_derive::params::private_value_tx_bytes;
 use pcash_derive::private_value_profiles::PrivateValueShape;
 use pcash_derive::{
-    contract_funding_mode, AccountCreationAuthorization, ContractAccountCreation, ContractBody,
-    ContractFunction, ContractFunding, ContractFundingMode, EncodeError, ParseError,
-    PrivateValueSection, ReceiveKey, ReceiveKeyUpdate, SectionLayout, Transaction,
-    UserAccountCreation, UserAccountUpdate, ACCOUNT_MAX_TX_BYTES, CONTRACT_MAX_BODY_BYTES,
-    CONTRACT_MAX_TX_BYTES, FUNDING_MODE_OFFSET, ML_KEM768_PUBLIC_KEY_LEN, OUTPUT_DATA_BYTES,
+    AccountCreationAttachment, AccountCreationAuthorization, ContractAccountCreation, ContractBody,
+    ContractFunction, EncodeError, ParseError, PrivateValueSection, ReceiveKey, ReceiveKeyUpdate,
+    SectionLayout, Transaction, UserAccountCreation, UserAccountUpdate, ACCOUNT_MAX_TX_BYTES,
+    CONTRACT_MAX_BODY_BYTES, CONTRACT_MAX_TX_BYTES, ML_KEM768_PUBLIC_KEY_LEN, OUTPUT_DATA_BYTES,
     USER_ACCOUNT_UPDATE_MAX_TX_BYTES,
 };
 use pcash_state::CircuitWord;
@@ -37,13 +35,12 @@ const KEY_LEN: usize = ML_KEM768_PUBLIC_KEY_LEN;
 const PV_S: SectionLayout = SectionLayout::PrivateValue(S);
 const PV_L: SectionLayout = SectionLayout::PrivateValue(L);
 const UPDATE: SectionLayout = SectionLayout::UserAccountUpdate;
-const CONTRACT: SectionLayout = SectionLayout::ContractAccountCreation;
-const LAYOUTS: [SectionLayout; 4] = [PV_S, PV_L, UPDATE, CONTRACT];
+const CONTRACT: SectionLayout = PV_S;
+const LAYOUTS: [SectionLayout; 3] = [PV_S, PV_L, UPDATE];
 const OTHER_CHAIN_ID: u32 = PCASH_CHAIN_ID + 1;
-/// Where a contract body starts: after the envelope, the funding mode, and
-/// the mode's fixed-size payload.
-const UNFUNDED_BODY: usize = 46;
-const SPONSORED_BODY: usize = 31_615;
+/// Contract bodies follow either a standalone anchor or a value section and tag.
+const UNFUNDED_BODY: usize = 45;
+const ATTACHED_BODY: usize = 31_648;
 
 /// [`assert_roundtrip_on`] the test network.
 #[track_caller]
@@ -296,13 +293,14 @@ fn contract_body(
     }
 }
 
-fn sponsored(body: ContractBody, mut section: PrivateValueSection) -> Transaction {
+fn attached(body: ContractBody, mut section: PrivateValueSection) -> Transaction {
     let issuance_owner = section.shape().profile().issuance_owner_offset;
     *section.public_input_mut(issuance_owner).unwrap() = CircuitWord::ZERO;
-    Transaction::ContractAccountCreation(ContractAccountCreation {
-        body,
-        funding: ContractFunding::Sponsored(section),
-    })
+    Transaction::PrivateValue(
+        section
+            .with_account_creation(AccountCreationAttachment::Contract(body))
+            .unwrap(),
+    )
 }
 
 fn unfunded_with(
@@ -312,10 +310,8 @@ fn unfunded_with(
 ) -> Transaction {
     Transaction::ContractAccountCreation(ContractAccountCreation {
         body,
-        funding: ContractFunding::Unfunded {
-            recent_pcash_block_hash,
-            valid_until_timestamp,
-        },
+        recent_pcash_block_hash,
+        valid_until_timestamp,
     })
 }
 
@@ -325,12 +321,17 @@ fn unfunded(body: ContractBody) -> Transaction {
 
 /// Where the body of a contract creation's encoding starts.
 fn body_offset(transaction: &Transaction) -> usize {
-    let Transaction::ContractAccountCreation(creation) = transaction else {
-        panic!("type {:#04x} has no contract body", transaction.kind())
-    };
-    match creation.funding {
-        ContractFunding::Unfunded { .. } => UNFUNDED_BODY,
-        ContractFunding::Sponsored(_) => SPONSORED_BODY,
+    match transaction {
+        Transaction::ContractAccountCreation(_) => UNFUNDED_BODY,
+        Transaction::PrivateValue(section)
+            if matches!(
+                section.account_creation(),
+                Some(AccountCreationAttachment::Contract(_))
+            ) =>
+        {
+            private_value_tx_bytes(section.shape())
+        }
+        _ => panic!("transaction has no contract body"),
     }
 }
 
@@ -341,9 +342,6 @@ fn carrier(layout: SectionLayout, section: PrivateValueSection) -> Transaction {
         SectionLayout::UserAccountUpdate => {
             Transaction::UserAccountUpdate(update(ReceiveKeyUpdate::Keep, section))
         }
-        SectionLayout::ContractAccountCreation => {
-            sponsored(contract_body(false, None, vec![function(1)]), section)
-        }
     }
 }
 
@@ -351,10 +349,6 @@ fn carried_section(transaction: &Transaction) -> &PrivateValueSection {
     match transaction {
         Transaction::PrivateValue(section) => section,
         Transaction::UserAccountUpdate(update) => &update.section,
-        Transaction::ContractAccountCreation(ContractAccountCreation {
-            funding: ContractFunding::Sponsored(section),
-            ..
-        }) => section,
         _ => panic!("type {:#04x} carries no section", transaction.kind()),
     }
 }
@@ -376,7 +370,7 @@ fn private_value_s_layout_is_frozen() {
         &arena,
     ));
 
-    let expected = Layout::new(31_647)
+    let expected = Layout::new(31_648)
         .put(0, &[0x00])
         .put(1, &PCASH_CHAIN_ID.to_be_bytes())
         .put(5, &[0x00])
@@ -403,6 +397,7 @@ fn private_value_s_layout_is_frozen() {
         .put(26_589, &output_data[3])
         .put(27_802, &output_data[4])
         .put(29_015, &arena)
+        .put(31_647, &[0])
         .done();
 
     assert_frozen(&transaction, &expected);
@@ -423,7 +418,7 @@ fn private_value_l_layout_is_frozen() {
         &arena,
     ));
 
-    let mut expected = Layout::new(80_198)
+    let mut expected = Layout::new(80_199)
         .put(0, &[0x00])
         .put(1, &PCASH_CHAIN_ID.to_be_bytes())
         .put(5, &[0x01])
@@ -444,7 +439,7 @@ fn private_value_l_layout_is_frozen() {
     for (slot, data) in output_data.iter().enumerate() {
         expected = expected.put(24_710 + 1_213 * slot, data);
     }
-    expected = expected.put(63_526, &arena);
+    expected = expected.put(63_526, &arena).put(80_198, &[0]);
 
     assert_frozen(&transaction, &expected.done());
 }
@@ -576,78 +571,69 @@ fn user_account_update_layout_is_frozen() {
 
 #[test]
 fn contract_creation_layouts_are_frozen() {
-    assert_eq!(SPONSORED_BODY, 6 + CONTRACT.section_bytes());
     let functions = || vec![function(0x07), function(0xfe)];
-    // The envelope and funding mode, then the mode's payload, then the body at
-    // `at`. A receive key moves everything after it by its length.
-    let layout = |len: usize, mode: u8, at: usize, flag: u8, key: Option<&[u8]>| {
+    let body_layout = |layout: Layout, at: usize, flag: u8, key: Option<&[u8]>| {
         let shift = key.map_or(0, <[u8]>::len);
-        let layout = Layout::new(len)
-            .put(0, &[0x02])
-            .put(1, &PCASH_CHAIN_ID.to_be_bytes())
-            .put(5, &[mode])
+        let layout = layout
             .put(at, &[flag])
             .put(at + 1, tagged_word(0x0f, 6).as_slice());
         let layout = match key {
-            None => layout.put(at + 33, &[0x00]),
-            Some(key) => layout.put(at + 33, &[0x01]).put(at + 34, key),
+            None => layout.put(at + 33, &[0]),
+            Some(key) => layout.put(at + 33, &[1]).put(at + 34, key),
         };
         layout
-            .put(at + 34 + shift, &[0x02])
-            .put(at + 35 + shift, &[0x07])
-            .put(at + 36 + shift, tagged_word(0x0d, 0x07).as_slice())
-            .put(at + 68 + shift, tagged_word(0x0e, 0x07).as_slice())
+            .put(at + 34 + shift, &[2])
+            .put(at + 35 + shift, &[7])
+            .put(at + 36 + shift, tagged_word(0x0d, 7).as_slice())
+            .put(at + 68 + shift, tagged_word(0x0e, 7).as_slice())
             .put(at + 100 + shift, &[0xfe])
             .put(at + 101 + shift, tagged_word(0x0d, 0xfe).as_slice())
             .put(at + 133 + shift, tagged_word(0x0e, 0xfe).as_slice())
     };
-
     let words = Words::distinct(S);
-    let proof = full_proof(CONTRACT, 0x77);
+    let proof = full_proof(PV_S, 0x77);
     let output_data = full_output_data(S);
     let arena = full_arena(S);
     let section = section_of(S, PCASH_CHAIN_ID, &words, &proof, &output_data, &arena);
-    let transaction = sponsored(contract_body(true, None, functions()), section);
-    let expected = layout(31_780, 0x01, 31_615, 0x01, None)
-        .put(6, words.recent.as_slice())
-        .put(38, words.nullifiers[0].as_slice())
-        .put(70, words.nullifiers[1].as_slice())
-        .put(102, words.nullifiers[2].as_slice())
-        .put(134, words.nullifiers[3].as_slice())
-        .put(166, words.bodies[0].as_slice())
-        .put(198, words.bodies[1].as_slice())
-        .put(230, words.bodies[2].as_slice())
-        .put(262, words.bodies[3].as_slice())
-        .put(294, words.bodies[4].as_slice())
-        .put(326, words.open_fee.as_slice())
-        .put(358, words.not_before.as_slice())
-        .put(390, words.valid_until.as_slice())
-        .put(422, words.carrier_context_hash.as_slice())
-        .put(454, words.events_commitment.as_slice())
-        .put(486, &proof)
-        .put(22_918, &output_data[0])
-        .put(24_131, &output_data[1])
-        .put(25_344, &output_data[2])
-        .put(26_557, &output_data[3])
-        .put(27_770, &output_data[4])
-        .put(28_983, &arena)
-        .done();
-    assert_frozen(&transaction, &expected);
+    let transaction = attached(contract_body(true, None, functions()), section);
+    let mut expected = Layout::new(31_813)
+        .put(0, &[0])
+        .put(1, &PCASH_CHAIN_ID.to_be_bytes())
+        .put(5, &[0]);
+    for (index, word) in words.wire().iter().enumerate() {
+        let word = if index == 11 {
+            CircuitWord::ZERO
+        } else {
+            *word
+        };
+        expected = expected.put(6 + 32 * index, word.as_slice());
+    }
+    expected = expected.put(518, &proof);
+    for (slot, data) in output_data.iter().enumerate() {
+        expected = expected.put(22_950 + 1_213 * slot, data);
+    }
+    expected = expected.put(29_015, &arena).put(31_647, &[2]);
+    assert_frozen(&transaction, &body_layout(expected, 31_648, 1, None).done());
 
     let deadline = [0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18];
-    let transaction = unfunded(contract_body(true, None, functions()));
-    let expected = layout(211, 0x00, 46, 0x01, None)
-        .put(6, tagged_word(0x08, 3).as_slice())
-        .put(38, &deadline)
-        .done();
-    assert_frozen(&transaction, &expected);
-
-    let transaction = unfunded(contract_body(false, Some(key()), functions()));
-    let expected = layout(1_395, 0x00, 46, 0x00, Some(key().as_slice()))
-        .put(6, tagged_word(0x08, 3).as_slice())
-        .put(38, &deadline)
-        .done();
-    assert_frozen(&transaction, &expected);
+    for (len, flag, receive_key) in [(210, 1, None), (1_394, 0, Some(key()))] {
+        let transaction = unfunded(contract_body(flag != 0, receive_key.clone(), functions()));
+        let expected = Layout::new(len)
+            .put(0, &[2])
+            .put(1, &PCASH_CHAIN_ID.to_be_bytes())
+            .put(5, tagged_word(0x08, 3).as_slice())
+            .put(37, &deadline);
+        assert_frozen(
+            &transaction,
+            &body_layout(
+                expected,
+                45,
+                flag,
+                receive_key.as_deref().map(<[u8; KEY_LEN]>::as_slice),
+            )
+            .done(),
+        );
+    }
 }
 
 // ---- cross-checks against the independent builders in `common` ------------
@@ -770,8 +756,8 @@ fn encoder_matches_the_hand_written_contract_builders() {
         let data: Vec<&[u8]> = section.output_data().iter().map(Vec::as_slice).collect();
         let section_bytes = private_value_section(&section.public_inputs(), &section.proof, &data);
         assert_frozen(
-            &sponsored(contract(), section),
-            &sponsored_contract_txbytes(&body, &section_bytes),
+            &attached(contract(), section),
+            &attached_contract_txbytes(&body, &section_bytes),
         );
     }
 }
@@ -802,7 +788,7 @@ fn every_type_round_trips_at_the_chain_id_extremes() {
                 AccountCreationAuthorization::DirectL1,
             )),
             Transaction::UserAccountUpdate(update(ReceiveKeyUpdate::Keep, fee(UPDATE))),
-            sponsored(body(), fee(CONTRACT)),
+            attached(body(), fee(CONTRACT)),
             unfunded_with(body(), word(1), 2),
         ] {
             let bytes = assert_roundtrip_on(&transaction, pcash_chain_id);
@@ -841,7 +827,9 @@ fn private_value_words_are_preserved_raw() {
             };
             assert_eq!(decoded.public_inputs().len(), profile.public_inputs);
             for (index, word) in decoded.public_inputs().iter().enumerate() {
-                let derived = index == 0 || index == profile.delivery_commitment_offset;
+                let derived = index == 0
+                    || index == profile.delivery_commitment_offset
+                    || index == profile.account_creation_commitment_offset;
                 if !derived {
                     assert_eq!(
                         *word,
@@ -888,7 +876,7 @@ fn private_value_words_are_preserved_raw() {
             words.carrier_context_hash
         );
         assert_eq!(
-            distinct.public_inputs()[profile.public_inputs - 1],
+            distinct.public_inputs()[profile.public_inputs - 2],
             words.events_commitment
         );
         assert_roundtrip(&Transaction::PrivateValue(distinct));
@@ -903,13 +891,9 @@ fn each_section_layout_decodes_only_at_its_exact_size() {
     // Items carry no length, so this size alone places every item boundary.
     assert_eq!(OUTPUT_DATA_BYTES, 1_213);
     // (layout, bytes of its carrier outside the section, section bytes)
-    for (layout, outside, section_bytes) in [
-        (PV_S, 6, 31_641),
-        (PV_L, 6, 80_192),
-        (UPDATE, 90, 31_609),
-        // Envelope and funding mode, then a 100-byte body after the section.
-        (CONTRACT, 106, 31_609),
-    ] {
+    for (layout, outside, section_bytes) in
+        [(PV_S, 7, 31_641), (PV_L, 7, 80_192), (UPDATE, 90, 31_609)]
+    {
         let shape = layout.shape();
         let profile = shape.profile();
         assert_eq!(layout.section_bytes(), section_bytes);
@@ -958,7 +942,7 @@ fn each_section_layout_decodes_only_at_its_exact_size() {
                 .unwrap();
                 let bytes = carrier(layout, altered).encode(PCASH_CHAIN_ID).unwrap();
                 let error = Transaction::decode(&bytes, PCASH_CHAIN_ID).err();
-                if layout == CONTRACT {
+                if matches!(layout, SectionLayout::PrivateValue(_)) {
                     assert!(error.is_some(), "{layout:?}");
                 } else {
                     assert_eq!(error, Some(expected), "{layout:?}");
@@ -1152,20 +1136,10 @@ fn contract_creation_edge_cases_round_trip() {
                     || contract_body(publishes_nk_root, receive_key.clone(), functions.clone());
                 let body_len = 35 + key_bytes + 65 * functions.len();
 
-                for (transaction, mode, payload) in [
-                    (unfunded(body()), ContractFundingMode::Unfunded, 40),
-                    (
-                        sponsored(body(), section(CONTRACT)),
-                        ContractFundingMode::Sponsored,
-                        CONTRACT.section_bytes(),
-                    ),
-                ] {
+                for transaction in [unfunded(body()), attached(body(), section(CONTRACT))] {
                     let bytes = assert_roundtrip(&transaction);
-                    assert_eq!(bytes.len(), 6 + payload + body_len);
-                    assert_eq!(bytes[FUNDING_MODE_OFFSET], mode as u8);
-                    assert_eq!(contract_funding_mode(&bytes), Some(mode));
                     let body_at = body_offset(&transaction);
-                    assert_eq!(body_at, 6 + payload);
+                    assert_eq!(bytes.len(), body_at + body_len);
                     assert_eq!(bytes[body_at], u8::from(publishes_nk_root));
                     assert_eq!(bytes[body_at + 33], u8::from(receive_key.is_some()));
                 }
@@ -1184,56 +1158,73 @@ fn contract_creation_edge_cases_round_trip() {
                 CircuitWord::repeat_byte(filler),
                 valid_until_timestamp,
             ));
-            assert_eq!(bytes[38..46], valid_until_timestamp.to_be_bytes());
+            assert_eq!(bytes[37..45], valid_until_timestamp.to_be_bytes());
         }
     }
 
     let largest_body = || contract_body(true, Some(key()), all_selectors());
     let largest = assert_roundtrip(&unfunded(largest_body()));
-    assert_eq!(largest.len(), 17_840);
-    assert_eq!(largest.len() - UNFUNDED_BODY, CONTRACT_MAX_BODY_BYTES);
-    let largest = assert_roundtrip(&sponsored(largest_body(), section(CONTRACT)));
     assert_eq!(largest.len(), CONTRACT_MAX_TX_BYTES);
-    assert_eq!(largest.len() - SPONSORED_BODY, CONTRACT_MAX_BODY_BYTES);
+    assert_eq!(largest.len() - UNFUNDED_BODY, CONTRACT_MAX_BODY_BYTES);
+    let largest = assert_roundtrip(&attached(largest_body(), section(CONTRACT)));
+    assert_eq!(
+        largest.len(),
+        private_value_tx_bytes(S) + CONTRACT_MAX_BODY_BYTES
+    );
+    assert_eq!(largest.len() - ATTACHED_BODY, CONTRACT_MAX_BODY_BYTES);
 }
 
-/// The funding byte names its mode without decoding, and only for a contract
-/// creation.
 #[test]
-fn contract_funding_mode_reads_only_the_mode_byte() {
-    let body = || contract_body(false, None, vec![function(1)]);
-    let unfunded = unfunded(body()).encode(PCASH_CHAIN_ID).unwrap();
-    let sponsored = sponsored(body(), section(CONTRACT))
-        .encode(PCASH_CHAIN_ID)
-        .unwrap();
-    assert_eq!(
-        contract_funding_mode(&unfunded),
-        Some(ContractFundingMode::Unfunded)
-    );
-    assert_eq!(
-        contract_funding_mode(&sponsored),
-        Some(ContractFundingMode::Sponsored)
-    );
-    // The six-byte prefix decides it, whatever follows.
-    assert_eq!(
-        contract_funding_mode(&sponsored[..=FUNDING_MODE_OFFSET]),
-        Some(ContractFundingMode::Sponsored)
-    );
-    assert_eq!(
-        contract_funding_mode(&unfunded[..FUNDING_MODE_OFFSET]),
-        None
-    );
-    for mode in 2..=u8::MAX {
-        let mut unknown = unfunded.clone();
-        unknown[FUNDING_MODE_OFFSET] = mode;
-        assert_eq!(contract_funding_mode(&unknown), None);
-        assert_eq!(ContractFundingMode::from_wire_byte(mode), None);
+fn attached_contract_has_its_tag_after_the_section() {
+    let body = contract_body(false, None, vec![function(1)]);
+    let transaction = attached(body, section(PV_S));
+    let bytes = assert_roundtrip(&transaction);
+    assert_eq!(bytes[0], 0);
+    assert_eq!(bytes[ATTACHED_BODY - 1], 2);
+    assert!(matches!(
+        carried_section(&transaction).account_creation(),
+        Some(AccountCreationAttachment::Contract(_))
+    ));
+}
+
+#[test]
+fn signed_user_attachments_keep_the_complete_creation_payload() {
+    for layout in [PV_S, PV_L] {
+        for receive_key in [None, Some(key())] {
+            let creation = creation(receive_key, signature());
+            let standalone = Transaction::UserAccountCreation(creation.clone())
+                .encode(PCASH_CHAIN_ID)
+                .unwrap();
+            let attached = section(layout)
+                .with_account_creation(AccountCreationAttachment::User(creation.clone()))
+                .unwrap();
+            let commitment = attached.account_creation_commitment();
+            assert_ne!(commitment, CircuitWord::ZERO);
+            let bytes = assert_roundtrip(&Transaction::PrivateValue(attached));
+            let tag = 6 + layout.section_bytes();
+            assert_eq!(bytes[tag], 1);
+            assert_eq!(&bytes[tag + 1..], &standalone[5..]);
+            let Transaction::PrivateValue(decoded) =
+                Transaction::decode(&bytes, PCASH_CHAIN_ID).unwrap()
+            else {
+                panic!("value transaction")
+            };
+            assert_eq!(decoded.account_creation_commitment(), commitment);
+            assert_eq!(
+                decoded.account_creation(),
+                Some(&AccountCreationAttachment::User(creation))
+            );
+        }
     }
-    let account_update =
-        Transaction::UserAccountUpdate(update(ReceiveKeyUpdate::Keep, section(UPDATE)))
-            .encode(PCASH_CHAIN_ID)
-            .unwrap();
-    assert_eq!(contract_funding_mode(&account_update), None);
+    assert_eq!(
+        section(PV_S)
+            .with_account_creation(AccountCreationAttachment::User(creation(
+                None,
+                AccountCreationAuthorization::DirectL1
+            )))
+            .err(),
+        Some(EncodeError::DirectCreationAttachment)
+    );
 }
 
 // ---- constructors ---------------------------------------------------------
@@ -1273,7 +1264,7 @@ fn constructors_build_the_form_decoding_returns() {
                 contract_body(publishes_nk_root, receive_key.clone(), vec![function(3)])
             );
             assert_roundtrip(&unfunded(body.clone()));
-            assert_roundtrip(&sponsored(body, section(CONTRACT)));
+            assert_roundtrip(&attached(body, section(CONTRACT)));
         }
     }
 }
@@ -1366,8 +1357,8 @@ fn function_count_must_fit_its_prefix_byte() {
     let body = ContractBody::new(false, word(1), None, functions(255)).unwrap();
     let bytes = assert_roundtrip(&unfunded(body.clone()));
     assert_eq!(bytes[UNFUNDED_BODY + 34], 255);
-    let bytes = assert_roundtrip(&sponsored(body, section(CONTRACT)));
-    assert_eq!(bytes[SPONSORED_BODY + 34], 255);
+    let bytes = assert_roundtrip(&attached(body, section(CONTRACT)));
+    assert_eq!(bytes[ATTACHED_BODY + 34], 255);
 
     // 256 functions would wrap the count byte to zero and leave 256 records
     // of trailing bytes.
@@ -1386,8 +1377,8 @@ fn function_count_must_fit_its_prefix_byte() {
         Some(error.clone())
     );
     assert_eq!(
-        sponsored(body, section(CONTRACT))
-            .encode(PCASH_CHAIN_ID)
+        section(CONTRACT)
+            .with_account_creation(AccountCreationAttachment::Contract(body))
             .err(),
         Some(error)
     );
@@ -1412,8 +1403,8 @@ fn transactions_of_every_layout() -> Vec<Transaction> {
         Transaction::UserAccountUpdate(update(ReceiveKeyUpdate::Keep, section(UPDATE))),
         Transaction::UserAccountUpdate(update(ReceiveKeyUpdate::Clear, section(UPDATE))),
         Transaction::UserAccountUpdate(update(ReceiveKeyUpdate::Replace(key()), section(UPDATE))),
-        sponsored(with_key(), section(CONTRACT)),
-        sponsored(without_key(), section(CONTRACT)),
+        attached(with_key(), section(CONTRACT)),
+        attached(without_key(), section(CONTRACT)),
         unfunded(with_key()),
         unfunded(without_key()),
     ]
@@ -1427,7 +1418,22 @@ type Selector = (usize, u8, fn(u8) -> ParseError);
 fn selectors(transaction: &Transaction, len: usize) -> Vec<Selector> {
     let mut out = vec![(0, 4, ParseError::UnknownKind as fn(u8) -> ParseError)];
     match transaction {
-        Transaction::PrivateValue(_) => out.push((5, 2, ParseError::UnknownPrivateValueShape)),
+        Transaction::PrivateValue(section) => {
+            out.push((5, 2, ParseError::UnknownPrivateValueShape));
+            out.push((
+                6 + SectionLayout::PrivateValue(section.shape()).section_bytes(),
+                3,
+                ParseError::UnknownAccountCreationTag,
+            ));
+            if matches!(
+                section.account_creation(),
+                Some(AccountCreationAttachment::Contract(_))
+            ) {
+                let body = body_offset(transaction);
+                out.push((body, 2, ParseError::UnknownPublishesNkRootFlag));
+                out.push((body + 33, 2, ParseError::UnknownReceiveKeyMode));
+            }
+        }
         Transaction::UserAccountCreation(creation) => {
             out.push((5, 2, ParseError::UnknownAuthorizationMode));
             out.push((70, 2, ParseError::UnknownReceiveKeyMode));
@@ -1438,7 +1444,6 @@ fn selectors(transaction: &Transaction, len: usize) -> Vec<Selector> {
         Transaction::UserAccountUpdate(_) => out.push((57, 3, ParseError::UnknownReceiveKeyMode)),
         Transaction::ContractAccountCreation(_) => {
             let body = body_offset(transaction);
-            out.push((FUNDING_MODE_OFFSET, 2, ParseError::UnknownFundingMode));
             out.push((body, 2, ParseError::UnknownPublishesNkRootFlag));
             out.push((body + 33, 2, ParseError::UnknownReceiveKeyMode));
         }
@@ -1570,18 +1575,11 @@ fn a_mode_byte_fixes_whether_its_field_follows() {
     bytes[57] = 0;
     assert_eq!(decode(&bytes), Some(ParseError::Trailing));
 
-    // An unfunded payload is too short to be read as a section. A section
-    // read as an unfunded payload leaves its later words to be read as the
-    // body; these words give a body with no receive key and no functions,
-    // and the rest of the section trails it.
-    let body = || contract_body(false, None, vec![function(1)]);
-    let mut bytes = unfunded(body()).encode(PCASH_CHAIN_ID).unwrap();
-    bytes[FUNDING_MODE_OFFSET] = 1;
-    assert_eq!(decode(&bytes), Some(ParseError::Truncated));
-    let mut bytes = sponsored(body(), section(CONTRACT))
+    let body = contract_body(false, None, vec![function(1)]);
+    let mut bytes = attached(body, section(CONTRACT))
         .encode(PCASH_CHAIN_ID)
         .unwrap();
-    bytes[FUNDING_MODE_OFFSET] = 0;
+    bytes[ATTACHED_BODY - 1] = 0;
     assert_eq!(decode(&bytes), Some(ParseError::Trailing));
 }
 
@@ -1730,16 +1728,15 @@ impl Rng {
             }
             3 => {
                 let section = self.section(CONTRACT, pcash_chain_id);
-                Transaction::ContractAccountCreation(ContractAccountCreation {
-                    body: self.body(),
-                    funding: ContractFunding::Sponsored(section),
-                })
+                Transaction::PrivateValue(
+                    section
+                        .with_account_creation(AccountCreationAttachment::Contract(self.body()))
+                        .unwrap(),
+                )
             }
             _ => Transaction::ContractAccountCreation(ContractAccountCreation {
-                funding: ContractFunding::Unfunded {
-                    recent_pcash_block_hash: self.word(),
-                    valid_until_timestamp: self.next(),
-                },
+                recent_pcash_block_hash: self.word(),
+                valid_until_timestamp: self.next(),
                 body: self.body(),
             }),
         }
@@ -1753,12 +1750,9 @@ fn generated_transactions_round_trip() {
     for case in 0..3_000 {
         let pcash_chain_id = rng.next() as u32;
         let transaction = rng.transaction(pcash_chain_id);
-        // Types 0 to 3, with a sponsored contract creation counted as 4.
+        // Types 0 to 3, with an attached contract creation counted as 4.
         let variant = match &transaction {
-            Transaction::ContractAccountCreation(ContractAccountCreation {
-                funding: ContractFunding::Sponsored(_),
-                ..
-            }) => 4,
+            Transaction::PrivateValue(section) if section.account_creation().is_some() => 4,
             _ => usize::from(transaction.kind()),
         };
         seen[variant] += 1;

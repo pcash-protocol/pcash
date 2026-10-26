@@ -1,4 +1,6 @@
 import { sameTransactionData, storeTransactionData, restoreTransactionData, resolveTransactionData, type TransactionData } from "@pcash/sdk/delivery";
+import { decodeTransaction, type AccountCreationAttachment, type RawPrivateValueTransaction } from "@pcash/sdk/protocol";
+import { sameAccountCreation } from "./accountCreation.ts";
 // One S action that pays or burns a standard asset. Asset notes fund the
 // recipients and burn, native notes fund the network fee, and both changes
 // return to the owner with the asset's definition attached.
@@ -16,12 +18,13 @@ import {
 import type { PcashNodeClient, StatusResult } from "@pcash/sdk/clients";
 import { fieldToHex } from "@pcash/sdk/crypto";
 import { resolveRecipientAddress, resolveRecipientDelivery, parseExtendedCode } from "@pcash/sdk/delivery";
+import { directSendsToRecord } from "../directSends.ts";
 import { requestPcashAuthorization, type PcashActionSigner, type SelectedRelayQuoteProvider } from "@pcash/sdk/eip712";
 import {
   networkConfigFromStatus,
   ownerCommitment,
 } from "@pcash/sdk/protocol";
-import { addressHex, randomFieldEntropy, U128_LIMIT } from "@pcash/sdk/utils";
+import { addressHex, fromHex, randomFieldEntropy, U128_LIMIT } from "@pcash/sdk/utils";
 import { assertReceiveKeyOwned, registeredSelfReceiveKey } from "./selfDelivery.ts";
 import type { PcashProfile } from "../externalIdentity.ts";
 import { knownAssetDefinition, selectInputNotes, selectSpendableInputNotes, spendableNotes, type WalletFileData } from "../noteStore.ts";
@@ -43,7 +46,7 @@ import {
 import {
   actionPublication,
   fixPublication,
-  PADDED_PRIVATE_VALUE_BYTE_SIZE,
+  paddedPrivateValueByteSize,
   pendingIssuanceBeneficiary,
   planPublication,
   publicationOf,
@@ -67,6 +70,9 @@ export interface AssetSendOutput {
 }
 
 export interface AssetTransferIntent extends DurableSubmissionCallbacks {
+  /** Finality polling attempts after submission; applications may observe settlement separately. */
+  settlePollMaxAttempts?: number;
+  accountCreation?: AccountCreationAttachment;
   assetId: bigint;
   outputs: readonly AssetSendOutput[];
   /** Encrypted records for recipients and the sender. */
@@ -122,6 +128,7 @@ async function resumeAssetTransfer<Prepared, Output>(
   const pending = data.pendingAssetActions?.find((item) => item.contentHash.toLowerCase() === params.retryContentHash!.toLowerCase());
   const review = pending?.assetTransferReview;
   if (pending === undefined || review === undefined) throw new Error("retryContentHash does not name a journaled asset payment or burn");
+  const transaction = decodeTransaction(fromHex(pending.transactionHex)) as RawPrivateValueTransaction;
   if (BigInt(pending.assetId) !== params.assetId
     || BigInt(review.burnAmount) !== burnAmount
     || review.outputs.length !== params.outputs.length
@@ -131,6 +138,7 @@ async function resumeAssetTransfer<Prepared, Output>(
         || (output.noteSecret === undefined ? requested.noteSecret !== undefined : BigInt(output.noteSecret) !== requested.noteSecret);
     })
     || !sameTransactionData(review.data, params.data)
+    || !sameAccountCreation(transaction.accountCreation, params.accountCreation)
     || (params.openFeeAmount !== undefined && BigInt(pending.openFeeAmount) !== params.openFeeAmount)
     || (params.privateRelayFeeAmount !== undefined && BigInt(pending.privateRelayFeeAmount ?? 0n) !== params.privateRelayFeeAmount)
     || (params.validUntilTimestamp !== undefined && BigInt(pending.validUntilTimestamp) !== params.validUntilTimestamp)) {
@@ -173,7 +181,7 @@ export async function runAssetTransferClient<Prepared, Output>(
   });
   if (params.retryContentHash !== undefined) return resumeAssetTransfer(params, data, status, burnAmount);
   const plan = await planPublication({
-    qualifying: true, byteSize: PADDED_PRIVATE_VALUE_BYTE_SIZE,
+    qualifying: true, byteSize: paddedPrivateValueByteSize(profile.shapeId, params.accountCreation),
     publication: publicationOf(params.submission, params.privateRelayFeeAmount), node: params.node,
     openFeeAmount: params.openFeeAmount, privateRelayFeeAmount: params.privateRelayFeeAmount,
     selectedRelayQuote: params.selectedRelayQuote,
@@ -239,6 +247,7 @@ export async function runAssetTransferClient<Prepared, Output>(
     action: "asset action",
   });
   const publication = await fixPublication({
+    maxTransactionBytes: paddedPrivateValueByteSize(profile.shapeId, params.accountCreation),
     selectedRelayQuote: params.selectedRelayQuote, publication: plan.publication, owner: params.wallet,
     requestedCommitment: 0n, node: params.node, status: witnesses.status,
     nullifiers: transactionNullifiers(params.wallet.nkRoot, inputNotes, dummyInputSeed, profile.inputs),
@@ -275,6 +284,7 @@ export async function runAssetTransferClient<Prepared, Output>(
   }));
   while (inputs.length < profile.inputs) inputs.push({ kind: "dummy" });
   const build = buildAssetAction({
+    ...(params.accountCreation === undefined ? {} : { accountCreation: params.accountCreation }),
     pcashChainId: params.chainId, snapshot: witnesses.snapshot, owner: witnesses.owner, assetId: params.assetId,
     assetBurnAmount: burnAmount, inputs, outputs, openFeeAmount: plan.openFeeAmount,
     issuanceOwnerCommitment: publication.issuanceOwnerCommitment,
@@ -285,6 +295,7 @@ export async function runAssetTransferClient<Prepared, Output>(
     data: await resolveTransactionData(params.data, params.chainId, witnesses.receiveKeyOf),
     sender: {
       outgoingKey: params.wallet.outgoingKey,
+      directSendOpenings: directSendsToRecord(data, params.wallet.address, inputNotes),
     },
   });
   const authorization = build.prepareOwnerAuthorization({

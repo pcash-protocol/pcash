@@ -1,3 +1,4 @@
+import type { AccountCreationAttachment } from "@pcash/sdk/protocol";
 // Browser-native marketplace claim. The claim travels in the router call that
 // pays for it (`buy`) or in a later `retry`, as the router's `PcashBatch` event.
 // This module proves the claim against one PCASH snapshot, frames it as that
@@ -127,6 +128,7 @@ export interface ProveClaimParams {
   node: PcashNodeClient;
   offer: OfferPublication;
   buyer: PcashProfile;
+  accountCreation?: AccountCreationAttachment;
   snapshot: ClaimSnapshot;
   /** Resolve the buyer's owned receive key from the account directory at the snapshot's account root. */
   buyerReceiveKey(accountStateRoot: bigint): Promise<Uint8Array>;
@@ -214,6 +216,7 @@ export async function proveCarriedClaim(params: ProveClaimParams): Promise<Prove
       dummyInputEntropy,
       validUntilTimestamp: terms.deadlineT,
       carrierContextHash,
+      ...(params.accountCreation === undefined ? {} : { accountCreation: params.accountCreation }),
       outputEntropies: [randomFieldEntropy()],
       accountIndex: safeIndex(snapshot.account.account.index, "account state commitment index"),
       accountSiblings: snapshot.account.accountSiblings,
@@ -246,6 +249,7 @@ export async function proveCarriedClaim(params: ProveClaimParams): Promise<Prove
     designatedIssuanceOpening,
     validUntilTimestamp: terms.deadlineT,
     carrierContextHash,
+    ...(params.accountCreation === undefined ? {} : { accountCreation: params.accountCreation }),
     dummyInputSeed: dummyInputEntropy,
   });
   const proof = await prover.proveAssetAction({

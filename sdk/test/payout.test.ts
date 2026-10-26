@@ -97,7 +97,7 @@ describe("notes-only wire", () => {
   it("round-trips 17 statement words for open and designated routes", () => {
     const outputData = Array.from({ length: 5 }, () => sizeClassFiller()) as unknown as PrivateValueOutputData;
     const arena = randomArena(PRIVATE_VALUE_PROFILES.S.shapeId);
-    const base = [chainId, 9n, 1n, 2n, 3n, 4n, 5n, 6n, 7n, 8n, 9n, deliveryCommitment(outputData, arena), 0n, 0n, 11n, 12n, 0n, 0n];
+    const base = [chainId, 9n, 1n, 2n, 3n, 4n, 5n, 6n, 7n, 8n, 9n, deliveryCommitment(outputData, arena), 0n, 0n, 11n, 12n, 0n, 0n, 0n];
     const { offsets } = PRIVATE_VALUE_PROFILES.S;
     for (const [openFeeAmount, issuanceOwnerCommitment] of [[0n, 0n], [0n, BigInt(p.issuanceOwnerCommitment)], [1n, 0n], [1n, BigInt(p.issuanceOwnerCommitment)]] as const) {
       const publicInputs = [...base];
@@ -129,7 +129,7 @@ function sectionInputs(shape: "S" | "L", openFeeAmount: bigint, issuanceOwnerCom
   const publicInputs = [
     chainId, 9n, ...spent,
     ...Array.from({ length: profile.outputs }, (_, index) => BigInt(2_000 + index)),
-    deliveryCommitment(outputData, arena), openFeeAmount, issuanceOwnerCommitment, 0n, 12n, 0n, 0n,
+    deliveryCommitment(outputData, arena), openFeeAmount, issuanceOwnerCommitment, 0n, 12n, 0n, 0n, 0n,
   ];
   return { shape: profile.shapeId, publicInputs, proof: new Uint8Array(WIRE_PROOF_BYTES), outputData, arena, nullifiers: spent };
 }
@@ -149,14 +149,8 @@ function accountUpdateEntry(openFeeAmount: bigint, issuanceOwnerCommitment: bigi
   });
 }
 
-function contractEntry(openFeeAmount: bigint, issuanceOwnerCommitment: bigint): Uint8Array {
-  const { nullifiers: _nullifiers, shape: _shape, ...section } = sectionInputs("S", openFeeAmount, issuanceOwnerCommitment);
-  // publishesNkRoot ‖ material ‖ receive-key mode ‖ function count.
-  return encodeContractAccountCreation(chainId, new Uint8Array(1 + 32 + 1 + 1), { mode: "sponsored", section: { ...section, proof: new Uint8Array(WIRE_PROOF_BYTES) } });
-}
-
 function unfundedContractEntry(): Uint8Array {
-  return encodeContractAccountCreation(chainId, new Uint8Array(1 + 32 + 1 + 1), { mode: "unfunded", recentPcashBlockHash: 1n, validUntilTimestamp: 2n });
+  return encodeContractAccountCreation(chainId, new Uint8Array(1 + 32 + 1 + 1), { recentPcashBlockHash: 1n, validUntilTimestamp: 2n });
 }
 
 function userCreationEntry(): Uint8Array {
@@ -216,7 +210,6 @@ describe("controlled issuance openings", () => {
 
   it("rejects designated account-operation fee sections", () => {
     expect(() => accountUpdateEntry(0n, 1n)).toThrow("cannot designate issuance");
-    expect(() => contractEntry(0n, 1n)).toThrow("cannot designate issuance");
   });
 
   it("returns null for open routes, other destinations, and entries without a section", () => {
@@ -237,7 +230,6 @@ describe("unpaid mempool entries", () => {
     ["positive-fee designated type 0x00", () => privateValueEntry("S", 1n, designated), false],
     ["zero-fee open account update", () => accountUpdateEntry(0n, 0n), true],
     ["positive-fee open account update", () => accountUpdateEntry(1n, 0n), false],
-    ["zero-fee open contract creation", () => contractEntry(0n, 0n), true],
     ["unfunded contract creation", () => unfundedContractEntry(), true],
     ["user account creation", userCreationEntry, true],
   ] as const)("classifies %s", (_label, entry, unpaid) => {

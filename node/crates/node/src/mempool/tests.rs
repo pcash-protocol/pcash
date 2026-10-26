@@ -16,8 +16,8 @@ use alloy_primitives::{b256, keccak256, Address, Bytes, B256, U256};
 use pcash_derive::private_value_profiles::PrivateValueShape;
 use pcash_derive::{
     AccountCreationAuthorization, AdmittedTransaction, BlockOutcome, CarrierContext,
-    ContractAccountCreation, ContractBody, ContractFunction, ContractFunding, PrivateValueSection,
-    ReceiveKeyUpdate, SectionLayout, Transaction, UserAccountCreation, UserAccountUpdate,
+    ContractAccountCreation, ContractBody, ContractFunction, PrivateValueSection, ReceiveKeyUpdate,
+    SectionLayout, Transaction, UserAccountCreation, UserAccountUpdate,
 };
 use pcash_l1::{CarrierKind, L1BlockData, L1Header, L1Receipt, L1Tx};
 use pcash_metrics::{AdmissionOutcome, AdmissionSource, Metrics};
@@ -86,7 +86,8 @@ fn accepted_block_inputs(outcome: &BlockOutcome) -> (Vec<B256>, Vec<&AcceptedEff
 /// The address a contract creation's body derives.
 fn contract_address(transaction: &AdmittedTransaction) -> Option<Address> {
     match transaction {
-        AdmittedTransaction::ContractAccountCreation(_, check) => check.address(),
+        AdmittedTransaction::ContractAccountCreation(_, check)
+        | AdmittedTransaction::PrivateValue(_, Some(check)) => check.address(),
         _ => None,
     }
 }
@@ -903,7 +904,7 @@ fn account_quota_preserves_capacity_for_fee_bearing_entries() {
 #[test]
 fn known_transaction_type_outside_its_activation_window_is_state_dependent() {
     let raw = transfer_raw(B256::ZERO, &[], 99);
-    let rules = pcash_derive::ProtocolRules::new([vec![], vec![]], vec![], vec![]).with_fork(
+    let rules = pcash_derive::ProtocolRules::new([vec![], vec![]], vec![]).with_fork(
         pcash_derive::ForkActivation {
             name: "retire private value",
             activation_timestamp: 10,
@@ -2332,16 +2333,16 @@ fn disabled_registration_policy_cleans_proof_free_entries_on_restart() {
     contract.metadata.open_fee_amount = U256::ZERO;
     contract.metadata.has_publication_section = false;
     contract.received_at_unix_ms = now_unix_ms();
-    // A zero-fee sponsored creation is proof-bearing, not a registration.
+    // A zero-fee attached creation is proof-bearing, not a registration.
     let mut sponsored = stored(
-        sponsored_contract_creation(
+        attached_contract_creation(
             &unfunded_contract_creation(B256::ZERO, 2_000, 0x52),
             B256::ZERO,
             94,
         ),
         1,
     );
-    sponsored.metadata.kind = TransactionKind::ContractAccountCreation;
+    sponsored.metadata.kind = TransactionKind::PrivateValue;
     sponsored.metadata.open_fee_amount = U256::ZERO;
     sponsored.received_at_unix_ms = now_unix_ms();
     {
@@ -2370,7 +2371,7 @@ fn disabled_registration_policy_cleans_proof_free_entries_on_restart() {
     assert!(store.get(&free.content_hash).is_none());
     assert!(store.get(&paid.content_hash).is_some());
     assert!(store.get(&contract.content_hash).is_none());
-    assert!(store.get(&sponsored.content_hash).unwrap().unpaid());
+    assert!(!store.get(&sponsored.content_hash).unwrap().unpaid());
     assert_eq!(store.total_bytes, paid.raw.len() + sponsored.raw.len());
     assert!(matches!(
         store.insert(free),
@@ -2441,7 +2442,7 @@ fn proof_bearing_candidates_without_a_statement_are_refused_before_the_verifier(
     .encode(crate::PCASH_CHAIN_ID)
     .unwrap();
 
-    // `account_action` gives a sponsored creation no functions, which its
+    // `account_action` gives a attached creation no functions, which its
     // body's static check refuses.
     let invalid_body = account_action(
         pcash_derive::KIND_CONTRACT_ACCOUNT_CREATION,
@@ -2477,26 +2478,13 @@ fn proof_bearing_unpaid_capacity_is_bounded_without_enabling_registration() {
     update.metadata.kind = TransactionKind::UserAccountUpdate;
     update.metadata.open_fee_amount = U256::ZERO;
     update.received_at_unix_ms = now_unix_ms();
-    // Only the funding byte at offset 5 classifies a contract creation.
-    let contract_raw = |mode: u8| {
-        let mut raw = vec![
-            pcash_derive::KIND_CONTRACT_ACCOUNT_CREATION,
-            0,
-            0,
-            0,
-            2,
-            mode,
-        ];
-        raw.extend_from_slice(&[0x5a; 40]);
-        raw
-    };
-    let mut contract = stored(contract_raw(1), 1);
-    contract.metadata.kind = TransactionKind::ContractAccountCreation;
+    let mut contract = stored(vec![pcash_derive::KIND_USER_ACCOUNT_UPDATE, 2], 1);
+    contract.metadata.kind = TransactionKind::UserAccountUpdate;
     contract.metadata.open_fee_amount = U256::ZERO;
     contract.received_at_unix_ms = update.received_at_unix_ms;
     store.insert(update).unwrap();
     assert!(matches!(store.insert(contract), Err(MempoolApiError::Full)));
-    let mut unfunded = stored(contract_raw(0), 1);
+    let mut unfunded = stored(vec![pcash_derive::KIND_CONTRACT_ACCOUNT_CREATION, 0], 1);
     unfunded.metadata.kind = TransactionKind::ContractAccountCreation;
     unfunded.metadata.open_fee_amount = U256::ZERO;
     assert!(matches!(
@@ -2649,13 +2637,17 @@ fn account_action(kind: u8, mut section: PrivateValueSection) -> Vec<u8> {
             section,
         })
     } else {
-        section
-            .proof
-            .resize(SectionLayout::ContractAccountCreation.proof_bytes(), 0);
-        Transaction::ContractAccountCreation(ContractAccountCreation {
-            body: ContractBody::new(false, CircuitWord::ZERO, None, Vec::new()).unwrap(),
-            funding: ContractFunding::Sponsored(section),
-        })
+        section.proof.resize(
+            SectionLayout::PrivateValue(PrivateValueShape::S).proof_bytes(),
+            0,
+        );
+        Transaction::PrivateValue(
+            (section)
+                .with_account_creation(pcash_derive::AccountCreationAttachment::Contract(
+                    ContractBody::new(false, CircuitWord::ZERO, None, Vec::new()).unwrap(),
+                ))
+                .unwrap(),
+        )
     };
     transaction.encode(crate::PCASH_CHAIN_ID).unwrap()
 }
@@ -3125,29 +3117,32 @@ fn unfunded_contract_creation_with_functions(
                 .collect(),
         )
         .unwrap(),
-        funding: ContractFunding::Unfunded {
-            recent_pcash_block_hash: recent,
-            valid_until_timestamp: deadline,
-        },
+        recent_pcash_block_hash: recent,
+        valid_until_timestamp: deadline,
     })
     .encode(crate::PCASH_CHAIN_ID)
     .unwrap()
 }
 
-/// The body of `unfunded`, sponsored by a zero-fee section.
-fn sponsored_contract_creation(unfunded: &[u8], recent: B256, salt: u64) -> Vec<u8> {
+/// The body of `unfunded`, attached to a zero-fee value action.
+fn attached_contract_creation(unfunded: &[u8], recent: B256, salt: u64) -> Vec<u8> {
     let Ok(Transaction::ContractAccountCreation(creation)) =
         Transaction::decode(unfunded, crate::PCASH_CHAIN_ID)
     else {
         panic!("a contract creation");
     };
     let mut fee = publication_section(recent, salt, 0, CircuitWord::ZERO);
-    fee.proof
-        .resize(SectionLayout::ContractAccountCreation.proof_bytes(), 0);
-    Transaction::ContractAccountCreation(ContractAccountCreation {
-        body: creation.body,
-        funding: ContractFunding::Sponsored(fee),
-    })
+    fee.proof.resize(
+        SectionLayout::PrivateValue(PrivateValueShape::S).proof_bytes(),
+        0,
+    );
+    Transaction::PrivateValue(
+        (fee)
+            .with_account_creation(pcash_derive::AccountCreationAttachment::Contract(
+                creation.body,
+            ))
+            .unwrap(),
+    )
     .encode(crate::PCASH_CHAIN_ID)
     .unwrap()
 }
@@ -3191,10 +3186,6 @@ fn unfunded_contract_admission_requires_opt_in_and_skips_the_verifier() {
     // admit() uses a nonexistent bb binary; successful admission proves no verifier was started.
     let admitted = admit(&service, raw.clone(), AdmissionSource::P2p).unwrap();
     assert_eq!(admitted.kind, pcash_rpc::TransactionKind::ContractAccount);
-    assert_eq!(
-        admitted.funding_mode,
-        Some(pcash_rpc::ContractFundingMode::Unfunded)
-    );
     assert_eq!(admitted.valid_until, Some(2_000));
     assert_eq!(admitted.open_fee_amount, U256::ZERO);
     assert_eq!(admitted.issuance_route, pcash_rpc::IssuanceRoute::None);
@@ -3232,10 +3223,10 @@ fn funding_byte_classifies_registration_opt_in_through_revalidation_and_restart(
         .unwrap()
         .hash;
     let unfunded = unfunded_contract_creation(recent, 2_000, 0x51);
-    let sponsored = sponsored_contract_creation(&unfunded, recent, 95);
+    let sponsored = attached_contract_creation(&unfunded, recent, 95);
     // Neither pays a public fee; only the funding byte tells them apart.
-    assert_eq!(unfunded[pcash_derive::FUNDING_MODE_OFFSET], 0);
-    assert_eq!(sponsored[pcash_derive::FUNDING_MODE_OFFSET], 1);
+    assert_eq!(unfunded[0], pcash_derive::KIND_CONTRACT_ACCOUNT_CREATION);
+    assert_eq!(sponsored[0], pcash_derive::KIND_PRIVATE_VALUE);
     assert!(requires_unpaid_registration_opt_in(&unfunded));
     assert!(!requires_unpaid_registration_opt_in(&sponsored));
     service
@@ -3256,14 +3247,10 @@ fn funding_byte_classifies_registration_opt_in_through_revalidation_and_restart(
     let admitted = service
         .admit_and_record(sponsored, AdmissionSource::P2p, &AlreadyVerified)
         .unwrap();
-    assert_eq!(admitted.kind, pcash_rpc::TransactionKind::ContractAccount);
-    assert_eq!(
-        admitted.funding_mode,
-        Some(pcash_rpc::ContractFundingMode::Sponsored)
-    );
+    assert_eq!(admitted.kind, pcash_rpc::TransactionKind::PrivateValue);
     assert_eq!(admitted.open_fee_amount, U256::ZERO);
-    assert_eq!(admitted.issuance_route, pcash_rpc::IssuanceRoute::None);
-    assert_eq!(service.store.lock().unwrap().occupancy().unpaid_entries, 1);
+    assert_eq!(admitted.issuance_route, pcash_rpc::IssuanceRoute::Open);
+    assert_eq!(service.store.lock().unwrap().occupancy().unpaid_entries, 0);
 
     // A head refresh revalidates the entry and keeps it.
     let outcome = service
@@ -3304,10 +3291,7 @@ fn funding_byte_classifies_registration_opt_in_through_revalidation_and_restart(
         .transaction(&admitted.content_hash)
         .unwrap()
         .unwrap();
-    assert_eq!(
-        reloaded.funding_mode,
-        Some(pcash_rpc::ContractFundingMode::Sponsored)
-    );
+    assert_eq!(reloaded.kind, pcash_rpc::TransactionKind::PrivateValue);
 }
 
 #[test]
@@ -3365,7 +3349,7 @@ fn unfunded_contract_inclusion_and_reorg_restore_deadline_variants() {
     let variant_content_hash = admit(&service, variant_raw.clone(), AdmissionSource::Rpc)
         .unwrap()
         .content_hash;
-    let sponsored_raw = sponsored_contract_creation(&included_raw, recent, 93);
+    let sponsored_raw = attached_contract_creation(&included_raw, recent, 93);
     let sponsored_content_hash = service
         .admit_and_record(sponsored_raw, AdmissionSource::Rpc, &AlreadyVerified)
         .unwrap()
@@ -3376,9 +3360,11 @@ fn unfunded_contract_inclusion_and_reorg_restore_deadline_variants() {
         sponsored_content_hash,
     ]
     .map(|content_hash| service.transaction(&content_hash).unwrap().unwrap());
-    assert!(descriptions
-        .iter()
-        .all(|entry| entry.stable_id == descriptions[0].stable_id && entry.conflict_count == 2));
+    assert_eq!(descriptions[0].stable_id, descriptions[1].stable_id);
+    assert_eq!(descriptions[0].conflict_count, 1);
+    assert_eq!(descriptions[1].conflict_count, 1);
+    assert_ne!(descriptions[2].stable_id, descriptions[0].stable_id);
+    assert_eq!(descriptions[2].conflict_count, 0);
     let prepared = service
         .prepare(PrepareRelayRequest {
             content_hashes: vec![
@@ -3393,9 +3379,9 @@ fn unfunded_contract_inclusion_and_reorg_restore_deadline_variants() {
         .unwrap();
     assert_eq!(
         prepared.selected_content_hashes,
-        vec![included_content_hash]
+        vec![included_content_hash, sponsored_content_hash]
     );
-    assert_eq!(prepared.rejected.len(), 2);
+    assert_eq!(prepared.rejected.len(), 1);
     let outcome = service
         .inner
         .lock()
@@ -3424,12 +3410,14 @@ fn unfunded_contract_inclusion_and_reorg_restore_deadline_variants() {
             store.get(&included_content_hash).unwrap().status,
             MempoolStatus::IncludedUnfinalized
         );
-        for content_hash in [variant_content_hash, sponsored_content_hash] {
-            let entry = store.get(&content_hash).unwrap();
-            assert_eq!(entry.status, MempoolStatus::Suspended);
-            assert_eq!(entry.superseded_block.unwrap().block_number, 1);
-            assert_eq!(entry.invalidated_block, None);
-        }
+        assert_eq!(
+            store.get(&sponsored_content_hash).unwrap().status,
+            MempoolStatus::Ready
+        );
+        let entry = store.get(&variant_content_hash).unwrap();
+        assert_eq!(entry.status, MempoolStatus::Suspended);
+        assert_eq!(entry.superseded_block.unwrap().block_number, 1);
+        assert_eq!(entry.invalidated_block, None);
     }
     service.inner.lock().unwrap().rollback_to(100).unwrap();
     service.on_rollback(0).unwrap();
@@ -3449,14 +3437,14 @@ fn unfunded_contract_inclusion_and_reorg_restore_deadline_variants() {
 }
 
 #[test]
-fn sponsored_contract_nullifier_conflict_restores_on_rollback_and_purges_on_finalization() {
+fn attached_contract_nullifier_conflict_restores_on_rollback_and_purges_on_finalization() {
     use pcash_derive::private_value_profiles::S;
 
     let dir = tempdir().unwrap();
     let genesis_block_hash = B256::repeat_byte(0x78);
     let (service, _, recent) = service(dir.path(), genesis_block_hash);
     let unfunded = unfunded_contract_creation(recent, 2_000, 0x51);
-    let committed_raw = sponsored_contract_creation(&unfunded, recent, 93);
+    let committed_raw = attached_contract_creation(&unfunded, recent, 93);
     let committed_content_hash = pcash_state::content_hash(&committed_raw);
     let shared_nullifier = word(93 * 16 + 1);
     let mut pending_section = publication_section(recent, 94, 0, CircuitWord::ZERO);
@@ -3468,7 +3456,7 @@ fn sponsored_contract_nullifier_conflict_restores_on_rollback_and_purges_on_fina
         .unwrap();
     let committed = descriptor(&committed_raw, &service.source).unwrap();
     let pending = descriptor(&pending_raw, &service.source).unwrap();
-    assert_eq!(committed.kind, TransactionKind::ContractAccountCreation);
+    assert_eq!(committed.kind, TransactionKind::PrivateValue);
     assert_eq!(pending.kind, TransactionKind::PrivateValue);
     assert_ne!(committed.statement_id, pending.statement_id);
     assert!(pending
@@ -3582,7 +3570,7 @@ fn maximum_contract_body_is_cached_across_snapshots_and_reload() {
             .hash;
         let free = unfunded_contract_creation_with_functions(recent, 2_000, 0x51, 255);
         let raw = if sponsored {
-            sponsored_contract_creation(&free, recent, 91)
+            attached_contract_creation(&free, recent, 91)
         } else {
             free
         };
@@ -3698,7 +3686,7 @@ fn exhausted_unpaid_budget_refuses_invalid_contract_bodies() {
     let free = Transaction::ContractAccountCreation(creation)
         .encode(crate::PCASH_CHAIN_ID)
         .unwrap();
-    let invalid_bodies = [free.clone(), sponsored_contract_creation(&free, recent, 92)];
+    let invalid_bodies = [free.clone(), attached_contract_creation(&free, recent, 92)];
     for raw in &invalid_bodies {
         assert!(matches!(
             service.admit_and_record(raw.clone(), AdmissionSource::Rpc, &AlreadyVerified),
@@ -3710,11 +3698,12 @@ fn exhausted_unpaid_budget_refuses_invalid_contract_bodies() {
         std::time::Instant::now() + std::time::Duration::from_hours(1),
         32,
     );
-    for raw in invalid_bodies {
-        assert!(
-            matches!(service.admit_and_record(raw, AdmissionSource::Rpc, &AlreadyVerified), Err(MempoolApiError::Busy(message)) if message == "unpaid admission budget exhausted")
-        );
-    }
+    assert!(
+        matches!(service.admit_and_record(invalid_bodies[0].clone(), AdmissionSource::Rpc, &AlreadyVerified), Err(MempoolApiError::Busy(message)) if message == "unpaid admission budget exhausted")
+    );
+    assert!(
+        matches!(service.admit_and_record(invalid_bodies[1].clone(), AdmissionSource::Rpc, &AlreadyVerified), Err(MempoolApiError::State(name)) if name == "SelectorsNotStrictlyIncreasing")
+    );
 }
 
 /// A verifier that rejects every proof.

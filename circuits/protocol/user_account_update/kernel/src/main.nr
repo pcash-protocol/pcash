@@ -55,6 +55,7 @@ fn main(
     event_application_vk: AppVerificationKey,
     event_salt: Field,
 ) -> return_data [Field; S_PUBLIC_INPUTS + 1] {
+    assert(choices.account_creation_commitment == 0, "account updates cannot attach a creation");
     // The node binds both rows, including the successor revision, through the
     // public account update commitment, so only the current row is opened here.
     let (current_account_state_commitment, account) = open_account_leaf(

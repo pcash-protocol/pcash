@@ -11,9 +11,7 @@ export type MarketplaceActivityStatus = "action-required" | "pending" | "ready" 
 
 export type MarketplaceSellerPhase =
   | "recovery-unavailable"
-  | "contract-missing"
   | "draft"
-  | "contract-submitted"
   | "funding-submitted"
   | "finalizing"
   | "funded"
@@ -109,7 +107,6 @@ export function marketplaceSellerState(
     return null;
   }
   if (offer.recoveryUnavailable) return { role: "seller", phase: "recovery-unavailable", status: "pending", updatedAt: offer.savedAt };
-  if (offer.missingContract) return { role: "seller", phase: "contract-missing", status: "action-required", updatedAt: offer.savedAt };
   const reclaim = offer.reclaim;
   if (reclaim !== undefined) {
     if (reclaim.phase === "finalized") {
@@ -167,8 +164,8 @@ export function marketplaceSellerState(
       phase: "publication-failed",
       status: "action-required",
       updatedAt: publish.updatedAt,
-      ...(publish.fundingContentHash ?? publish.l2ContractContentHash
-        ? { contentHash: publish.fundingContentHash ?? publish.l2ContractContentHash }
+      ...(publish.fundingContentHash
+        ? { contentHash: publish.fundingContentHash }
         : {}),
       ...(publish.catalogError === undefined
         ? { error: "Funded offer has not been published to the catalog" }
@@ -181,16 +178,14 @@ export function marketplaceSellerState(
       phase: "publication-failed",
       status: "failed",
       updatedAt: publish.updatedAt,
-      ...(publish.fundingContentHash ?? publish.l2ContractContentHash
-        ? { contentHash: publish.fundingContentHash ?? publish.l2ContractContentHash }
+      ...(publish.fundingContentHash
+        ? { contentHash: publish.fundingContentHash }
         : {}),
       ...(publish.error === undefined ? {} : { error: publish.error }),
     };
   }
   // A catalogued listing is live while its transactions finalize.
-  const phase: MarketplaceSellerPhase = catalogued ? "funded" : publish?.phase === "l2-contract-submitted"
-    ? "contract-submitted"
-    : publish?.phase === "funding-submitted"
+  const phase: MarketplaceSellerPhase = catalogued ? "funded" : publish?.phase === "funding-submitted"
       ? "funding-submitted"
       : publish?.phase === "finalizing"
         ? "finalizing"
@@ -207,8 +202,8 @@ export function marketplaceSellerState(
     phase,
     status,
     updatedAt: publish?.updatedAt ?? offer.savedAt,
-    ...(publish?.fundingContentHash ?? publish?.l2ContractContentHash
-      ? { contentHash: publish?.fundingContentHash ?? publish?.l2ContractContentHash }
+    ...(publish?.fundingContentHash
+      ? { contentHash: publish?.fundingContentHash }
       : {}),
     ...(publish?.catalogError === undefined ? {} : { error: publish.catalogError }),
   };

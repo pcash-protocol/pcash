@@ -24,7 +24,7 @@ export function sellerRecord(offer: { l2ContractNkRoot: bigint; terms: { ethPric
   return sellerRecordSchema.encode({ nkRoot: offer.l2ContractNkRoot, ethPriceWei, deadlineT, router, seller });
 }
 
-export interface RestoredSellerOffer { publication: OfferPublication; missingContract: boolean }
+export interface RestoredSellerOffer { publication: OfferPublication }
 
 /** Sync reopens sent outputs from this wallet's sender regions and checks each against its chain commitment. */
 export async function recoverSellerOffers(
@@ -51,16 +51,16 @@ export async function recoverSellerOffers(
       if (escrow === undefined) throw new Error("recovery terms do not reconstruct the funded contract");
       const { sent, offer } = escrow;
       const contract = await context.node.getContract(sent.recipientAddress);
-      if (contract.status !== "notFound") {
-        if (contract.status !== "contract") throw new Error("funded contract is unavailable");
-        const creation = decodeTransaction(hexToBytes(contract.transaction as Hex));
-        if (!("body" in creation) || bytesToHex(creation.body) !== bytesToHex(offer.l2ContractBody)) throw new Error("recovered contract differs from its registered body");
-      }
+      if (contract.status !== "contract") throw new Error("funded contract is unavailable");
+      const creation = decodeTransaction(hexToBytes(contract.transaction as Hex));
+      const body = creation.kind === 2 ? creation.body
+        : creation.kind === 0 && creation.accountCreation?.kind === "contract" ? creation.accountCreation.body : undefined;
+      if (body === undefined || bytesToHex(body) !== bytesToHex(offer.l2ContractBody)) throw new Error("recovered contract differs from its registered body");
       const publication = publicationFromOffer(offer, sent.assetDefinition === undefined ? undefined : hexToBytes(sent.assetDefinition as Hex));
       const leafIndex = Number(sent.leafIndex);
       if (!Number.isSafeInteger(leafIndex)) throw new Error("escrow output index exceeds the supported range");
       publication.escrow = { leafIndex, noteSecret: fieldToHex(BigInt(sent.noteSecret)), amount: fieldToHex(BigInt(sent.amount)) };
-      offers.push({ publication, missingContract: contract.status === "notFound" });
+      offers.push({ publication });
     } catch (cause) { errors.push(`Seller recovery ${transactionId}: ${cause instanceof Error ? cause.message : String(cause)}`); }
   }
   return { offers, errors };

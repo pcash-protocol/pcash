@@ -191,7 +191,7 @@ function ListingForm({ market }: { market: MarketplaceModel }) {
         </p>
         <TradeWalletSetup />
         {ready && (
-          <Tooltip block placement="top" tip="Approve two free signatures: one to create the listing’s escrow contract and one to fund it. Then approve one Ethereum transaction to publish both. Gas is paid in ETH.">
+          <Tooltip block placement="top" tip="Approve one free signature to create and fund the listing’s escrow. Then approve one Ethereum transaction to publish it. Gas is paid in ETH.">
             {submit}
           </Tooltip>
         )}

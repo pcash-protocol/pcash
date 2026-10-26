@@ -6,6 +6,11 @@ import { derivePcashProfileFromPrivateKey } from "@pcash/sdk/wallet";
 import { browserWalletDatabaseName, openBrowserWallet } from "@pcash/sdk/wallet/web";
 
 const PRIVATE_KEY = Uint8Array.from({ length: 32 }, () => 1);
+const preparationOnly = {
+  mode: "l1" as const,
+  preflight: async () => undefined,
+  submit: async (): Promise<never> => { throw new Error("probe prepares journal fixtures without publishing"); },
+};
 
 export async function seedRelayJournal(rpcUrl: string, entry: RelayBatchJournalEntry) {
   const { status } = await context(rpcUrl);
@@ -15,7 +20,7 @@ export async function seedRelayJournal(rpcUrl: string, entry: RelayBatchJournalE
 
 export async function seedQueuedAccountActivation(name: string, rpcUrl: string, journalEntry: RelayBatchJournalEntry) {
   const { node, profile, status } = await context(rpcUrl);
-  const wallet = await openBrowserWallet({ name: browserWalletDatabaseName(name, status), node, profile });
+  const wallet = await openBrowserWallet({ name: browserWalletDatabaseName(name, status), node, profile, userAccountCreationSubmission: preparationOnly });
   try {
     await wallet.clearAccountActivation();
     const pending = await wallet.prepareAccountActivation({ authorizationMode: "direct", validUntilTimestamp: status.latestBlockTimestamp + 1n });
@@ -32,7 +37,7 @@ export async function seedQueuedAccountActivation(name: string, rpcUrl: string, 
 
 export async function replaceAccountActivation(name: string, rpcUrl: string, prepare: boolean) {
   const { node, profile, status } = await context(rpcUrl);
-  const wallet = await openBrowserWallet({ name: browserWalletDatabaseName(name, status), node, profile });
+  const wallet = await openBrowserWallet({ name: browserWalletDatabaseName(name, status), node, profile, userAccountCreationSubmission: preparationOnly });
   try {
     await wallet.clearAccountActivation();
     if (prepare) return (await wallet.prepareAccountActivation({
@@ -53,7 +58,7 @@ async function context(rpcUrl: string) {
 
 export async function seedWalletCursor(name: string, rpcUrl: string) {
   const { node, profile, status } = await context(rpcUrl);
-  const wallet = await openBrowserWallet({ name: browserWalletDatabaseName(name, status), node, profile });
+  const wallet = await openBrowserWallet({ name: browserWalletDatabaseName(name, status), node, profile, userAccountCreationSubmission: preparationOnly });
   try {
     await wallet.sync();
     return { syncedThrough: (await wallet.snapshot()).syncedThrough?.pcashNumber.toString() ?? null };
@@ -64,7 +69,7 @@ export async function seedWalletCursor(name: string, rpcUrl: string) {
 
 export async function reopenAndSyncWallet(name: string, rpcUrl: string) {
   const { node, profile, status } = await context(rpcUrl);
-  const wallet = await openBrowserWallet({ name: browserWalletDatabaseName(name, status), node, profile });
+  const wallet = await openBrowserWallet({ name: browserWalletDatabaseName(name, status), node, profile, userAccountCreationSubmission: preparationOnly });
   try {
     const before = await wallet.snapshot();
     await wallet.sync();

@@ -13,7 +13,6 @@ export * from "./noteFundedTransfer.ts";
 export * from "./publication.ts";
 export * from "./userAccountUpdateClient.ts";
 export * from "./assetActionClient.ts";
-export * from "./contractCreationClient.ts";
 export * from "./contractSponsorshipClient.ts";
 export { InsufficientNotesError, selectInputNotes } from "../noteStore.ts";
 export { loadReceiveKeyAtSnapshot, localReceiveKeyLookup } from "./localChain.ts";
@@ -27,3 +26,5 @@ export * from "../bulkJobs.ts";
 
 export * from "./paymentIssuance.ts";
 export type { SyncWalletResult } from "./syncWallet.ts";
+
+export type { ResumeValueTransactionIntent, ResumeValueTransactionResult } from "./resumeValueTransaction.ts";

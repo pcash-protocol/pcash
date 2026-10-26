@@ -104,8 +104,6 @@ export const CIRCUIT_URLS = {
   user_account_update_kernel: "/prover/user_account_update_kernel.json",
   private_value_hiding_kernel: "/prover/private_value_hiding_kernel.json",
   user_account_update_hiding_kernel: "/prover/user_account_update_hiding_kernel.json",
-  contract_creation_kernel: "/prover/contract_creation_kernel.json",
-  contract_creation_hiding_kernel: "/prover/contract_creation_hiding_kernel.json",
   account_rule_large_batch_transfer_ecdsa: "/prover/account_rule_large_batch_transfer_ecdsa.json",
   account_rule_large_asset_creation_ecdsa: "/prover/account_rule_large_asset_creation_ecdsa.json",
   account_rule_large_contract_fee_sponsorship_ecdsa:
@@ -173,18 +171,7 @@ export interface Prover {
     onStatus?: (s: ProveStatus) => void,
     signal?: AbortSignal,
   ): Promise<ProofResult>;
-  proveSponsoredContractCreation(
-    args: {
-      eventApplication?: ChonkApplicationStep & { event: bigint };
-      authorizationWitnessMap: WitnessMap;
-      buildKernelWitnessMap: (feeVk: ChonkVkArtifacts) => WitnessMap;
-      expectedPublicInputs: bigint[];
-      authorizationCircuitUrl?: string;
-      authorizationLabel?: string;
-    },
-    onStatus?: (s: ProveStatus) => void,
-    signal?: AbortSignal,
-  ): Promise<ProofResult>;
+
 }
 
 /** One private application folded into a CHONK transaction. */

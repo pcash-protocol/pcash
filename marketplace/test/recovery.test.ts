@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { bytesToHex, type Hex } from "viem";
 import { addressHex, DEFAULT_NETWORK_CONFIG, fieldToHex, fullOutputCommitment, type PcashNodeClient, type StatusResult } from "@pcash/sdk/browser";
-import { buildUnfundedContractCreation } from "@pcash/sdk/builders";
-import { decodeContractBody, assetDefinitionAssetId, encodeAssetDefinition, planArena, encodeRecords, sentEnvelopesSchema, sentOpeningsSchema, assetDefinitionSchema, type DataRecord } from "@pcash/sdk/protocol";
+import { assetDefinitionAssetId, encodeAssetDefinition, planArena, encodeRecords, sentEnvelopesSchema, sentOpeningsSchema, assetDefinitionSchema, type DataRecord } from "@pcash/sdk/protocol";
 import { PRIVATE_VALUE_PROFILES } from "@pcash/sdk/constants";
 import { derivePcashProfileFromPrivateKey, type WalletExecutionContext } from "@pcash/sdk/wallet";
 import { createOffer, deriveOfferSecrets } from "../src/offer.mts";
@@ -13,7 +12,7 @@ import { recoverSellerOffers, sellerRecord } from "../src/client/sellerRecovery.
 import { purchaseCommitment } from "../src/client/buy.ts";
 import { encodePaymentRecovery, recoverPaymentPublication, savedPaymentIdentity, scanPayerPayments, scannedPaymentIdentity, type ScannedPayment } from "../src/client/paymentRecovery.ts";
 import { testToken } from "./tokenFixtures.ts";
-import { BUY_COMMITMENT, escrowSpenderResult } from "./anchoredTransaction.ts";
+import { BUY_COMMITMENT, escrowSpenderResult, anchoredPrivateValueTransaction } from "./anchoredTransaction.ts";
 
 const seller = derivePcashProfileFromPrivateKey(new Uint8Array(32).fill(7), DEFAULT_NETWORK_CONFIG);
 const buyer = derivePcashProfileFromPrivateKey(new Uint8Array(32).fill(8), DEFAULT_NETWORK_CONFIG);
@@ -28,8 +27,8 @@ function listing(token = false) {
     terms: { router: BigInt(router), seller: seller.address, assetId: token ? asset.assetId : 0n, amount: 500n, ethPriceWei: 900n, deadlineT: 4_000_000_000n },
     claimApplicationVkHash: CLAIM_APPLICATION_VK_HASH, reclaimApplicationVkHash: RECLAIM_APPLICATION_VK_HASH });
   const publication: OfferPublication = { ...publicationFromOffer(offer, token ? asset.bytes : undefined), escrow: { leafIndex: 7, noteSecret: fieldToHex(1234n), amount: fieldToHex(500n) } };
-  const transaction = bytesToHex(buildUnfundedContractCreation({ pcashChainId: DEFAULT_NETWORK_CONFIG.pcashChainId,
-    contract: decodeContractBody(offer.l2ContractBody), recentPcashBlockHash: 1n, validUntilTimestamp: 99n }).transactionBytes);
+  const transaction = bytesToHex(anchoredPrivateValueTransaction(1n, 1n, 0n, 0n, 0n,
+    { kind: "contract", body: offer.l2ContractBody }));
   // As the wallet stores the escrow output: its funding transaction's sender records repeat on each sent output.
   const record = sellerRecord(offer);
   const sent = { recipientAddress: addressHex(offer.l2ContractAddress), assetId: fieldToHex(offer.terms.assetId), amount: "500",
@@ -53,7 +52,7 @@ test("seller secret derivation matches frozen vectors and separates wallet, chai
   }
 });
 
-for (const token of [false, true]) test(`seller restores the identical ${token ? "token" : "native"} publication, including funding-only inclusion`, async () => {
+for (const token of [false, true]) test(`seller restores the identical ${token ? "token" : "native"} publication from atomic funding`, async () => {
   const fixture = listing(token);
   let missing = true;
   let rows: typeof fixture.sent[] = [];
@@ -65,8 +64,12 @@ for (const token of [false, true]) test(`seller restores the identical ${token ?
   for (const absent of [true, false, false]) {
     missing = absent;
     const recovered = await recoverSellerOffers(context, seller, DEFAULT_NETWORK_CONFIG);
+    if (absent) {
+      assert.equal(recovered.offers.length, 0);
+      assert.match(recovered.errors[0]!, /funded contract is unavailable/);
+      continue;
+    }
     assert.deepEqual(recovered.errors, []);
-    assert.equal(recovered.offers[0]!.missingContract, absent);
     assert.equal(publicationIdentity(recovered.offers[0]!.publication), publicationIdentity(fixture.publication));
   }
   assert.equal((await recoverSellerOffers(context, buyer, DEFAULT_NETWORK_CONFIG)).offers.length, 0);
@@ -159,17 +162,15 @@ for (const token of [false, true]) test(`controller restores ${token ? "token" :
     update: async (key, update) => { const next = update(records.get(key) ?? null); if (next === null) records.delete(key); else records.set(key, next); return next; },
   };
   let rows: typeof fixture.sent[] = [];
-  let registered = false;
+  let registered = true;
   let contractReads = 0;
-  const node = { catalogInfo: async () => { throw new Error("catalog offline"); },
+  const node = { getTransactionByNullifier: async () => null, catalogInfo: async () => { throw new Error("catalog offline"); },
     getContract: async () => { contractReads++; return registered ? fixture.contract : { status: "notFound" }; },
   } as unknown as PcashNodeClient;
-  const creations: Record<string, any>[] = [];
   const context = { node, profile: seller, status, spendable: () => true, store: { load: async () => ({ sentOutputs: rows }) } } as unknown as WalletExecutionContext;
   const wallet = {
     address: addressHex(seller.address), network: { chainId: fixture.offer.chainId },
     execute: async (action: (context: WalletExecutionContext) => unknown) => action(context),
-    sponsorContractCreation: async (intent: Record<string, any>) => { creations.push(intent); return { contentHash: hash, transactionHex: "0x", queued: true, settled: false, changeAmount: 0n }; },
     send: () => { throw new Error("must not fund again"); }, sendAsset: () => { throw new Error("must not fund again"); },
   };
   const controller = new MarketplaceController({ node, store, l1RpcUrls: ["unused"], identity: { wallet, l1Signer: { address: addressHex(seller.address) } } as never });
@@ -182,19 +183,13 @@ for (const token of [false, true]) test(`controller restores ${token ? "token" :
   assert.match(result.catalogError!, /catalog offline/);
   assert.deepEqual(result.recoveryErrors, []);
   assert.equal(publicationIdentity(result.localOffers[0]!.pub), publicationIdentity(fixture.publication));
-  assert.equal(marketplaceSellerState(result.localOffers[0]!, seller.address)?.phase, "contract-missing");
-  assert.equal(creations.length, 0); // Background discovery never requests a signature.
-  await controller.restoreContract(fixture.publication, 3n);
-  assert.equal(creations.length, 1);
-  assert.equal(creations[0]!.validUntilTimestamp, undefined); // Wallet chooses fresh validity, not the offer's deadline.
-  assert.equal(creations[0]!.contract.address, fixture.offer.l2ContractAddress);
-  assert.deepEqual(creations[0]!.contract.body, fixture.offer.l2ContractBody);
+  assert.equal(marketplaceSellerState(result.localOffers[0]!, seller.address)?.phase, "funded");
   registered = true;
   const key = offerKey(fixture.publication);
   const reclaim = { phase: "failed" as const, publication: fixture.publication, error: "retry proof", updatedAt: 2 };
   await store.update(key, current => ({ ...current!, reclaim }));
   const restored = (await controller.refresh()).localOffers[0]!;
-  assert.equal(restored.missingContract, false);
+  assert.equal(restored.recovered, true);
   assert.deepEqual(restored.reclaim, reclaim);
   rows = [];
   const orphaned = (await controller.refresh()).localOffers[0]!;
@@ -205,12 +200,11 @@ for (const token of [false, true]) test(`controller restores ${token ? "token" :
   assert.equal(rediscovered.recoveryUnavailable, false);
   assert.deepEqual(rediscovered.reclaim, reclaim);
   assert.equal(records.size, 1);
-  assert.equal(creations.length, 1);
 });
 
 const SPEND = `0x${"44".repeat(32)}`;
 const spendReceipt = { transactionId: SPEND, contentHash: SPEND, outcome: "succeeded", failureDetail: null, l1Sender: addressHex(1n),
-  issuanceOwnerCommitment: null, settledOpenFeeAmount: 0n, settledIssuanceAmount: 0n, kind: "privateValue", fundingMode: null,
+  issuanceOwnerCommitment: null, settledOpenFeeAmount: 0n, settledIssuanceAmount: 0n, kind: "privateValue", accountCreation: 0,
   inclusion: { l1BlockNumber: 100n, l1BlockHash: blockHash, l1TransactionIndex: 0n, l1TransactionHash: blockHash, batchItemIndex: 0n },
   outputLeafStart: 8n, outputsAdded: 1n, nullifiers: null, account: null };
 /** A node whose escrow nullifier was spent by `SPEND`, a transaction that required `carrier` in a block at `timestamp`. */

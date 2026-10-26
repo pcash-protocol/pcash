@@ -8,6 +8,7 @@ import { APPLICATION_ID_BYTES, encodeRecords, MAX_RECORD_BYTES, RECORD_SCHEMA, t
 import { privateValueProfile, type PrivateValueShape } from "../constants/privateValueProfiles.ts";
 import { uvarintLength } from "../utils/byteCursor.ts";
 import { assetDefinitionAssetId, decodeAssetDefinition, type AssetDefinition } from "./assetDefinition.ts";
+import { directSendEncapsulation, directSendSharedSecret, type DirectSendOpening } from "./directSend.ts";
 import {
   arenaCells,
   prepareArena,
@@ -16,6 +17,7 @@ import {
   claimedSenderSchema,
   sentEnvelopesSchema,
   sentOpeningsSchema,
+  directSendOpeningsSchema,
   assetDefinitionSchema,
   openRecipientRecords,
   planArena,
@@ -45,13 +47,15 @@ export interface ArenaSender {
   outgoingKey: Uint8Array;
   /** Records only the building wallet reads back. */
   records?: readonly DataRecord[];
+  /** Direct sends the building wallet received, recorded so a restore finds them. */
+  directSendOpenings?: readonly DirectSendOpening[];
 }
 
 /** One output a builder delivers by envelope, before it is sealed. */
 export interface EnvelopeOutput {
   slot: number;
-  /** The recipient's ML-KEM-768 public key. */
-  receiveKey: Uint8Array;
+  /** The recipient's ML-KEM-768 public key. Absent for a direct send, whose envelope its note secret keys. */
+  receiveKey?: Uint8Array;
   /** Address whose note this envelope delivers, including owner change. */
   recipientAddress?: bigint;
   note?: { chainId: bigint; assetId: bigint; amount: bigint; owner: bigint; noteSecret: bigint };
@@ -97,15 +101,18 @@ export function sealSectionDelivery(input: SectionDeliveryInput): SectionDeliver
   if (new Set(slots).size !== slots.length || slots.some(slot => !Number.isInteger(slot) || slot < 0 || slot >= privateValueProfile(input.shape).outputs)) {
     throw new Error("envelope slots must be distinct and within the selected profile");
   }
+  const sameKey = (left: Uint8Array | undefined, right: Uint8Array | undefined) => left === undefined || right === undefined
+    ? left === right : left.length === right.length && left.every((byte, index) => byte === right[index]);
   for (const recipient of input.data?.recipients ?? []) {
     validateDataRecords(recipient.records);
     const records = recipient.records;
     const existing = envelopes.find(output => (output.recipientAddress ?? output.sentTo) === recipient.recipientAddress
-      && output.receiveKey.length === recipient.receiveKey.length && output.receiveKey.every((byte, index) => byte === recipient.receiveKey[index]));
+      && sameKey(output.receiveKey, recipient.receiveKey));
     if (existing !== undefined) {
       existing.recordsTo = recipient.recipientAddress;
       existing.records = [...existing.records ?? [], ...recipient.records];
     } else {
+      if (recipient.receiveKey === undefined) throw new Error("records for an address with no receive key travel only with a direct send to it");
       const slot = freeSlots.shift();
       if (slot === undefined) throw new Error("transaction data needs more envelope slots than this profile provides");
       envelopes.push({ slot, receiveKey: recipient.receiveKey, records, recordsTo: recipient.recipientAddress });
@@ -117,9 +124,14 @@ export function sealSectionDelivery(input: SectionDeliveryInput): SectionDeliver
     ...(input.sender?.records ?? []), ...(input.data?.self ?? []),
   ];
   validateDataRecords(selfRecords);
-  const encapsulations = new Map(envelopes.map((output) => [output.slot, encapsulateEnvelope(output.receiveKey)]));
+  const encapsulations = new Map(envelopes.map((output) => {
+    if (output.receiveKey !== undefined) return [output.slot, encapsulateEnvelope(output.receiveKey)];
+    if (output.note === undefined) throw new Error("an envelope needs a receive key or a direct send's note");
+    return [output.slot, directSendEncapsulation(output.note.noteSecret)];
+  }));
+  // A direct send is recovered from its sent opening, whose note secret derives its envelope's key.
   const sentEnvelopes: SentEnvelope[] = envelopes
-    .filter((output) => output.sentTo !== undefined || output.recordsTo !== undefined)
+    .filter((output) => output.receiveKey !== undefined && (output.sentTo !== undefined || output.recordsTo !== undefined))
     .map((output) => ({
       slot: output.slot, sharedSecret: encapsulations.get(output.slot)!.sharedSecret,
       recipientAddress: output.sentTo ?? output.recordsTo!,
@@ -131,6 +143,7 @@ export function sealSectionDelivery(input: SectionDeliveryInput): SectionDeliver
       ...selfRecords,
       ...(sentEnvelopes.length === 0 ? [] : [sentEnvelopesSchema.encode(sentEnvelopes)]),
       ...((input.sentOpenings?.length ?? 0) === 0 ? [] : [sentOpeningsSchema.encode(input.sentOpenings!)]),
+      ...((input.sender.directSendOpenings?.length ?? 0) === 0 ? [] : [directSendOpeningsSchema.encode(input.sender.directSendOpenings!)]),
     ],
   };
   const built = writeArena(prepareArena({
@@ -221,11 +234,13 @@ export function maxPublicBytes(plan: {
  * change and a relay fee without records, and a sender region naming the
  * payment. `includeSender` adds the claimed-sender record beside the memo.
  */
-export function paymentMaxMemoBytes(params: { shape: PrivateValueShape; includeSender: boolean }): number {
+export function paymentMaxMemoBytes(params: { shape: PrivateValueShape; includeSender: boolean; directSend?: boolean }): number {
   return maxMemoBytes({
     shape: params.shape,
     records: params.includeSender ? [claimedSenderSchema.encode(1n)] : [],
-    sender: [sentEnvelopesSchema.encode([{ slot: 0, sharedSecret: new Uint8Array(32), recipientAddress: 1n }])],
+    sender: [params.directSend === true
+      ? sentOpeningsSchema.encode([{ slot: 0, directSend: true, recipientAddress: 1n, assetId: 0n, amount: 1n, noteSecret: 1n }])
+      : sentEnvelopesSchema.encode([{ slot: 0, sharedSecret: new Uint8Array(32), recipientAddress: 1n }])],
   });
 }
 
@@ -273,6 +288,28 @@ export function noteAssetRecords(records: DataRecord[] | null, assetId: bigint):
 export function outputRecords(payload: NotePayload | MessagePayload, sharedSecret: Uint8Array, source: OutputArena): DataRecord[] | null {
   const records = deliveryRecords(payload, sharedSecret, source);
   return "kind" in payload ? records : noteAssetRecords(records, payload.assetId);
+}
+
+/**
+ * The records a direct send's envelope carries, read with its opening: the
+ * memo and claimed sender of any payment. Null when the envelope does not open
+ * or names no region, or its region is unavailable.
+ */
+export function directSendRecords(
+  opening: Pick<DirectSendOpening, "chainId" | "slot" | "noteSecret">,
+  outputData: Uint8Array,
+  source: OutputArena,
+): DataRecord[] | null {
+  const sharedSecret = directSendSharedSecret(opening.noteSecret);
+  const plaintext = openEnvelope(sharedSecret, outputData);
+  if (plaintext === null) return null;
+  let note: NotePayload;
+  try {
+    note = decodePayload(plaintext, { chainId: opening.chainId });
+  } catch {
+    return null;
+  }
+  return note.outputIndex === opening.slot ? outputRecords(note, sharedSecret, source) : null;
 }
 
 export interface DisclosedOutput {

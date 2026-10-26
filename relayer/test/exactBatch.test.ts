@@ -2,7 +2,7 @@ import { Readable } from "node:stream";
 import { describe, expect, it } from "vitest";
 import { custom } from "viem";
 import { MemoryRelayJournal, PrivateKeyRelaySubmitter } from "@pcash/sdk/node";
-import { WIRE_PROOF_BYTES, deliveryCommitment, encodeContractAccountCreation, randomArena, sizeClassFiller, transactionId } from "@pcash/sdk/protocol";
+import { encodeContractAccountCreation, transactionId } from "@pcash/sdk/protocol";
 import { concatBytes, fromHex, keccak256, toHex } from "@pcash/sdk/utils";
 import {
   parseRawTransactionBatch,
@@ -13,32 +13,9 @@ import {
 } from "../src/exactBatch.ts";
 
 function contractTransaction(): Uint8Array {
-  const empty = sizeClassFiller();
-  const outputData = [empty, empty, empty, empty, empty];
-  const arena = randomArena(0);
   return encodeContractAccountCreation(8191, concatBytes(
-    Uint8Array.of(0),
-    new Uint8Array(32),
-    Uint8Array.of(0, 0),
-  ), {
-    mode: "sponsored",
-    section: {
-      publicInputs: [
-        8191n,
-        0x4321n,
-        1n, 2n, 3n, 4n,
-        5n, 6n, 7n, 8n, 9n,
-        deliveryCommitment(outputData, arena),
-        0n, 0n, 0n,
-        1_900_000_000n,
-        0n,
-        0n,
-      ],
-      proof: new Uint8Array(WIRE_PROOF_BYTES),
-      outputData,
-      arena,
-    },
-  });
+    Uint8Array.of(0), new Uint8Array(32), Uint8Array.of(0, 0),
+  ), { recentPcashBlockHash: 0x4321n, validUntilTimestamp: 1_900_000_000n });
 }
 
 describe("raw transaction batches", () => {

@@ -148,6 +148,7 @@ describe("protocol conformance vectors", () => {
         carrierContextHash: 0n,
         assetBurnAmount: 0n,
         deliveryCommitment: 0n,
+      accountCreationCommitment: 0n,
       },
       inputs: Array.from({ length: 4 }, (_, index) => ({
         slotClass: SlotClass.DUMMY, inputCommitment: 0n, nullifier: BigInt(index + 1),
@@ -192,6 +193,7 @@ describe("protocol conformance vectors", () => {
         carrierContextHash: BigInt(vector.global.carrierContextHash),
         assetBurnAmount: BigInt(vector.global.assetBurnAmount),
         deliveryCommitment: BigInt(vector.global.deliveryCommitment),
+        accountCreationCommitment: BigInt(vector.global.accountCreationCommitment),
       },
       inputs,
       outputs,
@@ -591,7 +593,7 @@ describe("protocol conformance vectors", () => {
   it("commits transaction statements and payouts in the published results tree", () => {
     const vector = V.transactionResults;
     expect(vector.transactions.map((result: { statement: string[] | null }) => result.statement?.length ?? null))
-      .toEqual([18, 73, 19, 19, 4, 4, null]);
+      .toEqual([19, 74, 20, 19, 4, 4, null]);
     const results = vector.transactions.map((result: Record<string, unknown>) => {
       const outcome = transactionOutcomeFromCode(result.outcomeCode as number);
       if (!outcome.supported) throw new Error("vector outcome is unsupported");
@@ -601,7 +603,7 @@ describe("protocol conformance vectors", () => {
       }
       return {
         txType: result.txType as number,
-        fundingMode: result.fundingMode as number,
+        accountCreation: result.accountCreation as number,
         l1TransactionIndex: BigInt(result.l1TransactionIndex as number),
         batchItemIndex: BigInt(result.batchItemIndex as number),
         outcome: outcome.outcome,
@@ -652,7 +654,7 @@ describe("protocol conformance vectors", () => {
       nonCanonicalContractField: 21,
       emptyContractFunctionSet: 22,
       selectorsNotStrictlyIncreasing: 23,
-      carrierContextMismatch: 24,
+      carrierContextMismatch: 24, accountCreationMismatch: 25,
     });
     expect(transactionOutcomeFromCode(18)).toEqual({
       supported: true,
@@ -660,7 +662,7 @@ describe("protocol conformance vectors", () => {
     });
     expect(transactionOutcomeFromCode(23)).toEqual({ supported: true, outcome: "selectorsNotStrictlyIncreasing" });
     expect(transactionOutcomeFromCode(24)).toEqual({ supported: true, outcome: "carrierContextMismatch" });
-    expect(transactionOutcomeFromCode(25)).toEqual({ supported: false, code: 25 });
+    expect(transactionOutcomeFromCode(26)).toEqual({ supported: false, code: 26 });
     const hash = contentHash(Uint8Array.from([0, 0x50, 0x43, 0x53, 0x48, 1, 2, 3]));
     expect(hash).toEqual(
       bytes32("0x59895f0b9c2ceb30539f7bf48ec8d12f32653d75f73191aad2ee19609d6f8078"),

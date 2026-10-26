@@ -63,7 +63,7 @@ function receiptResult(contentHash: string, kind: ReceiptResult["kind"]): Receip
     settledOpenFeeAmount: 0n,
     settledIssuanceAmount: 0n,
     kind,
-    fundingMode: kind === "contractAccount" ? "sponsored" : null,
+    accountCreation: kind === "contractAccount" ? 1 : 0,
     inclusion: { l1BlockNumber: 100n, l1BlockHash: BLOCK_HASH, l1TransactionIndex: 0n, l1TransactionHash: BLOCK_HASH, batchItemIndex: 0n },
     outputLeafStart: kind === "privateValue" ? 1n : null,
     outputsAdded: kind === "privateValue" ? 1n : 0n,
@@ -165,10 +165,7 @@ test("headless Marketplace refresh reconciles publication, every buyer, and recl
     savedAt: 1,
     publish: {
       phase: "finalizing",
-      creationOpenFeeBaseUnits: "0",
       fundingOpenFeeBaseUnits: "0",
-      l2ContractContentHash: CONTRACT_TX,
-      l2ContractTransactionHex: "0x01",
       fundingContentHash: FUNDING_TX,
       fundingTransactionHex: "0x02",
       updatedAt: 1,
@@ -219,7 +216,6 @@ test("headless Marketplace refresh reconciles publication, every buyer, and recl
   const reconciled = result.localOffers[0]!;
   assert.equal(result.catalogError?.startsWith("Catalog unavailable"), true);
   assert.equal(reconciled.publish?.phase, "funded");
-  assert.equal(reconciled.publish?.l2ContractTransactionHex, undefined);
   assert.equal(reconciled.publish?.fundingTransactionHex, undefined);
   assert.equal(reconciled.buys?.[BUYER_A]?.claimedAt, 7);
   assert.equal(reconciled.buys?.[BUYER_A]?.claimTransactionHex, undefined);
@@ -237,12 +233,7 @@ test("headless Marketplace refresh does not re-read a listing's finalized transa
     savedAt: 1,
     publish: {
       phase: "funded",
-      creationOpenFeeBaseUnits: "0",
       fundingOpenFeeBaseUnits: "0",
-      l2ContractContentHash: CONTRACT_TX,
-      l2ContractAcceptedBlock: "99",
-      l2ContractAcceptedBlockHash: tx("99"),
-      l2ContractFinalizedAt: 5,
       fundingContentHash: FUNDING_TX,
       fundingAcceptedBlock: "99",
       fundingAcceptedBlockHash: tx("99"),
@@ -559,23 +550,15 @@ test("late publication checkpoints cannot regress finalized legs", () => {
     savedAt: 1,
     publish: {
       phase: "finalizing",
-      l2ContractContentHash: CONTRACT_TX,
-      l2ContractFinalizedAt: 2,
       fundingContentHash: FUNDING_TX,
       fundingTransactionHex: "0xfunding",
       updatedAt: 2,
     },
   };
   const merged = applyPublishCheckpoint(finalized, {
-    l2ContractContentHash: CONTRACT_TX,
-    l2ContractTransactionHex: "0xresurrected",
-    l2ContractAcceptedBlock: "10",
-    l2ContractAcceptedBlockHash: BLOCK_HASH,
     fundingContentHash: FUNDING_TX,
     fundingTransactionHex: "0xfunding",
   }, 3);
-  assert.equal(merged.publish?.l2ContractTransactionHex, undefined);
-  assert.equal(merged.publish?.l2ContractFinalizedAt, 2);
   assert.equal(merged.publish?.fundingTransactionHex, "0xfunding");
   assert.equal(merged.publish?.phase, "funding-submitted");
 });
@@ -616,7 +599,6 @@ test("controller rejects a zero-price offer before creating or funding seller st
     amount: 1n,
     ethPriceWei: 0n,
     purchaseMinutes: 1n,
-    creationOpenFeeAmount: 0n,
     fundingOpenFeeAmount: 0n,
   }), /ETH price must be greater than zero/);
 });
@@ -703,8 +685,8 @@ test("connected reconciliation uses the Wallet-bound node", async () => {
     source: "created",
     savedAt: 1,
     publish: {
-      phase: "l2-contract-submitted",
-      l2ContractContentHash: CONTRACT_TX,
+      phase: "funding-submitted",
+      fundingContentHash: FUNDING_TX,
       updatedAt: 1,
     },
   };
@@ -912,9 +894,9 @@ test("controller enters the seller lock before reclaim or publication resume wor
   ]);
 });
 
-for (const missing of ["creationOpenFeeBaseUnits", "fundingOpenFeeBaseUnits"] as const) {
+for (const missing of ["fundingOpenFeeBaseUnits"] as const) {
   test(`publication resume requires the saved ${missing}`, async () => {
-    const publish: PublishRecord = { phase: "l2-contract-submitted", creationOpenFeeBaseUnits: "3", fundingOpenFeeBaseUnits: "1", updatedAt: 1 };
+    const publish: PublishRecord = { phase: "draft", fundingOpenFeeBaseUnits: "1", updatedAt: 1 };
     delete publish[missing];
     const node = {} as PcashNodeClient;
     const controller = new MarketplaceController({
@@ -932,8 +914,7 @@ function conflictedFunding(spenderBlock: bigint) {
   const key = offerKey(publication);
   const spenderId = tx("40");
   const store = new MemoryStore({ key, pub: publication, source: "created", savedAt: 1, publish: {
-    phase: "funding-submitted", creationOpenFeeBaseUnits: "0", fundingOpenFeeBaseUnits: "0",
-    l2ContractContentHash: CONTRACT_TX, l2ContractTransactionHex: "0x01", l2ContractAcceptedBlock: "100", l2ContractAcceptedBlockHash: BLOCK_HASH,
+    phase: "funding-submitted", fundingOpenFeeBaseUnits: "0",
     fundingContentHash: FUNDING_TX, fundingTransactionHex: "0x02", updatedAt: 1,
   } });
   const node = {
@@ -951,15 +932,14 @@ function conflictedFunding(spenderBlock: bigint) {
   return { key, store, node };
 }
 
-test("a listing forgets funding whose input another transaction spent at finality", async () => {
+test("background reconciliation retains failed funding for the wallet's explicit resume decision", async () => {
   const { key, store, node } = conflictedFunding(100n);
   const publish = (await new MarketplaceController({ node, store, l1RpcUrls: ["http://l1.invalid"], now: () => 7 }).refresh()).localOffers[0]!.publish!;
-  assert.equal(publish.phase, "l2-contract-submitted");
-  assert.equal(publish.fundingContentHash, undefined);
-  assert.equal(publish.fundingTransactionHex, undefined);
-  assert.equal(publish.l2ContractContentHash, CONTRACT_TX);
-  await new MarketplaceController({ node, store, l1RpcUrls: ["http://l1.invalid"], identity: testIdentity() }).discardUnfundedPublication(publication);
-  assert.equal(await store.get(key), null);
+  assert.equal(publish.phase, "funding-submitted");
+  assert.equal(publish.fundingContentHash, FUNDING_TX);
+  assert.equal(publish.fundingTransactionHex, "0x02");
+  await assert.rejects(new MarketplaceController({ node, store, l1RpcUrls: ["http://l1.invalid"], identity: testIdentity() }).discardUnfundedPublication(publication), /funding has started/);
+  assert.notEqual(await store.get(key), null);
 });
 
 test("a listing keeps funding whose input was spent by a transaction that is not yet final", async () => {
@@ -971,18 +951,18 @@ test("a listing keeps funding whose input was spent by a transaction that is not
   assert.equal((await store.get(key))?.publish?.fundingContentHash, FUNDING_TX);
 });
 
-test("resuming a listing reconciles before it reuses saved funding bytes", async () => {
+test("resuming retains saved funding until the wallet permits replacement", async () => {
   const { key, store, node } = conflictedFunding(100n);
   const controller = new MarketplaceController({ node, store, l1RpcUrls: ["http://l1.invalid"], identity: executableIdentity(node, () => {}) });
   // The fixture publication cannot be reconstructed; resumption fails only after reconciling.
   await assert.rejects(controller.resumePublication(publication));
-  assert.equal((await store.get(key))?.publish?.fundingContentHash, undefined);
+  assert.equal((await store.get(key))?.publish?.fundingContentHash, FUNDING_TX);
 });
 
 test("discarding an unfunded listing re-reads it under the seller publication lock", async () => {
   const key = offerKey(publication);
   const unfunded: StoredOffer = { key, pub: publication, source: "created", savedAt: 1,
-    publish: { phase: "l2-contract-submitted", l2ContractContentHash: CONTRACT_TX, updatedAt: 1 } };
+    publish: { phase: "draft", updatedAt: 1 } };
   let stored: StoredOffer | null = { ...unfunded, publish: { ...unfunded.publish!, phase: "funding-submitted", fundingContentHash: FUNDING_TX } };
   const store = {
     update: async (_key: string, operation: (current: StoredOffer | null) => StoredOffer | null) => (stored = operation(structuredClone(stored))),
@@ -1113,7 +1093,7 @@ test("funded publication survives catalog failure and catalog publication remain
     pub: publication,
     source: "created",
     savedAt: 1,
-    publish: { phase: "funding-submitted", creationOpenFeeBaseUnits: "0", fundingOpenFeeBaseUnits: "0", updatedAt: 1 },
+    publish: { phase: "funding-submitted", fundingOpenFeeBaseUnits: "0", updatedAt: 1 },
   };
   const fundedPublication: OfferPublication = {
     ...publication,

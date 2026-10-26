@@ -31,7 +31,7 @@ export function verifyHandoff(params: {
   verifyResultProof(params.proof, params.recentHash, params.blockNumber, params.position);
   const leaf = params.proof.leaf;
   const profile = PRIVATE_VALUE_PROFILES.S;
-  if (leaf.kind !== "transaction" || leaf.txType !== 0 || leaf.fundingMode !== 0 || leaf.outcome !== 0 || leaf.statement === null || leaf.statement.words.length !== profile.publicInputs) throw new Error("lineage requires a successful S transfer");
+  if (leaf.kind !== "transaction" || leaf.txType !== 0 || leaf.outcome !== 0 || leaf.statement === null || leaf.statement.words.length !== profile.publicInputs) throw new Error("lineage requires a successful S transfer");
   if (!qualified(qualificationMask, params.outputSlot)) throw new Error("unqualified output slot");
   const words = leaf.statement.words.map(value => toField(value));
   const event = claimEvent({ root: params.policy.root, applicationVkHash: params.trustedVk, qualificationMask });

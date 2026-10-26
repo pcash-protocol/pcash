@@ -29,7 +29,7 @@ describe("discovering designated commitments this wallet controls", () => {
     const outputData = Array.from({ length: layout.outputs }, () => sizeClassFiller()) as unknown as PrivateValueOutputData;
     const arena = randomArena(layout.shapeId);
     const publicInputs = [BigInt(CHAIN_ID), 9n, ...nullifiers, ...Array.from({ length: layout.outputs }, (_, index) => BigInt(2_000 + index)),
-      deliveryCommitment(outputData, arena), 0n, commitment, 0n, 12n, 0n, 0n];
+      deliveryCommitment(outputData, arena), 0n, commitment, 0n, 12n, 0n, 0n, 0n];
     return toHex(encodePrivateValueTransaction({ shape: layout.shapeId, publicInputs, proof: new Uint8Array(WIRE_PROOF_BYTES), outputData, arena }));
   }
 

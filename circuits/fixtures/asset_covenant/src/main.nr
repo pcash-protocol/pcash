@@ -171,6 +171,7 @@ mod tests {
             carrier_context_hash: 0,
             asset_burn_amount: 0,
             delivery_commitment: 0,
+            account_creation_commitment: 0,
             input_slot_classes: [SLOT_CLASS_ASSET, SLOT_CLASS_NATIVE, 0, 0],
             input_commitments: [1, 2, 0, 0],
             nullifiers: [1, 2, 3, 4],

@@ -22,6 +22,7 @@ export * from "./asset.ts";
 export * from "./assetDefinition.ts";
 export * from "./envelope.ts";
 export * from "./arena.ts";
+export * from "./directSend.ts";
 export * from "./sectionDelivery.ts";
 export * from "./capabilities.ts";
 export * from "./catalog.ts";

@@ -37,7 +37,7 @@ vi.mock("@pcash/sdk/eip712", () => ({
   verifyPcashAuthorization: (_request: unknown, signature: string) => ({ signature }),
   serializeEcdsaSignature: ({ signature }: { signature: string }) => Uint8Array.of(signature === "signature-2" ? 2 : 1),
 }));
-vi.mock("@pcash/sdk/protocol", () => ({ networkConfigFromStatus: () => ({}), USER_ACCOUNT_CREATION_MAX_TX_BYTES: 3 }));
+vi.mock("@pcash/sdk/protocol", () => ({ networkConfigFromStatus: () => ({}), USER_ACCOUNT_CREATION_MAX_TX_BYTES: 12 }));
 vi.mock("@pcash/sdk/wallet", () => ({
   WalletReviewStaleError: class extends Error {}, DurablePreBroadcastError: class extends Error {},
   derivePcashProfileFromSignature: (signature: string, _network: unknown, address: string) => ({ address: BigInt(address), nkRoot: signature === "0x02" ? 3n : 2n }),
@@ -105,9 +105,10 @@ async function forget(account: string) {
   await store.clearProfileSessionIfRevision(identity(account), await store.profileSessionRevision(identity(account)));
 }
 let observed: ReturnType<typeof useWallet>;
+const renders: ReturnType<typeof useWallet>[] = [];
 let root: Root;
 let element: HTMLDivElement;
-function Probe() { observed = useWallet(); return null; }
+function Probe() { observed = useWallet(); renders.push(observed); return null; }
 function tree() {
   return <NetworkContext.Provider value={{ network }}><MemoryRouter><WalletProvider><Probe /></WalletProvider></MemoryRouter></NetworkContext.Provider>;
 }
@@ -230,6 +231,36 @@ describe("browser wallet sign-ins", () => {
     await act(async () => { resume(); await Promise.all([sync, refresh]); });
     expect(state.snapshotReads).toBe(3);
     expect(observed.funds?.total).toBe(10n);
+  });
+
+  it.each([
+    ["account switch", { status: "connected", address: B, chainId: 1 }, B],
+    ["network switch", { status: "connected", address: A, chainId: 2 }, A],
+    ["disconnect", { status: "disconnected", address: A, chainId: 1 }, undefined],
+  ])("hides the previous session on the first render after %s", async (_name, connection, viewer) => {
+    await act(async () => { await observed.signIn(); });
+    await settle("ready");
+    expect(observed.funds?.total).toBe(10n);
+
+    let resume!: () => void;
+    state.snapshotPause = new Promise<void>((resolve) => { resume = resolve; });
+    let pending!: Promise<void>;
+    await act(async () => { pending = observed.refresh(); });
+    renders.length = 0;
+    state.connection = { ...state.connection, ...connection };
+    await act(async () => root.render(tree()));
+    const first = renders[0]!;
+    expect(first.connectedAccount).toBe(viewer);
+    expect(first.phase).not.toBe("ready");
+    for (const key of ["profile", "wallet", "walletClient", "selfPublication", "snapshot", "funds", "followedStatus", "activation", "submissionLock"] as const) {
+      expect(first[key], key).toBeUndefined();
+    }
+    expect(first.paymentActivity).toEqual([]);
+    expect(first.accountRecord).toBe("unknown");
+
+    await act(async () => { resume(); await pending; });
+    expect(observed.funds).toBeUndefined();
+    expect(observed.profile).toBeUndefined();
   });
 
   it("leaves the ready publication UI when the connected Ethereum chain changes", async () => {
@@ -404,13 +435,26 @@ describe("Faster gas check", () => {
     expect(state.send).not.toHaveBeenCalled();
   });
 
-  it("quotes account setup as its creation entry and one action, before preparing it", async () => {
+  it.each(["new", "retry"] as const)("keeps %s open setup independent of Ethereum gas and recovery", async (kind) => {
+    state.accountReady = false;
+    const stopped = new Error("stopped at preparation");
+    state.prepareActivation.mockRejectedValue(stopped);
+    let caught: unknown;
+    await act(async () => {
+      caught = await (kind === "new" ? observed.setupAccountWithoutEth() : observed.retryAccountSetup("expired", "open")).catch(cause => cause);
+    });
+    expect(caught).toBe(stopped);
+    expect(state.quoteBatch).not.toHaveBeenCalled();
+    expect(state.prepareActivation).toHaveBeenCalledWith({ authorizationMode: "signed", mine: true, publication: "open" });
+  });
+
+  it("quotes account setup as one action with the signed creation attached", async () => {
     state.accountReady = false;
     let caught: unknown;
     await act(async () => { caught = await observed.setupAccount().catch((cause) => cause); });
     expect(caught).toBeInstanceOf(FasterGasError);
     const { transactions: entries } = state.quoteBatch.mock.calls[0]![0] as { transactions: Uint8Array[] };
-    expect(entries.map((entry) => entry.length)).toEqual([3, 4]);
+    expect(entries.map((entry) => entry.length)).toEqual([11]);
     expect(state.prepareActivation).not.toHaveBeenCalled();
     expect(observed.error).toBe("Not enough ETH for gas. Add ETH to your Ethereum wallet and try again.");
   });

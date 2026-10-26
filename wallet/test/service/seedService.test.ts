@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import type { PcashNodeClient } from "@pcash/sdk/clients";
-import { networkConfigFromStatus, decodeTransaction, transactionIdentity } from "@pcash/sdk/protocol";
+import { WIRE_PROOF_BYTES, networkConfigFromStatus, decodeTransaction, transactionIdentity } from "@pcash/sdk/protocol";
 import { fieldToHex } from "@pcash/sdk/crypto";
 import { addressHex, fromHex, toHex } from "@pcash/sdk/utils";
 import { privateKeyPcashActionSigner } from "@pcash/sdk/eip712";
@@ -41,10 +41,10 @@ vi.mock("@pcash/sdk/clients", async (original) => ({
   }),
 }));
 
-// Registration is proof-free; this service test does not load proving artifacts.
+// The service test supplies proof bytes while exercising setup and transport.
 vi.mock("@pcash/sdk/wallet/node", async (original) => ({
   ...await original<typeof import("@pcash/sdk/wallet/node")>(),
-  createWalletProvers: () => ({}),
+  createWalletProvers: () => ({ privateValue: { proveAndEncode: async (build: { encodeTransaction(proof: Uint8Array): Uint8Array }) => build.encodeTransaction(new Uint8Array(WIRE_PROOF_BYTES)) } }),
 }));
 vi.mock("@pcash/sdk/relay", async (original) => {
   const actual = await original<typeof import("@pcash/sdk/relay")>();
@@ -100,7 +100,7 @@ it("imports a seed over the local API, registers without a gas key, and reopens 
   fixture.node = sim.client();
   const node = fixture.node;
   node.status = async () => ({ ...sim.status(), acceptedTransactionTypes: [0, 1, 2, 3] });
-  node.getBlock = async (number) => ({ hash: fieldToHex(sim.block(BigInt(number)).hash) }) as never;
+  node.getBlock = async (number) => ({ hash: fieldToHex(sim.block(BigInt(number)).hash), timestamp: sim.block(BigInt(number)).envelope.header.timestamp }) as never;
   const published: string[] = [];
   node.submitRawTransaction = async (hex) => {
     published.push(hex);
@@ -123,7 +123,10 @@ it("imports a seed over the local API, registers without a gas key, and reopens 
   await expect(first.client.request("GET", "/code")).rejects.toThrow("no registered receive key");
   await first.client.request("POST", "/account", { submit: "mempool", waitMode: "none" });
   expect(published).toHaveLength(1);
-  const creation = decodeTransaction(fromHex(published[0]!));
+  const action = decodeTransaction(fromHex(published[0]!));
+  expect(action.kind).toBe(0);
+  if (action.kind !== 0 || action.accountCreation?.kind !== "user") throw new Error("expected attached setup");
+  const creation = decodeTransaction(action.accountCreation.transactionBytes);
   expect(creation).toMatchObject({ kind: 1, authorization: { kind: "signed" } });
   if (creation.kind !== 1) throw new Error("expected user account creation");
   sim.addBlock({ accounts: [{
@@ -161,7 +164,7 @@ it.each([false, true])("defaults registration to the selected wallet key with op
   const sim = new ChainSim(123456n);
   fixture.node = sim.client();
   fixture.node.status = async () => ({ ...sim.status(), acceptedTransactionTypes: [0, 1, 2, 3] });
-  fixture.node.getBlock = async number => ({ hash: fieldToHex(sim.block(BigInt(number)).hash) }) as never;
+  fixture.node.getBlock = async number => ({ hash: fieldToHex(sim.block(BigInt(number)).hash), timestamp: sim.block(BigInt(number)).envelope.header.timestamp }) as never;
   const gasKey = new Uint8Array(32).fill(0x31);
   const identity = deriveSeedWalletIdentity(MNEMONIC, networkConfigFromStatus(await fixture.node.status()));
   const address = addressHex(identity.profile.address);
@@ -185,7 +188,7 @@ it("in Tor mode builds the node client on the Tor fetch and registers through th
   const sim = new ChainSim(123456n);
   fixture.node = sim.client();
   fixture.node.status = async () => ({ ...sim.status(), acceptedTransactionTypes: [0, 1, 2, 3] });
-  fixture.node.getBlock = async number => ({ hash: fieldToHex(sim.block(BigInt(number)).hash) }) as never;
+  fixture.node.getBlock = async number => ({ hash: fieldToHex(sim.block(BigInt(number)).hash), timestamp: sim.block(BigInt(number)).envelope.header.timestamp }) as never;
   const published: string[] = [];
   fixture.node.submitRawTransaction = async (hex) => {
     published.push(hex);
@@ -209,7 +212,7 @@ it("in Tor mode builds the node client on the Tor fetch and registers through th
   expect(published).toEqual([]);
   await client.request("POST", "/account", { waitMode: "none" });
   expect(published).toHaveLength(1);
-  expect(decodeTransaction(fromHex(published[0]!))).toMatchObject({ kind: 1, authorization: { kind: "signed" } });
+  expect(decodeTransaction(fromHex(published[0]!))).toMatchObject({ kind: 0, accountCreation: { kind: "user" } });
   expect(l1Senders).toEqual([]);
 });
 
@@ -218,7 +221,7 @@ it("in Tor mode syncs each wallet and runs each request's actions on node client
   const sim = new ChainSim(123456n);
   fixture.node = sim.client();
   fixture.node.status = async () => ({ ...sim.status(), acceptedTransactionTypes: [0, 1, 2, 3] });
-  fixture.node.getBlock = async number => ({ hash: fieldToHex(sim.block(BigInt(number)).hash) }) as never;
+  fixture.node.getBlock = async number => ({ hash: fieldToHex(sim.block(BigInt(number)).hash), timestamp: sim.block(BigInt(number)).envelope.header.timestamp }) as never;
   fixture.node.submitRawTransaction = async (hex) =>
     ({ contentHash: transactionIdentity(fromHex(hex)).contentHash, status: "ready" }) as never;
   const service = await startWalletServer(parseServeArgs([
@@ -242,7 +245,7 @@ it("in Tor mode syncs each wallet and runs each request's actions on node client
   await client.request("POST", "/account", { wallet: first.address, waitMode: "none" });
   // Registration's anchor check and admission share one client, which nothing else used.
   const admission = nodeClients.calls.find(({ method }) => method === "submitRawTransaction")!.client;
-  expect(callsBy(admission).sort()).toEqual(["getBlock", "status", "status", "submitRawTransaction"]);
+  expect(callsBy(admission).sort()).toEqual(["getBlock", "status", "status", "status", "submitRawTransaction"]);
   expect(nodeClients.calls.slice(0, before).some(({ client }) => client === admission)).toBe(false);
   // The wallet's own client only syncs; the other wallet's is not touched.
   const walletReads = new Set(["status", "getBlockHeader", ...syncMethods]);
@@ -273,7 +276,7 @@ it("in Tor mode self-publishes registration through a Tor-reachable L1 endpoint 
   const sim = new ChainSim(123456n);
   fixture.node = sim.client();
   fixture.node.status = async () => ({ ...sim.status(), acceptedTransactionTypes: [0, 1, 2, 3] });
-  fixture.node.getBlock = async number => ({ hash: fieldToHex(sim.block(BigInt(number)).hash) }) as never;
+  fixture.node.getBlock = async number => ({ hash: fieldToHex(sim.block(BigInt(number)).hash), timestamp: sim.block(BigInt(number)).envelope.header.timestamp }) as never;
   const address = addressHex(deriveSeedWalletIdentity(MNEMONIC, networkConfigFromStatus(await fixture.node.status())).profile.address);
   const service = await startWalletServer(parseServeArgs([
     "--listen", "127.0.0.1:0", "--data-dir", directory, "--scan-interval-ms", "60000",
@@ -302,7 +305,7 @@ it("recovers an old sender's activation hash after restart without L1 configurat
   fixture.node = sim.client();
   const node = fixture.node;
   node.status = async () => ({ ...sim.status(), acceptedTransactionTypes: [0, 1, 2, 3] });
-  node.getBlock = async number => ({ hash: fieldToHex(sim.block(BigInt(number)).hash) }) as never;
+  node.getBlock = async number => ({ hash: fieldToHex(sim.block(BigInt(number)).hash), timestamp: sim.block(BigInt(number)).envelope.header.timestamp }) as never;
   const gasKey = new Uint8Array(32).fill(0x31);
   const oldSender = addressHex(privateKeyPcashActionSigner(gasKey).address);
   const identity = deriveSeedWalletIdentity(MNEMONIC, networkConfigFromStatus(await node.status()));

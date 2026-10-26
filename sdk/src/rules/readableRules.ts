@@ -15,7 +15,7 @@ import type { PrivateValue } from "../protocol/transaction.ts";
 import type { WalletProfile } from "../protocol/types.ts";
 
 export const PAYMENT_EIP712_TYPE =
-  "PcashPayment(uint256 pcashChainId,address recipient,uint256 amount,uint256 openFeeAmount,address issuanceRecipient,uint256 issuanceOwnerCommitment,uint256 relayFeeAmount,uint256 relayFeeOwnerCommitment,uint256 transactionContext,uint64 notBefore,uint64 validUntil)";
+  "PcashPayment(uint256 pcashChainId,address recipient,uint256 amount,uint256 openFeeAmount,address issuanceRecipient,uint256 issuanceOwnerCommitment,uint256 relayFeeAmount,uint256 relayFeeOwnerCommitment,uint256 accountCreationCommitment,uint256 transactionContext,uint64 notBefore,uint64 validUntil)";
 
 /** The full-transaction fixture's message. It has no relay terms: every real output is a declared output. */
 export const TRANSACTION_DETAIL_EIP712_TYPE =
@@ -26,7 +26,7 @@ export const TRANSACTION_DETAIL_EIP712_TYPE =
         `address out${i}Recipient,uint256 out${i}Amount,uint256 out${i}AssetId`,
     )
     .join(",") +
-  ",uint256 openFeeAmount,address issuanceRecipient,uint256 issuanceOwnerCommitment,uint256 transactionContext,uint64 notBefore,uint64 validUntil,uint256 privateValueCommitment)";
+  ",uint256 openFeeAmount,address issuanceRecipient,uint256 issuanceOwnerCommitment,uint256 accountCreationCommitment,uint256 transactionContext,uint64 notBefore,uint64 validUntil,uint256 privateValueCommitment)";
 
 /** The payment message in display order. All parties are Ethereum addresses. */
 export interface PaymentMessage {
@@ -38,6 +38,7 @@ export interface PaymentMessage {
   issuanceOwnerCommitment: FieldNumberish;
   relayFeeAmount: FieldNumberish;
   relayFeeOwnerCommitment: FieldNumberish;
+  accountCreationCommitment: FieldNumberish;
   transactionContext: FieldNumberish;
   notBefore: FieldNumberish;
   validUntil: FieldNumberish;

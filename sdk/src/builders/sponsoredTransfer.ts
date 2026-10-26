@@ -326,6 +326,7 @@ export function prepareSponsorshipAuthorization(
     issuanceOwnerCommitment: toField(transaction.global.issuanceOwnerCommitment, "issuanceOwnerCommitment"),
     relayFeeAmount: relayPayment?.amount ?? 0n,
     relayFeeOwnerCommitment: relayPayment?.ownerCommitment ?? 0n,
+    accountCreationCommitment: transaction.global.accountCreationCommitment,
     transactionContext,
     notBefore: toField(transaction.global.notBeforeTimestamp, "notBeforeTimestamp"),
     validUntil: toField(transaction.global.validUntilTimestamp, "validUntilTimestamp"),

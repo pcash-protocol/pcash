@@ -101,7 +101,7 @@ it("expires setup mining that no Ethereum transaction carried without leaving hi
     recipientAddress: `0x${"bb".repeat(20)}`, inputs: [{ nullifier: nullifiers[0]!, spentCommitment: null }], change: null,
   };
   data.pendingUserAccountCreations = [{
-    contentHash: word(60), miningTransactionHex: "0x0abc", transactionHex: "0x0def", address: `0x${"bb".repeat(20)}`,
+    contentHash, publication: "self", transactionHex: "0x0abc", address: `0x${"bb".repeat(20)}`,
     pcashChainId: "8191", pcashGenesisHash: word(11), l1ChainId: "11155111", inboxAddress: `0x${"22".repeat(20)}`,
     genesisL1Block: "0", genesisL1BlockHash: word(12), ruleSetCommitment: "0", receiveKeyHash: word(13),
     recentPcashBlockNumber: "0", recentPcashBlockHash: word(14), validUntilTimestamp: "100",

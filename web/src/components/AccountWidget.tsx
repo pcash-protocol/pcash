@@ -1,8 +1,6 @@
 import { EthereumAddress } from "./EthereumAddress.tsx";
 import { useEffect, useState } from "react";
-import { addressHex } from "@pcash/sdk/utils";
 import { Link } from "react-router-dom";
-import { useAccount } from "wagmi";
 import { AccountAvatar } from "./AccountAvatar.tsx";
 import { useWalletPanel } from "../routes/wallet/OwnerPanels.tsx";
 import { useWallet } from "../lib/WalletProvider.tsx";
@@ -21,8 +19,6 @@ function Avatar({ address, avatar, large }: { address: string | undefined; avata
 export function AccountWidget() {
   const {
     phase,
-    snapshot,
-    profile,
     connectedAccount,
     accountRecord,
     busy,
@@ -37,11 +33,7 @@ export function AccountWidget() {
   const [mounted, setMounted] = useState(false);
   const panel = useWalletPanel();
   const activity = useWalletActivity();
-  const { address: ethereumAddress } = useAccount();
-
-  const address = snapshot?.address
-    ?? (profile === undefined ? connectedAccount : addressHex(profile.address))
-    ?? (phase !== "disconnected" ? ethereumAddress : undefined);
+  const address = connectedAccount;
   const identity = useEthereumIdentity(mounted ? address : undefined);
 
   useEffect(() => setMounted(true), []);

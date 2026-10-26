@@ -25,7 +25,6 @@ import {
   failureOperands,
   formatBytes,
   formatCount,
-  formatFundingMode,
   formatKind,
   outcomeLabel,
   formatTime,
@@ -233,7 +232,7 @@ function PostedTransaction({ canonical, personalPayment }: { canonical: Transact
   const nullifiers = summary.nullifiers ?? [];
   const succeeded = summary.outcome === "succeeded";
   // A succeeded contract creation reports the account it created.
-  const createdContract = summary.kind === "contractAccount" ? summary.account : null;
+  const createdContract = summary.accountCreation !== 0 ? summary.account : null;
   const arena = useMemo(() => readArena(canonical.rawTransaction), [canonical.rawTransaction]);
   const tabs: DetailTab[] = arena === null ? ["Overview", "Public inputs", "Raw bytes"] : ["Overview", "Public inputs", "Arena", "Raw bytes"];
 
@@ -241,7 +240,7 @@ function PostedTransaction({ canonical, personalPayment }: { canonical: Transact
     <Breadcrumb><Link to="/explorer">Explorer</Link><Link to="/transactions">Transactions</Link></Breadcrumb>
     <header className={detailStyles.header}>
       <div className={detailStyles.title}><h1>Transaction</h1><Tag tone={succeeded ? "good" : "bad"}>{succeeded ? "Succeeded" : "Failed"}</Tag></div>
-      <p>{formatKind(summary.kind)}{summary.fundingMode !== null && <> · {formatFundingMode(summary.fundingMode)}</>}{createdContract !== null && <> · <Link to={addressPath(createdContract.address)}><EthereumAddress address={createdContract.address} short /></Link></>} · <RelativeTime seconds={summary.timestamp} suffix /></p>
+      <p>{formatKind(summary.kind)}{summary.accountCreation !== 0 && <> · {summary.accountCreation === 1 ? "Account created" : "Account reused"}</>}{createdContract !== null && <> · <Link to={addressPath(createdContract.address)}><EthereumAddress address={createdContract.address} short /></Link></>} · <RelativeTime seconds={summary.timestamp} suffix /></p>
     </header>
 
     {summary.outcome !== "succeeded" && <FailureBlock outcome={summary.outcome} detail={detail} />}

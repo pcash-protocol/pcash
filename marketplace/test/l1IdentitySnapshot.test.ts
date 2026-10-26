@@ -127,7 +127,7 @@ describe("single L1 identity snapshot", () => {
 
       await assert.rejects(
         controller.createAndPublish({
-          assetId: 0n, amount: 1n, ethPriceWei: 1n, purchaseMinutes: 1n, creationOpenFeeAmount: 0n, fundingOpenFeeAmount: 0n,
+          assetId: 0n, amount: 1n, ethPriceWei: 1n, purchaseMinutes: 1n, fundingOpenFeeAmount: 0n,
         }),
         /configured L1 RPC is chain 1, but the PCASH node follows L1 chain 999/,
       );

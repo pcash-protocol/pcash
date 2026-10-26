@@ -7,6 +7,7 @@ import { runLineageScenario } from "./lineage.ts";
 import { runBoardScenario } from "./board.ts";
 import { runContractPostingScenario } from "./contractPosting.ts";
 import { runCoreScenario } from "./core.ts";
+import { runDirectSendScenario } from "./directSend.ts";
 import { runIssuanceBoundaryScenario } from "./issuanceBoundary.ts";
 import { runMarketplaceScenario } from "./marketplace.ts";
 import { runP2pScenario } from "./p2p.ts";
@@ -41,6 +42,7 @@ const RUNNERS: Readonly<Record<string, (fixture: ScenarioFixture) => Promise<unk
   "selected-relay": runSelectedRelayScenario,
   "private-value-profiles": runPrivateValueProfilesScenario,
   "registration-mining": runRegistrationMiningScenario,
+  "direct-send": runDirectSendScenario,
   "seed-wallet": runSeedWalletScenario,
   reorg: runReorgScenario,
   "issuance-boundary": runIssuanceBoundaryScenario,

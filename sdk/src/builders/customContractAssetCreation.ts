@@ -1,3 +1,4 @@
+import type { AccountCreationAttachment } from "../protocol/codec.ts";
 import { PRIVATE_VALUE_PROFILES, privateValueProfile, type PrivateValueShape } from "../constants/privateValueProfiles.ts";
 import type { DesignatedIssuanceOpening } from "../protocol/payout.ts";
 import {
@@ -135,6 +136,7 @@ export interface BuildFixedSupplyCreationToCustomContractParams {
   notBeforeTimestamp?: FieldNumberish;
   /** The carrier context the delivering carrier must have; 0 = any delivery. Default 0. */
   carrierContextHash?: FieldNumberish;
+  accountCreation?: AccountCreationAttachment;
   dummyInputSeed?: FieldNumberish;
   /** The creating wallet's sender region, which also records every inventory opening. */
   sender?: ArenaSender;
@@ -226,6 +228,7 @@ export async function buildFixedSupplyCreationToCustomContract(
     ...(params.notBeforeTimestamp === undefined ? {} : { notBeforeTimestamp: params.notBeforeTimestamp }),
     validUntilTimestamp: params.validUntilTimestamp,
     ...(params.carrierContextHash === undefined ? {} : { carrierContextHash: params.carrierContextHash }),
+    ...(params.accountCreation === undefined ? {} : { accountCreation: params.accountCreation }),
     ...(params.dummyInputSeed === undefined ? {} : { dummyInputSeed: params.dummyInputSeed }),
     ...(params.sender === undefined ? {} : { sender: params.sender }),
     assetDefinition,

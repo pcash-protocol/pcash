@@ -1,3 +1,4 @@
+import { accountCreationAttachmentCommitment } from "../protocol/codec.ts";
 import { prepareEvent } from "../protocol/events.ts";
 import { PRIVATE_VALUE_PROFILES, privateValueProfile, type PrivateValueShape } from "../constants/privateValueProfiles.ts";
 import { authorizationIssuanceOpening } from "../protocol/payout.ts";
@@ -505,6 +506,7 @@ export function buildAssetAction(params: BuildAssetActionParams): AssetActionBui
   }
   const { issuanceRecipient, issuanceNoteSecret, transactionContext } = authorizationIssuanceOpening(issuanceOwnerCommitment, pcashChainId, nullifiers, params.designatedIssuanceOpening, shape);
   const carrierContextHash = toField(params.carrierContextHash ?? 0n, "carrierContextHash");
+  const accountCreationCommitment = accountCreationAttachmentCommitment(params.accountCreation, pcashChainId);
   const transaction: PrivateValue = {
     global: {
       openFeeAmount,
@@ -514,6 +516,7 @@ export function buildAssetAction(params: BuildAssetActionParams): AssetActionBui
       carrierContextHash,
       assetBurnAmount,
       deliveryCommitment: deliveryCommitmentValue,
+      accountCreationCommitment,
     },
     inputs: resolvedInputs.map((input) => ({
       slotClass: input.slotClass,
@@ -563,6 +566,7 @@ export function buildAssetAction(params: BuildAssetActionParams): AssetActionBui
     toField(params.validUntilTimestamp),
     carrierContextHash,
     eventOpening.eventsCommitment,
+    accountCreationCommitment,
   ];
 
   const prepareReadableOwnerAuthorization = (
@@ -677,6 +681,7 @@ export function buildAssetAction(params: BuildAssetActionParams): AssetActionBui
       issuanceOwnerCommitment,
       relayFeeAmount: relayPayment?.amount ?? 0n,
       relayFeeOwnerCommitment: relayPayment?.ownerCommitment ?? 0n,
+      accountCreationCommitment,
       transactionContext,
       notBefore: toField(params.notBeforeTimestamp ?? 0n),
       validUntil: toField(params.validUntilTimestamp),
@@ -823,7 +828,7 @@ export function buildAssetAction(params: BuildAssetActionParams): AssetActionBui
     publicInputs,
     outputData,
     arena,
-    encodeTransaction: (proof) => encodePrivateValueTransaction({ shape, publicInputs, proof, outputData, arena }),
+    encodeTransaction: (proof) => encodePrivateValueTransaction({ shape, publicInputs, proof, outputData, arena, ...(params.accountCreation === undefined ? {} : { accountCreation: params.accountCreation }) }),
     assetBurnAmount,
     recentPcashBlockHash: recent,
     pcashChainId,

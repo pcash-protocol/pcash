@@ -165,6 +165,7 @@ describe("signed-test signatures", () => {
     issuanceOwnerCommitment: 0n,
     relayFeeAmount: 0n,
     relayFeeOwnerCommitment: 0n,
+    accountCreationCommitment: 0n,
     transactionContext: payoutTransactionContext(pcashChainId, nullifiers),
     notBefore: 0n,
     validUntil: 2000000000n,
@@ -193,6 +194,7 @@ describe("signed-test signatures", () => {
         carrierContextHash: 0n,
         assetBurnAmount: 7n,
         deliveryCommitment: 0x61n,
+        accountCreationCommitment: 0n,
       },
       inputs: [
         {
@@ -230,6 +232,7 @@ describe("signed-test signatures", () => {
       openFeeAmount: 0n,
       issuanceRecipient,
       issuanceOwnerCommitment,
+      accountCreationCommitment: 0n,
       transactionContext: payoutTransactionContext(pcashChainId, nullifiers),
       notBefore: 10n,
       validUntil: 2000000000n,

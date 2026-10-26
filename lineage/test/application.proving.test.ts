@@ -42,7 +42,7 @@ if (process.env.PCASH_REQUIRE_PROVER === "1" && !available) throw new Error("rel
     statement[offsets.chainId] = fixture.build.pcashChainId;
     statement[offsets.outputs] = noteBodyCommitment(BigInt(input.payout.owner_commitment), 0n, 1000n);
     statement[offsets.eventsCommitment] = eventsCommitment(19n, { applicationVkHash: lineageVk, event: claimEvent({ root: fixture.policy.root, applicationVkHash: lineageVk, qualificationMask: 1 }) });
-    const result: TransactionResultCommitment = { txType: 0, fundingMode: 0, l1TransactionIndex: 0n, batchItemIndex: 0n, outcome: "succeeded", posterOwnerCommitment: 0n, outputStartIndex: 0n, statementHash: transactionStatementHash(statement) };
+    const result: TransactionResultCommitment = { txType: 0, accountCreation: 0, l1TransactionIndex: 0n, batchItemIndex: 0n, outcome: "succeeded", posterOwnerCommitment: 0n, outputStartIndex: 0n, statementHash: transactionStatementHash(statement) };
     const tree = new SparseMerkleTree(64); tree.setLeaf(0, transactionResultLeaf(result));
     const header = { ...fixture.publication.boundary.header, transactionResultsRoot: transactionResultsRoot([result], []) };
     const hash = blockHash(header);
@@ -51,7 +51,7 @@ if (process.env.PCASH_REQUIRE_PROVER === "1" && !available) throw new Error("rel
     predecessor.publication.l1_origin_root_siblings = openBlockHeaderKey(header, 5).siblings.map(fm);
     input.is_source = false;
     input.transaction_statement = statement.map(fm);
-    input.transaction_result = { tx_type: fm(0n), funding_mode: fm(0n), l1_transaction_index: fm(0n), batch_item_index: fm(0n), outcome: fm(0n), poster_owner_commitment: fm(0n), output_start_index: fm(0n), statement_hash: fm(transactionStatementHash(statement)) };
+    input.transaction_result = { tx_type: fm(0n), account_creation: fm(0n), l1_transaction_index: fm(0n), batch_item_index: fm(0n), outcome: fm(0n), poster_owner_commitment: fm(0n), output_start_index: fm(0n), statement_hash: fm(transactionStatementHash(statement)) };
     input.event_salt = fm(19n); input.qualification_mask = fm(1n); input.output_slot = 0;
     input.result_opening = { ...input.result_opening, results_header_siblings: openBlockHeaderKey(header, 3).siblings.map(fm), transaction_count: "1", payout_count: "0", result_siblings: tree.proof(0).siblings.map(fm) };
   });
@@ -61,13 +61,30 @@ if (process.env.PCASH_REQUIRE_PROVER === "1" && !available) throw new Error("rel
     await noir.execute(predecessor as never);
   });
 
+  it.each([1, 2] as const)("accepts an authenticated predecessor with account creation outcome %s", async accountCreation => {
+    const witness = structuredClone(predecessor);
+    const input = witness.inputs[0];
+    input.transaction_statement[PRIVATE_VALUE_PROFILES.S.offsets.accountCreationCommitment] = fm(77n);
+    const statementHash = transactionStatementHash(input.transaction_statement.map(BigInt));
+    input.transaction_result.account_creation = fm(BigInt(accountCreation));
+    input.transaction_result.statement_hash = fm(statementHash);
+    const result: TransactionResultCommitment = { txType: 0, accountCreation, l1TransactionIndex: 0n, batchItemIndex: 0n, outcome: "succeeded", posterOwnerCommitment: 0n, outputStartIndex: 0n, statementHash };
+    const tree = new SparseMerkleTree(64); tree.setLeaf(0, transactionResultLeaf(result));
+    const header = { ...fixtureHeader, transactionResultsRoot: transactionResultsRoot([result], []) };
+    witness.recent_pcash_block_hash = fm(blockHash(header));
+    witness.history_root_siblings = openBlockHeaderKey(header, 6).siblings.map(fm);
+    witness.publication.l1_origin_root_siblings = openBlockHeaderKey(header, 5).siblings.map(fm);
+    input.result_opening = { ...input.result_opening, results_header_siblings: openBlockHeaderKey(header, 3).siblings.map(fm), result_siblings: tree.proof(0).siblings.map(fm) };
+    await noir.execute(witness as never);
+  });
+
   it("rejects an authenticated event from another actual VK naming the same root", async () => {
     const witness = structuredClone(predecessor);
     const input = witness.inputs[0];
     input.transaction_statement[PRIVATE_VALUE_PROFILES.S.offsets.eventsCommitment] = fm(eventsCommitment(19n, { applicationVkHash: lineageVk + 1n, event: claimEvent({ root: policyRoot, applicationVkHash: lineageVk, qualificationMask: 1 }) }));
     const statementHash = transactionStatementHash(input.transaction_statement.map(BigInt));
     input.transaction_result.statement_hash = fm(statementHash);
-    const result: TransactionResultCommitment = { txType: 0, fundingMode: 0, l1TransactionIndex: 0n, batchItemIndex: 0n, outcome: "succeeded", posterOwnerCommitment: 0n, outputStartIndex: 0n, statementHash };
+    const result: TransactionResultCommitment = { txType: 0, accountCreation: 0, l1TransactionIndex: 0n, batchItemIndex: 0n, outcome: "succeeded", posterOwnerCommitment: 0n, outputStartIndex: 0n, statementHash };
     const tree = new SparseMerkleTree(64); tree.setLeaf(0, transactionResultLeaf(result));
     const header = { ...fixtureHeader, transactionResultsRoot: transactionResultsRoot([result], []) };
     const hash = blockHash(header);
@@ -102,7 +119,7 @@ if (process.env.PCASH_REQUIRE_PROVER === "1" && !available) throw new Error("rel
   it.each([
     ["failed predecessor", (w: Map) => { w.inputs[0].transaction_result.outcome = fm(1n); }, /must have succeeded/],
     ["wrong transaction type", (w: Map) => { w.inputs[0].transaction_result.tx_type = fm(1n); }, /private value transaction/],
-    ["wrong funding mode", (w: Map) => { w.inputs[0].transaction_result.funding_mode = fm(1n); }, /funding mode must be zero/],
+    ["wrong account creation outcome", (w: Map) => { w.inputs[0].transaction_result.account_creation = fm(1n); }, /block hash must be in the PCASH history tree/],
     ["wrong output slot", (w: Map) => { w.inputs[0].output_slot = 1; }, /output slot must be qualified/],
     ["forged event salt", (w: Map) => { w.inputs[0].event_salt = fm(20n); }, /trusted lineage application and policy/],
     ["unrecognized application", (w: Map) => { w.lineage_vk_identity = fm(lineageVk + 1n); }, /trusted lineage application and policy/],
