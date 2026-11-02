@@ -1,0 +1,9 @@
+.scanner { display: flex; flex-direction: column; gap: 10px; }
+.viewport { position: relative; overflow: hidden; aspect-ratio: 1; border-radius: var(--radius-md); background: #111; }
+.video { width: 100%; height: 100%; object-fit: cover; }
+.frame { position: absolute; inset: 12%; border: 2px solid rgb(255 255 255 / 85%); border-radius: 12px; box-shadow: 0 0 0 999px rgb(0 0 0 / 30%); }
+.overlayText { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; color: #fff; font-size: 13px; }
+.hint { margin: 0; color: var(--color-text-muted); font-size: 12px; }
+.error { margin: 0; color: var(--color-danger-text); font-size: 12.5px; }
+.actions { display: flex; justify-content: flex-end; gap: 8px; }
+.actions select { flex: 1; min-width: 0; }

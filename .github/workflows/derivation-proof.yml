@@ -1,0 +1,113 @@
+name: Derivation proof
+
+# The derivation proof's contract and programs. The programs take most of an
+# hour to build, so on a pull request they build only when something they
+# build from changes.
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: Derivation proof contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1
+        with:
+          version: v1.8.5
+      - name: Contract tests
+        working-directory: derivation-proof/contracts
+        run: forge test
+
+  programs:
+    name: Derivation proof programs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      PCASH_CIRCUIT_KAT_SET: runtime
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      # The programs run the node's derivation and link bb's verifier at the
+      # node's pinned version, so changes to either rebuild them.
+      - name: Changes the programs build from
+        id: changes
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          if [ "$EVENT" != pull_request ] || ! git diff --quiet "origin/$BASE...HEAD" -- derivation-proof node \
+            circuits scripts/circuits Cargo.lock assets/prover-toolchain.json .github/workflows/derivation-proof.yml; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Configure temporary paths
+        if: steps.changes.outputs.build == 'true'
+        run: |
+          echo "PCASH_TOOL_ROOT=$RUNNER_TEMP/pcash-prover" >> "$GITHUB_ENV"
+          echo "PCASH_CIRCUIT_CACHE=$RUNNER_TEMP/circuit-bundles" >> "$GITHUB_ENV"
+          echo "PCASH_SP1_ROOT=$RUNNER_TEMP/sp1" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        if: steps.changes.outputs.build == 'true'
+        with:
+          node-version: 24.15.0
+          cache: npm
+      - name: Free runner disk
+        if: steps.changes.outputs.build == 'true'
+        # SP1's toolchains and the programs' builds outgrow the runner's free
+        # space; drop preinstalled SDKs this job never uses.
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL && df -h /
+      - name: Cache prover toolchain
+        if: steps.changes.outputs.build == 'true'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/pcash-prover
+          key: pcash-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('assets/prover-toolchain.json') }}
+      - name: Cache bb's verifier for the guest
+        if: steps.changes.outputs.build == 'true'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/sp1/chonk-*
+          key: chonk-${{ runner.os }}-${{ hashFiles('derivation-proof/bb/**', 'derivation-proof/toolchain.sh', 'assets/prover-toolchain.json') }}
+      - name: Install the prover toolchain
+        if: steps.changes.outputs.build == 'true'
+        run: node scripts/bootstrap_prover_toolchain.mjs
+      - name: Build the circuit bundle
+        if: steps.changes.outputs.build == 'true'
+        run: node scripts/circuits/bundle.mjs --print-path
+      - name: Build the programs
+        if: steps.changes.outputs.build == 'true'
+        run: |
+          derivation-proof/build-guest.sh
+          derivation-proof/build-guest.sh aggregation
+      - name: Build and lint the host
+        if: steps.changes.outputs.build == 'true'
+        run: |
+          sudo apt-get install -y protobuf-compiler
+          derivation-proof/build-host.sh
+          cd derivation-proof/host
+          export PCASH_CIRCUIT_BUNDLE="$(node ../../scripts/circuits/bundle.mjs --print-path | tail -n 1)"
+          CARGO_TARGET_DIR=../target/host cargo clippy --release -- -D warnings
+          CARGO_TARGET_DIR=../target/host cargo test --release
+      # A build anywhere gives these keys for this commit; compare a
+      # contract's with them.
+      - name: The programs' keys
+        if: steps.changes.outputs.build == 'true'
+        run: >-
+          derivation-proof/target/host/release/derivation-proof-host keys
+          --elf derivation-proof/target/guest/riscv64im-succinct-zkvm-elf/release/derivation-proof-guest
+          --aggregation-elf derivation-proof/target/guest/riscv64im-succinct-zkvm-elf/release/derivation-proof-aggregation
+      - name: The range program's verifier answers as the node's
+        if: steps.changes.outputs.build == 'true'
+        run: >-
+          derivation-proof/target/host/release/derivation-proof-host verdicts
+          --elf derivation-proof/target/guest/riscv64im-succinct-zkvm-elf/release/verdicts
+          --bundle "$(node scripts/circuits/bundle.mjs --print-path | tail -n 1)"

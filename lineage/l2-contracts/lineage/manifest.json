@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "contract": "LineageGate",
+  "functions": [
+    {
+      "name": "gated",
+      "applicationVkHash": "0x048382777724071952a4c6c49d9e7dc5cc985d0d26cd767113806dcef3de2d35",
+      "selector": 0,
+      "arguments": [
+        {
+          "name": "lineageVkIdentity",
+          "type": "field",
+          "visibility": "private"
+        },
+        {
+          "name": "eventEntry",
+          "type": "field",
+          "visibility": "private"
+        }
+      ],
+      "configuration": [
+        {
+          "name": "salt",
+          "type": "field",
+          "visibility": "private"
+        },
+        {
+          "name": "policyRoot",
+          "type": "field",
+          "visibility": "private"
+        },
+        {
+          "name": "lineageVk",
+          "type": "field",
+          "visibility": "private"
+        }
+      ],
+      "configurationCommitment": {
+        "scheme": "poseidon",
+        "domain": "REFERENCE_CONFIGURATION_DOMAIN",
+        "fields": [
+          "salt",
+          "policyRoot",
+          "lineageVk"
+        ]
+      }
+    }
+  ]
+}

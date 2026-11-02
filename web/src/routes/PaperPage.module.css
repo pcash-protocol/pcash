@@ -1,0 +1,36 @@
+.page {
+  --radius-md: 0;
+  --radius-lg: 0;
+  color: var(--color-text);
+  font-family: var(--font-serif);
+  min-width: 0;
+}
+
+.page > :global(.route-heading) {
+  padding: 32px 0 36px;
+  margin-bottom: 12px;
+  border-bottom: 3px double var(--color-text);
+}
+.page > :global(.route-heading) h1 {
+  font: 800 clamp(44px, 5.8vw, 80px)/1.02 var(--font-serif);
+  letter-spacing: -.03em;
+}
+.page > :global(.route-heading) p:last-child {
+  max-width: 44ch;
+  margin-bottom: 0;
+  font-size: 21px;
+  line-height: 1.5;
+}
+.page > :global(.panel) {
+  border-top: 3px double var(--color-text);
+  padding: clamp(18px, 3vw, 32px);
+}
+.page button, .page :global(.button) { border-radius: 3px; }
+
+@media (max-width: 900px) {
+  .page > :global(.route-heading) > :last-child:not(:first-child) { display: inline-block; margin-top: 20px; }
+}
+@media (max-width: 620px) {
+  .page > :global(.route-heading) { padding-block: 12px 28px; }
+  .page > :global(.route-heading) p:last-child { font-size: 19px; }
+}

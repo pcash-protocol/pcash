@@ -1,0 +1,5 @@
+.metric { display: grid; gap: 6px; min-width: 0; }
+.metric > span { color: var(--color-text-muted); font-size: 12px; }
+.metric output { font-size: 26px; line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.balances { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; min-width: 0; }
+.ether { color: var(--color-text-muted); font-size: 14px; font-variant-numeric: tabular-nums; }

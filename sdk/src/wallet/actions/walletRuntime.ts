@@ -1,0 +1,1037 @@
+import { transactionDataHash } from "@pcash/sdk/delivery";
+import { PRIVATE_VALUE_PROFILES, type PrivateValueShape } from "@pcash/sdk/constants";
+import { batchEntryCarrying } from "@pcash/sdk/relay";
+import type { SelectedRelayQuoteProvider } from "@pcash/sdk/eip712";
+import { userAccountCreationAttachment } from "./accountCreation.ts";
+import { runAssetCreationClient, type AssetCreationIntent, type AssetCreationProver } from "./assetCreationClient.ts";
+import type { AssetActionProver } from "./assetActionClient.ts";
+import { runAssetTransferClient, type AssetTransferIntent } from "./assetTransferClient.ts";
+import { runBulkJobStep, startBulkJob } from "./bulkJobClient.ts";
+import {
+  buildAuthorizedReferenceUserAccountCreation,
+  buildDirectReferenceUserAccountCreation,
+  defaultEcdsaRuleSet,
+} from "@pcash/sdk/builders";
+import { transactionIdentity, networkConfigFromStatus, RECENT_PCASH_BLOCK_WINDOW_SECONDS, nativeBurnAmount, NO_BURN, projectedBaseFee, quoteNativeBurn, quoteNetworkFee, ACCOUNT_WEIGHT, type NativeBurn } from "@pcash/sdk/protocol";
+import { ProtocolFeeFundingError, protocolFeeFundingFailure } from "./protocolFee.ts";
+import { assertMempoolAdmissible, type PcashNodeClient, type StatusResult } from "@pcash/sdk/clients";
+import type { PcashActionSigner } from "@pcash/sdk/eip712";
+import {
+  encodeUserAccountCreation,
+  decodeTransactionForChain,
+  TX_KIND_USER_ACCOUNT_CREATION,
+  TX_KIND_PRIVATE_VALUE,
+  generateMlKemKeyPair,
+  type MlKemKeyPair,
+  type RawPrivateValueTransaction,
+  type WalletProfile,
+} from "@pcash/sdk/protocol";
+import { addressHex, bytes32Hex, fromHex } from "@pcash/sdk/utils";
+import {
+  InsufficientNotesError,
+  addPendingNote,
+  addPendingUserAccountCreation,
+  addPendingNoteFundedTransfer,
+  markPendingNoteFundedTransferL1Submitted,
+  markPendingUserAccountCreationBroadcastRequested,
+  markPendingUserAccountCreationPrepared,
+  markPendingUserAccountCreationSubmitted,
+  pendingUserAccountCreation,
+  removePendingUserAccountCreation,
+  removePendingNoteFundedTransfer,
+  removePendingNotesForTransaction,
+  selectSpendableInputNotes,
+  spendableNotes,
+  type PendingUserAccountCreation,
+  type WalletNote,
+} from "../noteStore.ts";
+import type { WalletStateStore } from "../store.ts";
+import { emptyWalletState } from "../store.ts";
+import {
+  receiveKeyHashHex,
+  retainReceiveKeyPairForRescan,
+} from "../receiveKeyring.ts";
+import {
+  FULL_RESCAN_RESOURCE,
+  accountResource,
+  withWalletReservation,
+} from "../reservations.ts";
+import type { PcashProfile } from "../externalIdentity.ts";
+import {
+  isPcashProfile,
+  isSpendableWallet,
+  missingSpendableCapability,
+} from "../walletCapabilities.ts";
+import { buildExtendedCode, requireReceiveKeys } from "../wallet.ts";
+import {
+  assertPreparedInputNotesAvailable,
+  preflightNoteFundedTransferClient,
+  prepareNoteFundedTransfer,
+  selectNoteTransferFunding,
+  selectedPendingNoteFundedTransfer,
+  journaledBurn,
+  runNoteFundedTransferClient,
+  type NoteFundedProver,
+  type NoteFundedTransferIntent,
+  type PreparedNoteFundedTransfer,
+} from "./noteFundedClient.ts";
+import {
+  durableSubmissionCallbacks,
+  DurablePreBroadcastError,
+  type DurableSubmissionAdapter,
+  type DurableSubmissionCallbacks,
+  type DurableSubmissionResult,
+} from "./durableSubmission.ts";
+import {
+  runSponsoredContractAssetActionClient,
+  type SponsoredContractAssetActionIntent,
+} from "./contractSponsorshipClient.ts";
+import {
+  runUserAccountUpdateClient,
+  type UserAccountReceiveKeyClientUpdate,
+  type UserAccountUpdateProver,
+} from "./userAccountUpdateClient.ts";
+import { syncWallet, type SyncWalletResult } from "./syncWallet.ts";
+import { isWalletSyncConflict } from "./syncConflictRetry.ts";
+import { throwIfWalletActionCanceled } from "./cancellation.ts";
+import { localAccount } from "./localChain.ts";
+import { assertWalletStoreMatches } from "./walletSession.ts";
+import { loadSelfReceiveKey } from "./selfDelivery.ts";
+import {
+  actionPublication,
+  paddedPrivateValueByteSize,
+  pendingIssuanceBeneficiary,
+  planPublication,
+  privateValueActionUnits,
+  MAX_MINE_ACTIONS,
+  resolvePublicationFunding,
+  publicationOf,
+  type PublicationPlan,
+} from "./publication.ts";
+import {
+  type WalletTransferPreflight,
+} from "./transferReview.ts";
+export {
+  WalletReviewStaleError,
+  type WalletTransferPreflight,
+} from "./transferReview.ts";
+export interface WalletRuntimeProvers {
+  assetCreation: AssetCreationProver;
+  /** Asset payments, burns, batch transfers, and bulk chunks under the rule each selects. */
+  assetAction: AssetActionProver;
+  privateValue: NoteFundedProver;
+  userAccountUpdate: UserAccountUpdateProver;
+}
+
+export interface WalletBulkJobStepIntent<Prepared = unknown, Output = unknown> extends DurableSubmissionCallbacks {
+  jobId: string;
+  /** Allocate this new chunk beside an unresolved one; absent resumes the first unresolved chunk. */
+  chunkIndex?: number;
+  submission?: DurableSubmissionAdapter<Prepared, Output>;
+  privateRelayFeeAmount?: bigint;
+  selectedRelayQuote?: SelectedRelayQuoteProvider;
+}
+
+interface WalletContractSponsorshipIntent<Prepared = unknown, Output = unknown>
+  extends SponsoredContractAssetActionIntent {
+  submission?: DurableSubmissionAdapter<Prepared, Output>;
+}
+
+interface WalletRuntimeParams<Prepared = unknown, Output = unknown> {
+  node: PcashNodeClient;
+  chainId: bigint;
+  wallet: PcashProfile | WalletProfile;
+  /** Absent on watch-only accounts. */
+  signer?: PcashActionSigner;
+  store: WalletStateStore;
+  provers?: Partial<WalletRuntimeProvers>;
+  submission?: DurableSubmissionAdapter<Prepared, Output>;
+  userAccountCreationSubmission?: DurableSubmissionAdapter<Prepared, Output>;
+  settlePollIntervalMs?: number;
+  settlePollMaxAttempts?: number;
+}
+
+interface WalletAccountActivationIntent extends DurableSubmissionCallbacks {
+  publication?: "self" | "open";
+  /** Attach registration to a zero-value action. Open publication always does this. */
+  mine?: boolean;
+  authorizationMode?: "direct" | "signed";
+  receiveKey?: UserAccountReceiveKeyClientUpdate;
+  ruleSetCommitment?: bigint;
+  validUntilTimestamp?: bigint;
+  /** Approved native fee an update pays from the wallet's own notes; creation carries no fee. */
+  openFeeAmount?: bigint;
+  privateRelayFeeAmount?: bigint;
+  issuanceOwnerCommitment?: bigint;
+  selectedRelayQuote?: SelectedRelayQuoteProvider;
+}
+
+interface WalletAccountIntent<Prepared = unknown, Output = unknown>
+  extends WalletAccountActivationIntent {
+  /** Publication of an update to an existing account. */
+  submission?: DurableSubmissionAdapter<Prepared, Output>;
+  /**
+   * Publication of a new USER account. Its authority is its own Ethereum
+   * address, so it defaults to the wallet's L1 creation path; an update's
+   * `submission` does not redirect it.
+   */
+  userAccountCreationSubmission?: DurableSubmissionAdapter<Prepared, Output>;
+}
+
+export class WalletCapabilityError extends Error {
+  readonly capability: "signer" | "prover" | "submission" | "profile";
+
+  constructor(capability: WalletCapabilityError["capability"], action: string) {
+    super(`${action} requires the wallet ${capability} capability`);
+    this.name = "WalletCapabilityError";
+    this.capability = capability;
+  }
+}
+
+function requireSpendable(params: WalletRuntimeParams, action: string): {
+  signer: PcashActionSigner;
+  wallet: PcashProfile;
+} {
+  const authority = { profile: params.wallet, signer: params.signer };
+  if (!isSpendableWallet(authority)) {
+    throw new WalletCapabilityError(missingSpendableCapability(authority)!, action);
+  }
+  return { signer: authority.signer, wallet: authority.profile };
+}
+
+/** Distinct notes for each of `count` independent mines, each covering its burn. */
+function mineFunding(spendable: readonly WalletNote[], count: number, burn: bigint): WalletNote[][] {
+  const used = new Set<string>();
+  return Array.from({ length: count }, () => {
+    try {
+      const notes = selectSpendableInputNotes(spendable.filter(note => !used.has(note.commitment!)), burn,
+        PRIVATE_VALUE_PROFILES.S.inputs);
+      for (const note of notes) used.add(note.commitment!);
+      return notes;
+    } catch (error) {
+      throw protocolFeeFundingFailure(error, burn);
+    }
+  });
+}
+
+function requirePcashProfile(params: WalletRuntimeParams, action: string): PcashProfile {
+  if (!isPcashProfile(params.wallet)) throw new WalletCapabilityError("profile", action);
+  return params.wallet;
+}
+
+export function createWalletRuntime<Prepared = unknown, Output = unknown>(
+  params: WalletRuntimeParams<Prepared, Output>,
+) {
+  const settleInterval = params.settlePollIntervalMs ?? 2000;
+  const settleAttempts = params.settlePollMaxAttempts ?? 150;
+  // Settling reads the local chain state, so each attempt synchronizes first.
+  const synchronize = () => syncWallet({
+    node: params.node,
+    wallet: requireReceiveKeys(params.wallet),
+    chainId: params.chainId,
+    store: params.store,
+  });
+  // An action reads from the node its submission publishes through; sync stays on the wallet's node.
+  const actionNode = (submission?: Pick<DurableSubmissionAdapter, "node">): PcashNodeClient =>
+    submission?.node ?? params.node;
+  const retainReceiveKey = async (pair: MlKemKeyPair): Promise<void> => {
+    await withWalletReservation(params.store, [FULL_RESCAN_RESOURCE], async () => {
+      await params.store.transaction((current) => {
+        const data = current ?? emptyWalletState({
+          address: params.wallet.address,
+          network: params.store.identity.network,
+        });
+        retainReceiveKeyPairForRescan(data, pair);
+        return { data, value: undefined };
+      });
+    });
+  };
+
+  const activationAddress = addressHex(params.wallet.address);
+
+  const readActivation = async (): Promise<PendingUserAccountCreation | null> =>
+    pendingUserAccountCreation(await params.store.load(), activationAddress);
+
+  /**
+   * A crash between an Ethereum broadcast and saving its hash leaves the hash
+   * only in the transport journal. Copy it to the Ethereum-published
+   * transfers that journal carries. Runs once when the wallet opens.
+   */
+  const recordJournaledL1Hashes = async (): Promise<void> => {
+    const data = await params.store.load();
+    const outbox = new Set((data?.mempoolOutbox ?? []).map((entry) => entry.contentHash.toLowerCase()));
+    const unhashed = (data?.pendingNoteFundedTransfers ?? [])
+      .filter((transfer) => transfer.l1TxHash === undefined && !outbox.has(transfer.contentHash.toLowerCase()));
+    if (unhashed.length === 0) return;
+    const submission = params.userAccountCreationSubmission ?? params.submission;
+    const entries = (await (await submission?.l1Recovery?.())?.show())?.entries ?? [];
+    const carried = unhashed.flatMap((transfer) => {
+      const hash = batchEntryCarrying(entries, transfer.contentHash)?.transactionHash;
+      return hash === null || hash === undefined ? [] : [[transfer.contentHash, hash] as const];
+    });
+    if (carried.length === 0) return;
+    await params.store.transaction((current) => {
+      const data = current ?? emptyWalletState({ address: params.wallet.address, network: params.store.identity.network });
+      for (const [contentHash, hash] of carried) markPendingNoteFundedTransferL1Submitted(data, contentHash, hash);
+      return { data, value: undefined };
+    });
+  };
+
+  const reconcileAccountActivation = async (): Promise<PendingUserAccountCreation | null> => {
+    const pending = await readActivation();
+    if (pending === null) return null;
+    const [status, account] = await Promise.all([
+      params.node.status(),
+      params.store.readChain((chain) => chain?.account(activationAddress) ?? null),
+    ]);
+    if (account === null) {
+      const submission = pending.publication === "open" ? params.submission : params.userAccountCreationSubmission ?? params.submission;
+      const recovery = await submission?.l1Recovery?.();
+      const entry = batchEntryCarrying((await recovery?.show())?.entries ?? [], pending.contentHash);
+      if (entry !== undefined) {
+        if (pending.state === "l1-submitted" && pending.l1TxHash === entry.transactionHash
+          || pending.state === "broadcast-requested" && entry.transactionHash === null) return pending;
+        return params.store.transaction((stored) => {
+          const data = stored ?? emptyWalletState({ address: params.wallet.address, network: params.store.identity.network });
+          const current = pendingUserAccountCreation(data, activationAddress);
+          if (current?.contentHash === pending.contentHash) {
+            if (entry.transactionHash !== null) markPendingUserAccountCreationSubmitted(data, activationAddress, entry.transactionHash);
+            else if (current.state === "prepared") markPendingUserAccountCreationBroadcastRequested(data, activationAddress);
+          }
+          return { data, value: current };
+        });
+      }
+      // A PCASH deadline does not expire an Ethereum transaction. Keep the
+      // activation until its transport journal has been resolved as well.
+      const anchor = await params.node.getBlock(BigInt(pending.recentPcashBlockNumber));
+      const currentAnchor = anchor !== null && anchor.hash.toLowerCase() === pending.recentPcashBlockHash.toLowerCase()
+        && status.latestBlockTimestamp <= anchor.timestamp + RECENT_PCASH_BLOCK_WINDOW_SECONDS;
+      if (currentAnchor && status.latestBlockTimestamp <= BigInt(pending.validUntilTimestamp)
+        || (pending.publication === "self" && pending.state !== "prepared" && recovery === undefined)) return pending;
+    }
+    return params.store.transaction((current) => {
+      const data = current ?? emptyWalletState({ address: params.wallet.address, network: params.store.identity.network });
+      const active = pendingUserAccountCreation(data, activationAddress);
+      if (active?.contentHash !== pending.contentHash || active.state !== pending.state || active.l1TxHash !== pending.l1TxHash) return { data, value: active };
+      removePendingUserAccountCreation(data, activationAddress);
+      return { data, value: null };
+    });
+  };
+
+  const assertReceiveKeyChangeAllowed = (receiveKey?: UserAccountReceiveKeyClientUpdate) => {
+    if (isPcashProfile(params.wallet) && params.wallet.recoveryContract === "seed-derived"
+      && receiveKey !== undefined && receiveKey.operation !== "keep") {
+      throw new Error("seed wallets use one recoverable receive key; changing it is not supported");
+    }
+  };
+
+  const prepareAccountActivation = async (
+    intent: WalletAccountActivationIntent = {},
+    submissionOverride?: DurableSubmissionAdapter<Prepared, Output>,
+  ): Promise<PendingUserAccountCreation> => {
+    assertReceiveKeyChangeAllowed(intent.receiveKey);
+    const profile = requirePcashProfile(params, "account activation");
+    const submission = submissionOverride ?? (intent.publication === "open" ? params.submission : params.userAccountCreationSubmission ?? params.submission);
+    const publication = submission === undefined || submission.mode === "l1" ? "self" : "open";
+    const requestsMining = intent.mine === true || publication === "open";
+    const requestedAuthorization = requestsMining ? "signed" : intent.authorizationMode ?? "signed";
+    const status = await params.node.status();
+    assertWalletStoreMatches(params.store, params.wallet, params.chainId, status);
+    if (await localAccount(params.store, activationAddress) !== null) {
+      throw new Error(`user account ${activationAddress} already exists`);
+    }
+    if (intent.validUntilTimestamp !== undefined
+      && intent.validUntilTimestamp > status.latestBlockTimestamp + RECENT_PCASH_BLOCK_WINDOW_SECONDS) {
+      throw new Error("account activation deadline is beyond its recent PCASH block's window");
+    }
+    if (intent.ruleSetCommitment !== undefined) {
+      throw new Error("account activation does not accept an opaque custom rule-set commitment");
+    }
+    let creationReceiveKey = params.wallet.mlKemPublicKey;
+    if (intent.receiveKey?.operation === "clear") creationReceiveKey = undefined;
+    else if (intent.receiveKey?.operation === "replace") {
+      if (intent.receiveKey.keyPair === undefined) throw new Error("a new REPLACE requires a complete owned ML-KEM keypair");
+      creationReceiveKey = intent.receiveKey.keyPair.publicKey;
+    }
+    const network = networkConfigFromStatus(status);
+    const ruleSetCommitment = defaultEcdsaRuleSet({ wallet: profile, network, secrets: profile.defaultUserRuleSecrets }).ruleSetCommitment;
+    const expectedReceiveKeyHash = creationReceiveKey === undefined ? `0x${"00".repeat(32)}` : receiveKeyHashHex({ publicKey: creationReceiveKey });
+    const matchesActivation = (pending: PendingUserAccountCreation): boolean => {
+      const decoded = decodeTransactionForChain(fromHex(pending.transactionHex), params.chainId);
+      const creation = decoded.kind === TX_KIND_PRIVATE_VALUE && decoded.accountCreation?.kind === "user"
+        ? decodeTransactionForChain(decoded.accountCreation.transactionBytes, params.chainId) : decoded;
+      if (creation.kind !== TX_KIND_USER_ACCOUNT_CREATION) return false;
+      // A request for a standalone creation also takes the setup mining it falls back to:
+      // the same signed creation attached to an all-padding mine.
+      const form = decoded.kind === TX_KIND_PRIVATE_VALUE
+        ? creation.authorization.kind === "signed"
+        : !requestsMining && creation.authorization.kind === requestedAuthorization;
+      return form && pending.publication === publication
+        && BigInt(pending.ruleSetCommitment) === ruleSetCommitment
+        && pending.receiveKeyHash.toLowerCase() === expectedReceiveKeyHash.toLowerCase()
+        && (intent.validUntilTimestamp === undefined || BigInt(pending.validUntilTimestamp) === intent.validUntilTimestamp);
+    };
+    const existing = await reconcileAccountActivation();
+    if (existing !== null) {
+      if (!matchesActivation(existing)) throw new Error("a different exact account activation is already pending");
+      return existing;
+    }
+    // A standalone creation cannot pay, so it needs a zero base fee through inclusion. Past that, a wallet
+    // that can prove and sign attaches the same signed creation to an all-padding mine, which the waiver covers.
+    const carriesValue = requestsMining || (projectedBaseFee(status.feeExcess) !== 0n
+      && params.provers?.privateValue !== undefined && isSpendableWallet({ profile: params.wallet, signer: params.signer }));
+    const authorizationMode = carriesValue ? "signed" : requestedAuthorization;
+    const signer = authorizationMode === "signed" ? requireSpendable(params, "account activation").signer : undefined;
+    // Neither setup mining nor a standalone creation has a native input to burn from: setup
+    // mining needs the projected fee waived, a standalone creation a zero projected base fee.
+    const networkFeeAmount = carriesValue
+      ? quoteNetworkFee(status.feeExcess, privateValueActionUnits(PRIVATE_VALUE_PROFILES.S.shapeId) + ACCOUNT_WEIGHT)
+      : projectedBaseFee(status.feeExcess) * ACCOUNT_WEIGHT;
+    if (networkFeeAmount !== 0n) throw ProtocolFeeFundingError.unfunded(networkFeeAmount);
+    // Reconciliation can retire an expired prior activation before this new preparation starts.
+    const activeRevision = (await params.store.load())?.accountActivationRevision ?? "0";
+    if (intent.receiveKey?.operation === "replace") await retainReceiveKey(intent.receiveKey.keyPair!);
+    let validUntilTimestamp = intent.validUntilTimestamp ?? status.latestBlockTimestamp + 1_800n;
+    const creation = {
+      chainId: params.chainId, network, wallet: profile, defaultRuleSecrets: profile.defaultUserRuleSecrets,
+      ...(creationReceiveKey === undefined ? {} : { mlKemPublicKey: creationReceiveKey }),
+      recentPcashBlockHash: BigInt(status.latestBlockHash), validUntilTimestamp,
+    };
+    let entry: Uint8Array;
+    let preparedAction: PreparedNoteFundedTransfer | undefined;
+    let recentPcashBlockNumber = status.latestBlock;
+    let recentPcashBlockHash = status.latestBlockHash;
+    if (carriesValue) {
+      if (submission === undefined) throw new WalletCapabilityError("submission", "account activation");
+      const prover = params.provers?.privateValue;
+      if (prover === undefined) throw new WalletCapabilityError("prover", "account activation");
+      const prepared = await prepareNoteFundedTransfer({
+        ...params, node: actionNode(submission), wallet: profile, signer: signer!, prover, submission,
+        kind: "mine", to: activationAddress, amount: 0n, openFeeAmount: 0n, validUntilTimestamp,
+        validUntilMode: intent.validUntilTimestamp === undefined ? "ceiling" : "exact",
+        createAccount: context => userAccountCreationAttachment({ ...creation, ...context }, signer!),
+        ...durableSubmissionCallbacks(intent),
+      }, [], PRIVATE_VALUE_PROFILES.S.shapeId);
+      preparedAction = prepared.preparedAction;
+      entry = preparedAction.transactionBytes;
+      validUntilTimestamp = BigInt(preparedAction.pending.validUntilTimestamp);
+      recentPcashBlockNumber = prepared.anchor.number;
+      recentPcashBlockHash = bytes32Hex(prepared.anchor.blockHash);
+    } else {
+      const built = authorizationMode === "direct" ? buildDirectReferenceUserAccountCreation(creation)
+        : await buildAuthorizedReferenceUserAccountCreation(creation, signer!);
+      entry = encodeUserAccountCreation(params.chainId, built.body);
+    }
+    const pending: PendingUserAccountCreation = {
+      ...transactionIdentity(entry), publication,
+      address: activationAddress, pcashChainId: status.pcashChainId.toString(), pcashGenesisHash: status.genesisHash.toLowerCase(),
+      l1ChainId: status.l1ChainId.toString(), inboxAddress: status.inboxAddress.toLowerCase(),
+      genesisL1Block: status.genesisL1Block.toString(), genesisL1BlockHash: status.genesisL1BlockHash.toLowerCase(),
+      ruleSetCommitment: ruleSetCommitment.toString(), receiveKeyHash: expectedReceiveKeyHash,
+      recentPcashBlockNumber: recentPcashBlockNumber.toString(), recentPcashBlockHash: recentPcashBlockHash.toLowerCase(),
+      validUntilTimestamp: validUntilTimestamp.toString(), state: "prepared", l1TxHash: null,
+      preparedAtUnixMs: String((intent.nowUnixMilliseconds ?? Date.now)()),
+    };
+    await intent.beforeJournal?.(pending.contentHash, pending.transactionHex);
+    const authoritative = await params.store.transaction(current => {
+      const data = current ?? emptyWalletState({ address: params.wallet.address, network: params.store.identity.network });
+      if ((data.accountActivationRevision ?? "0") !== activeRevision) {
+        throw new Error("Account activation changed while preparing setup mining");
+      }
+      const winner = pendingUserAccountCreation(data, activationAddress);
+      if (winner !== null) {
+        if (!matchesActivation(winner)) throw new Error("Account activation changed while preparing setup mining");
+        return { data, value: winner };
+      }
+      addPendingUserAccountCreation(data, pending);
+      if (preparedAction !== undefined) addPendingNoteFundedTransfer(data, preparedAction.pending);
+      return { data, value: pending };
+    });
+    await intent.onPrepared?.(authoritative.contentHash, authoritative.transactionHex);
+    return authoritative;
+  };
+
+  const assertActivationContext = async (
+    pending: PendingUserAccountCreation,
+    status: StatusResult,
+    node: PcashNodeClient,
+  ): Promise<void> => {
+    if (
+      BigInt(pending.pcashChainId) !== BigInt(status.pcashChainId)
+      || pending.pcashGenesisHash.toLowerCase() !== status.genesisHash.toLowerCase()
+      || BigInt(pending.l1ChainId) !== status.l1ChainId
+      || pending.inboxAddress.toLowerCase() !== status.inboxAddress.toLowerCase()
+      || BigInt(pending.genesisL1Block) !== status.genesisL1Block
+      || pending.genesisL1BlockHash.toLowerCase() !== status.genesisL1BlockHash.toLowerCase()
+    ) {
+      throw new Error("prepared account activation belongs to a different PCASH or Ethereum network");
+    }
+    if (status.latestBlockTimestamp > BigInt(pending.validUntilTimestamp)) {
+      throw new Error("prepared account activation authorization has expired");
+    }
+    const recent = await node.getBlock(BigInt(pending.recentPcashBlockNumber));
+    if (recent === null || recent.hash.toLowerCase() !== pending.recentPcashBlockHash.toLowerCase()) {
+      throw new Error("prepared account activation recent PCASH block is no longer canonical");
+    }
+    if (status.latestBlockTimestamp > recent.timestamp + RECENT_PCASH_BLOCK_WINDOW_SECONDS) {
+      throw new Error("prepared account activation recent PCASH block has expired");
+    }
+  };
+
+  const submitPreparedAccountActivation = async (
+    submissionOverride?: DurableSubmissionAdapter<Prepared, Output>,
+    onSubmitted?: (pending: PendingUserAccountCreation) => void,
+  ) => {
+    const saved = await readActivation();
+    const submission = submissionOverride ?? (saved?.publication === "open" ? params.submission : params.userAccountCreationSubmission ?? params.submission);
+    if (submission === undefined) throw new WalletCapabilityError("submission", "account activation");
+    return withWalletReservation(
+      params.store,
+      [accountResource(activationAddress, 0n)],
+      async (reservation) => {
+        let data = await params.store.load();
+        let pending = pendingUserAccountCreation(data, activationAddress);
+        if (pending === null) throw new Error("Prepare account activation before submitting it to Ethereum.");
+        if (pending.state === "l1-submitted") throw new Error("Account activation was already submitted to Ethereum.");
+        if (pending.state === "broadcast-requested") {
+          throw new Error("The previous Ethereum submission result is ambiguous; reconcile it before retrying.");
+        }
+        const entry = fromHex(pending.transactionHex, "user account creation transaction");
+        // A direct creation creates the account of whichever Ethereum account sends it.
+        if (submission.mode === "l1" && submission.l1Sender?.toLowerCase() !== activationAddress.toLowerCase()) {
+          const creation = decodeTransactionForChain(entry, params.chainId);
+          if (creation.kind === TX_KIND_USER_ACCOUNT_CREATION && creation.authorization.kind === "direct") {
+            throw new Error(`direct account activation must be sent on Ethereum by ${activationAddress}`);
+          }
+        }
+        const node = actionNode(submission);
+        const status = await node.status();
+        await assertActivationContext(pending, status, node);
+        const prepared = await submission.preflight({
+          transactionBytes: entry,
+          status,
+          retry: true,
+        });
+
+        data = await params.store.load();
+        pending = pendingUserAccountCreation(data, activationAddress);
+        if (data === null || pending === null) {
+          throw new Error("Prepared account activation disappeared before submission.");
+        }
+        if (pending.state !== "prepared" && pending.state !== "mempool-submitted") {
+          throw new Error("Prepared account activation changed before submission.");
+        }
+        if (submission.mode === "l1") {
+          markPendingUserAccountCreationBroadcastRequested(data, activationAddress);
+          await reservation.save(data);
+        } else {
+          await reservation.assertActive();
+        }
+
+        let submitted = false;
+        const recordSubmission = async (hash: string) => {
+          const data = (await params.store.load())!;
+          markPendingUserAccountCreationSubmitted(data, activationAddress, hash);
+          await reservation.save(data);
+          submitted = true;
+          onSubmitted?.(pendingUserAccountCreation(data, activationAddress)!);
+        };
+        try {
+          const result = await submission.submit({
+            transactionBytes: entry,
+            status,
+            retry: true,
+            prepared,
+            onL1Submitted: recordSubmission,
+          });
+          if (submission.mode === "l1") {
+            if (result.l1Hash === undefined) throw new Error("direct account activation returned no Ethereum transaction hash");
+            if (!submitted) await recordSubmission(result.l1Hash);
+          } else {
+            data = (await params.store.load())!;
+            if (result.accepted) removePendingUserAccountCreation(data, activationAddress);
+            else pendingUserAccountCreation(data, activationAddress)!.state = "mempool-submitted";
+            await reservation.save(data);
+          }
+          return { ...result, contentHash: pending.contentHash };
+        } catch (cause) {
+          if (submission.mode === "l1" && submission.isDefinitePreBroadcastError?.(cause) === true) {
+            data = await params.store.load() ?? emptyWalletState({
+              address: params.wallet.address,
+              network: params.store.identity.network,
+            });
+            const current = pendingUserAccountCreation(data, activationAddress);
+            if (current?.state === "broadcast-requested") {
+              markPendingUserAccountCreationPrepared(data, activationAddress);
+              await reservation.save(data);
+            }
+          }
+          throw cause;
+        }
+      },
+    );
+  };
+
+  /**
+   * The fee and destination of a transfer, fixed before funding is selected. A
+   * journaled payment replays its exact bytes, so its fee is reused.
+   */
+  const transferPublication = async (
+    intent: Omit<NoteFundedTransferIntent, "to"> & { to?: string; expectedReview?: WalletTransferPreflight },
+    submission: Pick<DurableSubmissionAdapter, "mode" | "node">,
+    status: StatusResult,
+  ): Promise<PublicationPlan & { shape?: PrivateValueShape }> => {
+    const openFeeAmount = intent.openFeeAmount ?? intent.expectedReview?.openFeeAmount;
+    // A reviewed send signs exactly the burn it reviewed; building it refuses when that no longer covers the fee.
+    const approvedBurn = intent.burn ?? intent.expectedReview?.burn;
+    if (intent.to !== undefined) {
+      const data = await params.store.load();
+      const pending = data === null ? null : selectedPendingNoteFundedTransfer(data, {
+        ...intent,
+        to: intent.to,
+        ...(openFeeAmount === undefined ? {} : { openFeeAmount }),
+      });
+      if (pending !== null) {
+        return {
+          openFeeAmount: BigInt(pending.openFeeAmount),
+          privateRelayFeeAmount: BigInt(pending.privateRelayFeeAmount),
+          // A retry submits the journaled bytes and their burn; a re-authorization quotes a new one.
+          burn: intent.reauthorize === true
+            ? approvedBurn ?? quoteNativeBurn(status.feeExcess, privateValueActionUnits(
+              (decodeTransactionForChain(fromHex(pending.transactionHex), params.chainId) as RawPrivateValueTransaction).shape,
+              intent.accountCreation), intent.voluntaryBurnAmount ?? 0n)
+            : journaledBurn(pending),
+          publication: publicationOf(submission, BigInt(pending.privateRelayFeeAmount)),
+          beneficiary: pendingIssuanceBeneficiary(pending, params.wallet),
+          privateRelayRecipient: pending.privateRelayRecipient,
+        };
+      }
+    }
+    const shape = intent.shape ?? PRIVATE_VALUE_PROFILES.S.shapeId;
+    const publication = publicationOf(submission, intent.privateRelayFeeAmount ?? intent.expectedReview?.privateRelayFeeAmount);
+    const plan = (planned: typeof shape) => planPublication({
+      qualifying: true,
+      byteSize: paddedPrivateValueByteSize(planned, intent.accountCreation),
+      openFeeAmount,
+      privateRelayFeeAmount: intent.privateRelayFeeAmount,
+      burn: approvedBurn ?? quoteNativeBurn(status.feeExcess, privateValueActionUnits(planned, intent.accountCreation),
+        intent.voluntaryBurnAmount ?? 0n),
+      publication,
+      selectedRelayQuote: intent.selectedRelayQuote,
+      node: actionNode(submission),
+    });
+    let planned = await plan(shape);
+    const data = await params.store.load() ?? emptyWalletState({ address: params.wallet.address, network: params.store.identity.network });
+    const select = (fee: bigint) => selectNoteTransferFunding(data, { ...intent, openFeeAmount: fee, privateRelayFeeAmount: 0n, burn: NO_BURN });
+    try {
+      let resolved = resolvePublicationFunding(planned, select);
+      const shapeQuoted = (openFeeAmount === undefined && resolved.plan.openFeeAmount !== 0n)
+        || (approvedBurn === undefined && nativeBurnAmount(resolved.plan.burn) !== 0n);
+      if (intent.shape === undefined && resolved.funding.shape !== shape && shapeQuoted) {
+        planned = await plan(resolved.funding.shape);
+        resolved = resolvePublicationFunding(planned, select);
+      }
+      // A burn prices one profile's units, so the action keeps the profile it funds.
+      return intent.shape === undefined && nativeBurnAmount(resolved.plan.burn) !== 0n
+        ? { ...resolved.plan, shape: resolved.funding.shape } : resolved.plan;
+    } catch (error) {
+      // Funding preflight presents the full insufficiency report.
+      if (!(error instanceof InsufficientNotesError)) throw error;
+      return planned;
+    }
+  };
+
+  const clearAccountActivation = async (): Promise<void> => {
+    await params.store.transaction((current) => {
+      const data = current ?? emptyWalletState({
+        address: params.wallet.address,
+        network: params.store.identity.network,
+      });
+      removePendingUserAccountCreation(data, activationAddress);
+      return { data, value: undefined };
+    });
+  };
+
+  const resetAccountActivationSubmission = async (): Promise<void> => {
+    await params.store.transaction((current) => {
+      const data = current ?? emptyWalletState({
+        address: params.wallet.address,
+        network: params.store.identity.network,
+      });
+      markPendingUserAccountCreationPrepared(data, activationAddress);
+      return { data, value: undefined };
+    });
+  };
+
+  return {
+    accountActivation: reconcileAccountActivation,
+    recordJournaledL1Hashes,
+    prepareAccountActivation,
+    submitAccountActivation: (onSubmitted?: (pending: PendingUserAccountCreation) => void) => submitPreparedAccountActivation(undefined, onSubmitted),
+    clearAccountActivation,
+    resetAccountActivationSubmission,
+    async code() {
+      await synchronize();
+      const mlKemPublicKey = await loadSelfReceiveKey(params.store, params.wallet.address);
+      return {
+        address: addressHex(params.wallet.address),
+        chainId: params.chainId.toString(),
+        extendedCode: buildExtendedCode({ address: params.wallet.address, chainId: params.chainId, mlKemPublicKey }),
+      };
+    },
+
+    async scan(options: {
+      rescan?: boolean;
+      anchorAtCurrentBoundary?: boolean;
+      target?: { pcashNumber: bigint; pcashHash: string };
+      status?: StatusResult;
+      onProgress?: Parameters<typeof syncWallet>[0]["onProgress"];
+      onNodeTip?: Parameters<typeof syncWallet>[0]["onNodeTip"];
+    } = {}): Promise<SyncWalletResult> {
+      return syncWallet({
+        node: params.node,
+        wallet: requireReceiveKeys(params.wallet),
+        chainId: params.chainId,
+        store: params.store,
+        ...(options.rescan === true ? { rescan: true } : {}),
+        ...(options.anchorAtCurrentBoundary === true ? { anchorAtCurrentBoundary: true } : {}),
+        ...(options.target === undefined ? {} : { target: options.target }),
+        ...(options.status === undefined ? {} : { status: options.status }),
+        ...(options.onProgress === undefined ? {} : { onProgress: options.onProgress }),
+        ...(options.onNodeTip === undefined ? {} : { onNodeTip: options.onNodeTip }),
+      });
+    },
+
+    async createReceiveKey(options: { rescan?: boolean } = {}): Promise<{ receiveKeyHash: string }> {
+      if (isPcashProfile(params.wallet) && params.wallet.recoveryContract === "seed-derived") {
+        throw new Error("seed wallets use one recoverable receive key; rotation is not supported");
+      }
+      const pair = generateMlKemKeyPair();
+      return this.importReceiveKey(pair, options);
+    },
+
+    async importReceiveKey(
+      pair: MlKemKeyPair,
+      options: { rescan?: boolean } = {},
+    ): Promise<{ receiveKeyHash: string }> {
+      if (isPcashProfile(params.wallet) && params.wallet.recoveryContract === "seed-derived") {
+        throw new Error("seed wallets do not import receive keys");
+      }
+      await retainReceiveKey(pair);
+      if (options.rescan !== false) {
+        await syncWallet({
+          node: params.node,
+          wallet: requireReceiveKeys(params.wallet),
+          chainId: params.chainId,
+          store: params.store,
+          rescan: true,
+        });
+      }
+      return { receiveKeyHash: receiveKeyHashHex(pair) };
+    },
+
+    async preflightTransfer(intent: Omit<NoteFundedTransferIntent, "to"> & {
+      to?: string;
+      status?: StatusResult;
+      submission?: Pick<DurableSubmissionAdapter, "mode" | "node">;
+    }): Promise<WalletTransferPreflight> {
+      intent = { ...intent, ...(intent.data === undefined ? {} : { data: structuredClone(intent.data) }) };
+      const wallet = requirePcashProfile(params, "transfer preflight");
+      // A preflight without a transport reviews the default relayed publication.
+      const submission = intent.submission ?? params.submission ?? { mode: "mempool" };
+      const node = actionNode(submission);
+      const status = intent.status ?? await node.status();
+      const plan = await transferPublication(intent, submission, status);
+      const { submission: _submission, ...funding } = intent;
+      const notes = await preflightNoteFundedTransferClient({
+        node, store: params.store, wallet, chainId: params.chainId,
+        ...funding, ...(plan.shape === undefined ? {} : { shape: plan.shape }),
+        openFeeAmount: plan.openFeeAmount, privateRelayFeeAmount: plan.privateRelayFeeAmount, burn: plan.burn, status,
+      });
+      return {
+        openFeeAmount: plan.openFeeAmount,
+        privateRelayFeeAmount: plan.privateRelayFeeAmount,
+        burn: plan.burn,
+        privateRelayRecipient: plan.privateRelayRecipient,
+        beneficiary: plan.beneficiary,
+        publication: plan.publication,
+        inputCount: notes.inputCount,
+        inputTotal: notes.inputTotal,
+        retry: notes.retry,
+        dataHash: transactionDataHash(intent.data),
+      };
+    },
+
+    async transfer(intent: NoteFundedTransferIntent & {
+      status?: StatusResult;
+      submission?: DurableSubmissionAdapter<Prepared, Output>;
+      expectedReview?: WalletTransferPreflight;
+    } & DurableSubmissionCallbacks) {
+      intent = { ...intent, ...(intent.data === undefined ? {} : { data: structuredClone(intent.data) }) };
+      const spend = requireSpendable(params, "transfer");
+      const submission = intent.submission ?? params.submission;
+      if (submission === undefined) throw new WalletCapabilityError("submission", "transfer");
+      const node = actionNode(submission);
+      const status = intent.status ?? await node.status();
+      const plan = await transferPublication(intent, submission, status);
+      const shape = intent.shape ?? plan.shape;
+      if (params.provers?.privateValue === undefined) throw new WalletCapabilityError("prover", "transfer");
+      const result = await runNoteFundedTransferClient({
+        node,
+        store: params.store,
+        wallet: spend.wallet,
+        signer: spend.signer,
+        chainId: params.chainId,
+        kind: intent.kind ?? "payment",
+        ...(intent.accountCreation === undefined ? {} : { accountCreation: intent.accountCreation }),
+        to: intent.to,
+        amount: intent.amount,
+        ...(intent.directSend === undefined ? {} : { directSend: intent.directSend }),
+        ...(intent.data === undefined ? {} : { data: intent.data }),
+        ...(shape === undefined ? {} : { shape }),
+        ...(intent.notBeforeTimestamp === undefined ? {} : { notBeforeTimestamp: intent.notBeforeTimestamp }),
+        ...(intent.noteSelector === undefined ? {} : { noteSelector: intent.noteSelector }),
+        ...(intent.selectedRelayQuote === undefined ? {} : { selectedRelayQuote: intent.selectedRelayQuote }),
+        ...(intent.issuanceOwnerCommitment === undefined ? {} : { issuanceOwnerCommitment: intent.issuanceOwnerCommitment }),
+        openFeeAmount: plan.openFeeAmount,
+        privateRelayFeeAmount: plan.privateRelayFeeAmount,
+        burn: plan.burn,
+        ...(intent.reauthorize === undefined ? {} : { reauthorize: intent.reauthorize }),
+        validUntilMode: intent.validUntilMode ?? "exact",
+        ...(intent.validUntilTimestamp === undefined
+          ? {}
+          : { validUntilTimestamp: intent.validUntilTimestamp }),
+        ...(intent.retryContentHash === undefined ? {} : { retryContentHash: intent.retryContentHash }),
+        ...(intent.newAction === undefined ? {} : { newAction: intent.newAction }),
+        ...(intent.signal === undefined ? {} : { signal: intent.signal }),
+        ...durableSubmissionCallbacks(intent),
+        status,
+        ...(intent.expectedReview === undefined ? {} : { expectedReview: intent.expectedReview }),
+        prover: params.provers.privateValue,
+        submission,
+        settlePollIntervalMs: settleInterval,
+        settlePollMaxAttempts: intent.settlePollMaxAttempts ?? settleAttempts, synchronize,
+      });
+      return { ...result, publicationDetails: actionPublication(result, plan.beneficiary) };
+    },
+
+    /** Prove independent mines in memory and publish their exact bytes in one L1 batch. */
+    async mineBatch(intent: {
+      count: number;
+      /** For relay-only publication, the selected pending transactions. */
+      relayEntries?: readonly Uint8Array[];
+      /**
+       * The burn each mine was shown with. Each signs exactly it, and mining
+       * refuses when it no longer covers the fee. Absent, the wallet quotes it now.
+       */
+      burn?: NativeBurn;
+      submission?: DurableSubmissionAdapter<Prepared, Output>;
+      signal?: AbortSignal;
+    } & DurableSubmissionCallbacks): Promise<{ ownedContentHashes: string[]; submission: DurableSubmissionResult<Output> }> {
+      if (!Number.isInteger(intent.count) || intent.count < 0 || intent.count > MAX_MINE_ACTIONS) throw new Error(`mine count must be between 0 and ${MAX_MINE_ACTIONS}`);
+      const submission = intent.submission ?? params.submission;
+      if (submission?.mode !== "l1") throw new Error("Mining and relaying require self-publication on L1.");
+      const actions: Array<PreparedNoteFundedTransfer & { anchor: { blockHash: bigint; timestamp: bigint } }> = [];
+      if (intent.count > 0) {
+        const spend = requireSpendable(params, "mine");
+        const prover = params.provers?.privateValue;
+        if (prover === undefined) throw new WalletCapabilityError("prover", "mine");
+        // While the projected protocol fee is waived every mine is all padding.
+        // A required fee makes each one a signed self-payment burning from its own notes.
+        const burn = intent.burn ?? quoteNativeBurn((await actionNode(submission).status()).feeExcess,
+          privateValueActionUnits(PRIVATE_VALUE_PROFILES.S.shapeId));
+        const funding = nativeBurnAmount(burn) === 0n ? [] : mineFunding(
+          spendableNotes(await params.store.load() ?? emptyWalletState({ address: params.wallet.address, network: params.store.identity.network }), 0n),
+          intent.count, nativeBurnAmount(burn));
+        for (let index = 0; index < intent.count; index += 1) {
+          throwIfWalletActionCanceled(intent.signal);
+          const { preparedAction, anchor } = await prepareNoteFundedTransfer({
+            ...params, node: actionNode(submission), wallet: spend.wallet, signer: spend.signer, prover, submission,
+            kind: "mine", to: activationAddress, amount: 0n, openFeeAmount: 0n,
+            ...(nativeBurnAmount(burn) === 0n ? {} : { burn }),
+            ...(intent.signal === undefined ? {} : { signal: intent.signal }),
+            onProgress: (phase) => intent.onProgress?.(phase, `Proving ${index + 1} of ${intent.count}`),
+          }, funding[index] ?? [], PRIVATE_VALUE_PROFILES.S.shapeId);
+          actions.push({ ...preparedAction, anchor });
+        }
+      }
+      const entries = actions.length > 0 ? actions.map(action => action.transactionBytes) : [...(intent.relayEntries ?? [])];
+      if (entries.length === 0) throw new Error("No transactions available to relay.");
+      throwIfWalletActionCanceled(intent.signal);
+      const status = await actionNode(submission).status();
+      // The batch is quoted and sent under this status's network.
+      assertWalletStoreMatches(params.store, params.wallet, params.chainId, status);
+      // Relay entries are node mempool bytes; a direct account creation among
+      // them would register at this wallet's L1 sender.
+      if (actions.length === 0) for (const entry of entries) assertMempoolAdmissible(status, entry);
+      intent.onProgress?.("preparing", "Preparing the Ethereum transaction…");
+      const prepared = await submission.preflight({ transactionBytes: entries[0]!, status,
+        additionalTransactions: entries.slice(1), retry: false });
+      for (const action of actions) await intent.beforeJournal?.(action.pending.contentHash, action.pending.transactionHex);
+      throwIfWalletActionCanceled(intent.signal);
+      await params.store.transaction(current => {
+        const data = current ?? emptyWalletState({ address: params.wallet.address, network: params.store.identity.network });
+        for (const action of actions) {
+          // A note spent while the batch was proved would fail the whole batch on Ethereum.
+          assertPreparedInputNotesAvailable(data, action.pending);
+          addPendingNoteFundedTransfer(data, action.pending);
+          if (action.changeNote !== null) addPendingNote(data, action.pending.contentHash, action.changeNote);
+        }
+        return { data, value: undefined };
+      });
+      const recordMinesSubmitted = async (hash: string) => {
+        if (actions.length === 0) return;
+        await params.store.transaction(current => {
+          const data = current ?? emptyWalletState({ address: params.wallet.address, network: params.store.identity.network });
+          for (const action of actions) markPendingNoteFundedTransferL1Submitted(data, action.pending.contentHash, hash);
+          return { data, value: undefined };
+        });
+      };
+      let result: DurableSubmissionResult<Output>;
+      let submissionStarted = false;
+      try {
+        for (const action of actions) await intent.onPrepared?.(action.pending.contentHash, action.pending.transactionHex);
+        if (actions.length > 0) {
+          const current = await actionNode(submission).status();
+          const wallTime = BigInt(Math.floor((intent.nowUnixMilliseconds ?? Date.now)() / 1000));
+          const inclusionTime = current.latestBlockTimestamp > wallTime ? current.latestBlockTimestamp : wallTime;
+          for (const action of actions) {
+            const anchor = await actionNode(submission).getBlockByHash(bytes32Hex(action.anchor.blockHash));
+            if (anchor === null || inclusionTime + 60n > action.anchor.timestamp + RECENT_PCASH_BLOCK_WINDOW_SECONDS
+              || inclusionTime + 60n > BigInt(action.pending.validUntilTimestamp)) {
+              throw new DurablePreBroadcastError(new Error("Mining proofs expired while preparing. Please try again."));
+            }
+          }
+        }
+        throwIfWalletActionCanceled(intent.signal);
+        intent.onProgress?.("submitting", "Confirm the Ethereum transaction…");
+        submissionStarted = true;
+        result = await submission.submit({ transactionBytes: entries[0]!, status, prepared, retry: false,
+          onL1Submitted: recordMinesSubmitted });
+      } catch (error) {
+        // Ambiguous broadcasts remain recoverable through the exact L1 journal.
+        if (!submissionStarted || error instanceof DurablePreBroadcastError || submission.isDefinitePreBroadcastError?.(error)) {
+          await params.store.transaction(current => {
+            const data = current ?? emptyWalletState({ address: params.wallet.address, network: params.store.identity.network });
+            for (const action of actions) {
+              removePendingNoteFundedTransfer(data, action.pending.contentHash);
+              removePendingNotesForTransaction(data, action.pending.contentHash);
+            }
+            return { data, value: undefined };
+          });
+        }
+        throw error;
+      }
+      if (result.l1Hash !== undefined) await recordMinesSubmitted(result.l1Hash);
+      intent.onProgress?.("confirming", "Checking PCASH results…");
+      try { await synchronize(); }
+      catch (error) { if (!isWalletSyncConflict(error)) throw error; }
+      return { ownedContentHashes: actions.map(action => action.pending.contentHash), submission: result };
+    },
+
+    async assetCreation(intent: AssetCreationIntent & { submission?: DurableSubmissionAdapter<Prepared, Output> }) {
+      const spend = requireSpendable(params, "asset creation");
+      if (params.provers?.assetCreation === undefined) throw new WalletCapabilityError("prover", "asset creation");
+      const submission = intent.submission ?? params.submission;
+      if (submission === undefined) throw new WalletCapabilityError("submission", "asset creation");
+      return runAssetCreationClient({
+        ...intent, node: actionNode(submission), store: params.store, wallet: spend.wallet, signer: spend.signer,
+        chainId: params.chainId, prover: params.provers.assetCreation, submission,
+        settlePollIntervalMs: settleInterval, settlePollMaxAttempts: settleAttempts, synchronize,
+      });
+    },
+
+    async assetTransfer(intent: AssetTransferIntent & { submission?: DurableSubmissionAdapter<Prepared, Output> }) {
+      const spend = requireSpendable(params, "asset transfer");
+      if (params.provers?.assetAction === undefined) throw new WalletCapabilityError("prover", "asset transfer");
+      const submission = intent.submission ?? params.submission;
+      if (submission === undefined) throw new WalletCapabilityError("submission", "asset transfer");
+      return runAssetTransferClient({
+        ...intent, node: actionNode(submission), store: params.store, wallet: spend.wallet, signer: spend.signer,
+        chainId: params.chainId, prover: params.provers.assetAction, submission,
+        settlePollIntervalMs: settleInterval, settlePollMaxAttempts: intent.settlePollMaxAttempts ?? settleAttempts, synchronize,
+      });
+    },
+
+    async startBulkJob(intent: Omit<Parameters<typeof startBulkJob>[0], "node" | "store" | "wallet" | "chainId">) {
+      const wallet = requirePcashProfile(params, "bulk job");
+      return startBulkJob({ ...intent, node: params.node, store: params.store, wallet, chainId: params.chainId });
+    },
+
+    async runBulkJobStep(intent: WalletBulkJobStepIntent<Prepared, Output>) {
+      const spend = requireSpendable(params, "bulk job");
+      if (params.provers?.assetAction === undefined) throw new WalletCapabilityError("prover", "bulk job");
+      const submission = intent.submission ?? params.submission;
+      if (submission === undefined) throw new WalletCapabilityError("submission", "bulk job");
+      return runBulkJobStep({
+        jobId: intent.jobId,
+        ...(intent.chunkIndex === undefined ? {} : { chunkIndex: intent.chunkIndex }),
+        ...(intent.privateRelayFeeAmount === undefined ? {} : { privateRelayFeeAmount: intent.privateRelayFeeAmount }),
+        ...(intent.selectedRelayQuote === undefined ? {} : { selectedRelayQuote: intent.selectedRelayQuote }),
+        node: actionNode(submission), store: params.store, wallet: spend.wallet, signer: spend.signer,
+        chainId: params.chainId, prover: params.provers.assetAction, submission,
+        callbacks: durableSubmissionCallbacks(intent),
+      });
+    },
+
+    async contractSponsorship(intent: WalletContractSponsorshipIntent<Prepared, Output>) {
+      const spend = requireSpendable(params, "contract sponsorship");
+      const submission = intent.submission ?? params.submission;
+      if (submission === undefined) throw new WalletCapabilityError("submission", "contract sponsorship");
+      return runSponsoredContractAssetActionClient({
+        ...intent,
+        node: actionNode(submission),
+        store: params.store,
+        wallet: spend.wallet,
+        signer: spend.signer,
+        chainId: params.chainId,
+        submission,
+        settlePollIntervalMs: settleInterval,
+        settlePollMaxAttempts: settleAttempts,
+        synchronize,
+        ...durableSubmissionCallbacks(intent),
+      });
+    },
+
+    async account(intent: WalletAccountIntent<Prepared, Output> = {}) {
+      assertReceiveKeyChangeAllowed(intent.receiveKey);
+      const spend = requireSpendable(params, "account");
+      const current = await localAccount(params.store, addressHex(params.wallet.address));
+      if (current !== null) {
+        if (params.provers?.userAccountUpdate === undefined) throw new WalletCapabilityError("prover", "account");
+        const submission = intent.submission ?? params.submission;
+        if (submission === undefined) throw new WalletCapabilityError("submission", "account");
+        return runUserAccountUpdateClient({
+          node: actionNode(submission),
+          store: params.store,
+          address: spend.wallet.address,
+          wallet: spend.wallet,
+          signer: spend.signer,
+          chainId: params.chainId,
+          receiveKey: intent.receiveKey ?? { operation: "keep" },
+          ...(intent.ruleSetCommitment === undefined
+            ? {}
+            : { ruleSetCommitment: intent.ruleSetCommitment }),
+          ...(intent.validUntilTimestamp === undefined
+            ? {}
+            : { validUntilTimestamp: intent.validUntilTimestamp }),
+          ...(intent.openFeeAmount === undefined ? {} : { openFeeAmount: intent.openFeeAmount }),
+          ...(intent.privateRelayFeeAmount === undefined ? {} : { privateRelayFeeAmount: intent.privateRelayFeeAmount }),
+          ...(intent.issuanceOwnerCommitment === undefined ? {} : { issuanceOwnerCommitment: intent.issuanceOwnerCommitment }),
+          ...(intent.selectedRelayQuote === undefined ? {} : { selectedRelayQuote: intent.selectedRelayQuote }),
+          submission,
+          settlePollIntervalMs: settleInterval,
+          settlePollMaxAttempts: settleAttempts, synchronize,
+          prover: params.provers.userAccountUpdate,
+          ...durableSubmissionCallbacks(intent),
+        });
+      }
+      intent.onProgress?.("preparing", "preparing the user account submission…");
+      await prepareAccountActivation(intent, intent.userAccountCreationSubmission);
+      intent.onProgress?.("submitting", "submitting the user account…");
+      return submitPreparedAccountActivation(
+        intent.userAccountCreationSubmission ?? params.userAccountCreationSubmission ?? intent.submission,
+      );
+    },
+  };
+}

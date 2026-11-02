@@ -1,0 +1,118 @@
+# Copy this file to .envrc, edit it, and run `direnv allow`.
+# This is executable shell code. Never commit real credentials.
+
+# With PCASH_L1_RPC unset, just commands use local Anvil and disposable state.
+# A configured RPC uses persistent state by default. These flags can override it.
+# export PCASH_NODE_DEV="false"
+# export PCASH_WALLET_DEV="false"
+# export PCASH_RELAYER_DEV="false"
+# Dev wallet imports Anvil account 0; dev relayer defaults to Anvil account 1.
+# export PCASH_ANVIL_RPC_URL="http://127.0.0.1:8545"
+# export PCASH_ANVIL_DATA_DIR="$PWD/.cache/pcash/anvil-node"
+# export PCASH_NODE_PROFILE="release" # Defaults to debug.
+# export PCASH_DEV_ROOT="$PWD/.cache/pcash/dev"
+
+# Network and node identity. The values below are the Sepolia profile; enable
+# these when using a Sepolia execution RPC. The chain ID is read from RPC when unset.
+# export PCASH_L1_RPC="https://rpc.sepolia.ethpandaops.io"
+# export PCASH_BEACON_API="https://beacon-api.example"
+# Prepare network identity with `just prepare-launch --chain-id <unused-id>`.
+# Source the resulting .envrc.launch to pin the chain identity and anchor.
+# export PCASH_DATA_DIR="$PWD/.cache/pcash/sepolia-node"
+# export PCASH_RPC_ADDR="127.0.0.1:8645"
+# The preparation command requires an unused PCASH chain ID.
+# export PCASH_L1_CHAIN_ID="11155111"
+# export PCASH_INBOX_ADDRESS="0x00000000000000000000000000000000000CA511"
+# The genesis L1 block must already be finalized; both values are required.
+# The preparation command writes PCASH_GENESIS_L1_BLOCK and
+# PCASH_GENESIS_L1_BLOCK_HASH.
+# One L1 request-rate limit covers every L1 read, including catch-up and
+# retries. Each L1 block costs two requests (block and receipts).
+# export PCASH_L1_RPC_MAX_REQUESTS_PER_SECOND="30"
+# Catch-up blocks fetched but not yet applied; also caps concurrent fetches.
+# export PCASH_CATCHUP_FETCH_QUEUE="100"
+# Node CLI `--hash-threads` / PCASH_HASH_THREADS. Unset: min(available CPUs, 6).
+# export PCASH_HASH_THREADS="6"
+# export PCASH_POLL_SECS="4"
+
+# Optional node listeners, limits, and P2P behavior.
+# export PCASH_METRICS_ADDR="127.0.0.1:9465"
+# export PCASH_ADMIN_ADDR="127.0.0.1:8647"
+# export PCASH_PSCAN_ADDR="127.0.0.1:8648"
+# export PCASH_MEMPOOL_MAX_ENTRIES="4096"
+# export PCASH_MEMPOOL_MAX_BYTES="67108864"
+# export PCASH_MEMPOOL_MAX_UNPAID_ENTRIES="512"
+# Mempool verifier workers (one `bb` process each) and the admission queue that
+# feeds them. Unset verifiers: min(available CPUs, 4).
+# export PCASH_MEMPOOL_VERIFIERS="4"
+# export PCASH_MEMPOOL_ADMISSION_QUEUE="256"
+# export PCASH_P2P_LISTEN="/ip4/0.0.0.0/tcp/8646"
+# A compiled network preset: chain identity, L1 anchor, and bootnodes. Unset the
+# PCASH_CHAIN_ID, PCASH_L1_CHAIN_ID, PCASH_INBOX_ADDRESS, and PCASH_GENESIS_L1_BLOCK*
+# identity variables when using it.
+# export PCASH_NETWORK="testnet"
+# Bootnodes are dialed by IP; DNS multiaddrs are not supported.
+# export PCASH_P2P_BOOTNODES="/ip4/203.0.113.7/tcp/8646/p2p/12D3KooW..."
+# export PCASH_P2P_ADVERTISE_ADDR="/ip4/203.0.113.7/tcp/8646"
+# export PCASH_DISABLE_P2P="true"
+# export PCASH_P2P_ANTI_ENTROPY_SECS="10"
+# export PCASH_ENABLE_CATALOG="true"
+# export PCASH_PBOARD="true"
+# export PCASH_CATALOG_NAMESPACES="pcash.marketplace.offer.v1"
+# export PCASH_ENABLE_SOURCE_SUBMISSIONS="true"
+# export PCASH_SOURCE_VERIFICATION_REPRODUCER="$PWD/scripts/source-verification/index.mts"
+
+# Repository-pinned prover and browser bundle.
+# export PCASH_TOOL_ROOT="$PWD/.pcash-tools"
+# export PCASH_CIRCUIT_BUNDLE="/absolute/path/to/circuit-bundle"
+
+# Clients and independently runnable services.
+# export PCASH_RPC_URL="http://127.0.0.1:8645"
+# export PCASH_ADMIN_URL="http://127.0.0.1:8647"
+# export PCASH_PSCAN_URL="http://127.0.0.1:8648"
+# export PCASH_WALLET_URL="http://127.0.0.1:8745"
+# export PCASH_WALLET_LISTEN="127.0.0.1:8745"
+# export PCASH_WALLET_DATA_DIR="$PWD/.cache/pcash/wallet"
+# export PCASH_WALLET_PROVER="native"
+# Optional explicit token override; otherwise the CLI discovers the private local connection.
+# export PCASH_WALLET_TOKEN="..."
+# export PCASH_RELAYER_HTTP_ADDR="127.0.0.1:9464"
+# export PCASH_RELAYER_URL="http://127.0.0.1:9464"
+# export PCASH_RELAYER_JOURNAL_PATH="$PWD/.cache/pcash/relayer/journal.json"
+# Each service reads only its own namespace. `just wallet` and `just relayer` pass
+# PCASH_RPC_URL and PCASH_L1_RPC to them as PCASH_{WALLET,RELAYER}_{RPC_URL,L1_RPC}
+# unless the namespaced name is set.
+# export PCASH_WALLET_L1_KEY="0x..."
+# export PCASH_WALLET_MAX_FEE_PER_GAS="10000000000"
+# export PCASH_RELAYER_L1_KEY="0x..."
+# export PCASH_RELAYER_MAX_FEE_PER_GAS="10000000000"
+
+# Website and Marketplace configuration.
+# export PCASH_WEB_ADDR="127.0.0.1:5173"
+# Comma-separated, in order of preference: the website reads from the next endpoint when one
+# fails or no longer keeps the requested history. These are published in browser JavaScript
+# and must not contain operator credentials.
+# export PCASH_BROWSER_L1_RPC_URLS="https://ethereum-sepolia-rpc.publicnode.com,https://sepolia.gateway.tenderly.co,https://rpc.sepolia.ethpandaops.io"
+# Ethereum mainnet RPC for ENS names, also published in browser JavaScript.
+# export PCASH_ENS_RPC_URL="https://ethereum-rpc.publicnode.com"
+# Optional for just web --marketplace on local Anvil: leave unset to deploy a PaymentRouter.
+# export PCASH_PAYMENT_ROUTER_ADDRESS="0x..."
+# export PCASH_PAYMENT_ROUTER_FEE_RECIPIENT="0x..."
+# export PCASH_PAYMENT_ROUTER_FEE_BPS="500"
+
+# E2E runs, just seed, and the browser journeys read only PCASH_E2E_* names.
+# PCASH_E2E_L1_KEY pays every batch an E2E run publishes; the numbered actor
+# keys fund the browser journeys' actors (Anvil accounts when unset).
+# export PCASH_E2E_RPC_URL="https://<node>/rpc"
+# export PCASH_E2E_L1_RPC="https://<execution RPC for the node's L1>"
+# export PCASH_E2E_L1_KEY="0x..."
+# export PCASH_E2E_L1_MAX_FEE_PER_GAS="10000000000"
+# export PCASH_E2E_ACTOR_1_KEY="0x..."
+# export PCASH_E2E_ACTOR_2_KEY="0x..."
+# Optional for just seed: leave unset to deploy a PaymentRouter automatically.
+# export PCASH_E2E_PAYMENT_ROUTER_ADDRESS="0x..."
+# export PCASH_E2E_PAYMENT_ROUTER_FEE_RECIPIENT="0x..."
+# export PCASH_E2E_PAYMENT_ROUTER_FEE_BPS="500"
+
+# Non-PCASH process convention.
+# export RUST_LOG="info"

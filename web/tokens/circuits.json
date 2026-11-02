@@ -1,0 +1,41 @@
+{
+  "owner": "tokens",
+  "circuits": [
+    {
+      "package": "claim_link",
+      "path": "l2-contracts/claim-link/claim",
+      "artifact": "contracts/claim-link/claim",
+      "role": "application",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144
+    },
+    {
+      "package": "drop_claim",
+      "path": "l2-contracts/drop/claim",
+      "artifact": "contracts/drop/claim",
+      "role": "application",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144
+    },
+    {
+      "package": "drop_reclaim",
+      "path": "l2-contracts/drop/reclaim",
+      "artifact": "contracts/drop/reclaim",
+      "role": "application",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144
+    }
+  ]
+}

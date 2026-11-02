@@ -1,0 +1,54 @@
+.page { min-width: 0; max-width: 980px; color: var(--color-text); font-family: var(--font-serif); }
+.page a { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.page p { color: var(--color-text); font-size: 19px; line-height: 1.6; }
+
+.hero { padding-bottom: 36px; }
+.kicker { margin: 0 0 14px; color: var(--color-text-muted); font: 600 13px/1 var(--font-ui); letter-spacing: .14em; text-transform: uppercase; }
+.hero h1 { margin: 0; font: 800 clamp(48px, 6.4vw, 88px)/1.02 var(--font-serif); letter-spacing: -.03em; }
+.page .lead { max-width: 44ch; margin: 22px 0 0; font-size: 22px; line-height: 1.5; }
+.documentLinks { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
+
+/* Each idea: a hatched numeral beside a short section, divided by the double rule.
+   Read further uses the same text column, with the numeral column empty. */
+.idea, .deeper { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 32px; border-top: 3px double var(--color-text); }
+.idea { padding: 36px 0; }
+.deeper > div { grid-column: 2; min-width: 0; }
+.numeral { display: block; width: auto; height: 92px; mix-blend-mode: multiply; }
+.idea h2 { margin: 4px 0 14px; font: 700 clamp(28px, 3.2vw, 40px)/1.12 var(--font-serif); letter-spacing: -.02em; }
+.idea p { max-width: 62ch; margin: 0 0 14px; }
+.page .source { display: inline-block; margin-top: 2px; color: var(--color-text-muted); font-size: 15px; }
+.page .action { display: inline-block; padding: 13px 22px; border-radius: 3px; background: var(--color-text); color: var(--color-accent-contrast); font: 600 16px/1 var(--font-serif); text-decoration: none; }
+.page .action:hover { background: var(--color-accent-hover); }
+
+/* Questions a reader of the idea is likely to ask, opened in place. */
+.questions { max-width: 62ch; margin: 4px 0 18px; border-top: 1px solid var(--color-border); }
+.questions details { border-bottom: 1px solid var(--color-border); }
+.questions summary { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 13px 0; color: var(--color-text); font: 600 19px/1.35 var(--font-serif); list-style: none; cursor: pointer; }
+.questions summary::-webkit-details-marker { display: none; }
+.questions summary::after { content: "+"; flex: none; color: var(--color-text-muted); font: 400 22px/1 var(--font-ui); }
+.questions details[open] summary::after { content: "\2212"; }
+.questions details p { margin: 0 0 12px; font-size: 18px; }
+.page .questions .source { margin: 0 0 14px; }
+
+.deeper h2 { margin: 0 0 24px; font: 700 clamp(30px, 3.4vw, 44px)/1.1 var(--font-serif); letter-spacing: -.02em; }
+
+.deeper { padding: 40px 0 0; }
+.documents { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 20px; }
+.documents article { display: flex; flex-direction: column; padding: 22px; border: 1px solid var(--color-border); background: var(--color-surface); }
+.documents h3 { margin: 0 0 8px; font: 700 24px/1.2 var(--font-serif); }
+.documents h3 a { text-decoration: none; }
+.documents p { flex: 1; margin: 0 0 18px; font-size: 17px; }
+.tools { display: flex; flex-wrap: wrap; gap: 8px; }
+.page .onward { margin: 24px 0 0; font-size: 17px; }
+.onward a { text-decoration: underline; text-underline-offset: 3px; }
+.page .tool { padding: 9px 14px; border: 1.5px solid var(--color-text); border-radius: 3px; background: transparent; color: var(--color-text); font: 600 14px/1 var(--font-serif); text-decoration: none; cursor: pointer; }
+.page .tool:hover { background: rgb(29 43 34 / 8%); }
+
+@media (max-width: 620px) {
+  .page p { font-size: 18px; }
+  .page .lead { font-size: 20px; }
+  .idea, .deeper { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .idea { padding: 28px 0; }
+  .deeper > div { grid-column: 1; }
+  .numeral { height: 64px; }
+}

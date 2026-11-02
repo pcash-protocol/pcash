@@ -1,0 +1,64 @@
+.page { min-width: 0; color: var(--color-text); font-family: var(--font-serif); }
+
+.layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 56px; }
+/* Text keeps a reading measure; diagrams may use more of the column. */
+.main { min-width: 0; }
+.header, .mobileContents, .body { max-width: 74ch; }
+.figure { max-width: 880px; }
+
+/* Title, reading time and the tools for taking the document elsewhere. */
+.header { padding-bottom: 28px; border-bottom: 1px solid var(--color-border); }
+.breadcrumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; color: var(--color-text-muted); font-size: 14px; }
+.breadcrumbs a { color: var(--color-text); text-decoration: underline; text-underline-offset: 3px; }
+.header h1 { margin: 0; color: var(--color-text); font: 800 clamp(40px, 5vw, 64px)/1.04 var(--font-serif); letter-spacing: -.03em; }
+.page .meta { margin: 16px 0 20px; color: var(--color-text-muted); font: 500 13px/1 var(--font-ui); letter-spacing: .1em; text-transform: uppercase; }
+.tools { display: flex; flex-wrap: wrap; gap: 8px; }
+.tool { padding: 10px 16px; border: 1.5px solid var(--color-text); border-radius: 3px; background: transparent; color: var(--color-text); font: 600 15px/1 var(--font-serif); cursor: pointer; }
+.tool:hover { background: rgb(29 43 34 / 8%); }
+.tool[aria-pressed="true"] { background: var(--color-text); color: var(--color-canvas); }
+/* Below the sticky header, which is two rows tall under 1480px. */
+.contents { position: sticky; top: 140px; align-self: start; max-height: calc(100vh - 160px); overflow-y: auto; font-size: 14px; }
+.contents > span, .mobileContents summary { display: block; margin-bottom: 10px; color: var(--color-text-muted); font: 600 12px/1 var(--font-ui); letter-spacing: .12em; text-transform: uppercase; }
+.contents nav, .mobileContents nav { display: grid; gap: 2px; }
+.contents a, .mobileContents a { padding: 4px 0; color: var(--color-text); line-height: 1.35; }
+.contents a:hover, .mobileContents a:hover { text-decoration: underline; }
+.contents a.nested, .mobileContents a.nested { padding-left: 14px; color: var(--color-text-muted); }
+.mobileContents { display: none; }
+
+.body { min-width: 0; }
+.body :global(:is(h1, h2, h3, h4)) { scroll-margin-top: 140px; color: var(--color-text); }
+.body :global(h2) { margin: 60px 0 16px; padding-top: 18px; border-top: 3px double var(--color-text); font: 700 clamp(28px, 3vw, 38px)/1.15 var(--font-serif); letter-spacing: -.015em; }
+.body :global(h3) { margin: 40px 0 12px; font: 700 24px/1.25 var(--font-serif); }
+.body :global(h4) { margin: 28px 0 10px; font: 700 19px/1.3 var(--font-serif); }
+.body :global(p), .body :global(li) { color: var(--color-text); font-size: 18px; line-height: 1.65; }
+.body :global(p) { margin: 0 0 16px; }
+.body :global(ul), .body :global(ol) { margin: 0 0 16px; padding-left: 1.3em; }
+.body :global(li) { margin-bottom: 6px; }
+.body :global(a) { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.body :global(code) { font: .86em var(--font-mono); }
+/* A long hash or path in running text wraps rather than widening the page. */
+.body :global(:not(pre) > code) { overflow-wrap: anywhere; }
+.body :global(pre) { overflow-x: auto; margin: 0 0 18px; padding: 16px 18px; border: 1px solid var(--color-border); background: var(--color-surface); font-size: 14px; line-height: 1.5; }
+.body :global(pre code) { font-size: inherit; }
+/* Code quoted as evidence, captioned with its file. The page can hide it. */
+.body :global(figure.evidence) { margin: 0 0 18px; }
+.body :global(figure.evidence figcaption) { padding: 6px 12px; border: 1px solid var(--color-border); border-bottom: 0; background: var(--color-surface); color: var(--color-text-muted); font: 12px/1.4 var(--font-mono); overflow-wrap: anywhere; }
+.body :global(figure.evidence figcaption a) { color: inherit; }
+.body :global(figure.evidence pre) { margin: 0; }
+.hideEvidence :global(figure[data-evidence]) { display: none; }
+.body :global(table) { display: block; overflow-x: auto; margin: 20px 0; border-collapse: collapse; font-size: 15px; }
+.body :global(th), .body :global(td) { padding: 8px 12px; border: 1px solid var(--color-border); text-align: left; vertical-align: top; }
+.body :global(th) { background: var(--color-surface); }
+.body :global(blockquote) { margin: 16px 0; padding-left: 16px; border-left: 3px solid var(--color-border); }
+.body :global(hr) { margin: 40px 0; border: 0; border-top: 1px solid var(--color-border); }
+
+@media (max-width: 1000px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .contents { display: none; }
+  .mobileContents { display: block; padding: 12px 0; border-bottom: 1px solid var(--color-border); }
+  .mobileContents summary { display: list-item; margin: 0; cursor: pointer; }
+  .mobileContents nav { margin-top: 12px; }
+}
+@media (max-width: 620px) {
+  .body :global(p), .body :global(li) { font-size: 17px; }
+}

@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "nargo": {
+    "version": "1.0.0-rc.3",
+    "noircCommit": "5a7ee9bf5ed8973076df7bb0d2b723024db09ae7",
+    "archives": {
+      "darwin-arm64": {
+        "url": "https://github.com/noir-lang/noir/releases/download/v1.0.0-rc.3/noir-aarch64-apple-darwin.tar.gz",
+        "sha256": "44157443519c8ede9a2df7e6a4ee513b3d49ef9fdd5774c43311fe6f32887a59",
+        "binarySha256": "e1e5a7534b4ad7659fdc0f14d5877e24b7c4831a057aa38259556518583b1a96"
+      },
+      "darwin-x64": {
+        "url": "https://github.com/noir-lang/noir/releases/download/v1.0.0-rc.3/noir-x86_64-apple-darwin.tar.gz",
+        "sha256": "9014ea4b7e88ab2441a949454f2b3dbc2920a82a9353a7a3649a444afed78910",
+        "binarySha256": "c6b0278a3715731f476647e38e58d5de4eb7bd78f95b9a84105c0665ac66dc0e"
+      },
+      "linux-arm64": {
+        "url": "https://github.com/noir-lang/noir/releases/download/v1.0.0-rc.3/noir-aarch64-unknown-linux-gnu.tar.gz",
+        "sha256": "98be47cd6b2a81f3857c029acd8298fd590eebeb153ef51e1dc6f10c973e00e9",
+        "binarySha256": "563b5cb9eb616feca13e27cf95468d8c81016edc309411853cebafb1935fb43f"
+      },
+      "linux-x64": {
+        "url": "https://github.com/noir-lang/noir/releases/download/v1.0.0-rc.3/noir-x86_64-unknown-linux-gnu.tar.gz",
+        "sha256": "5792dd962afce1eed834570f95d9f72cc4a09d45cd846d3b80b7a57392732973",
+        "binarySha256": "764b4fc1b27c8dad8a107043f915fe1b2cccc3184284ea00f31e9b390633d6f5"
+      }
+    }
+  },
+  "barretenberg": {
+    "version": "6.0.0",
+    "archives": {
+      "darwin-arm64": {
+        "url": "https://github.com/AztecProtocol/barretenberg/releases/download/v6.0.0/barretenberg-arm64-darwin.tar.gz",
+        "sha256": "48bd18a7d53781a2820e7538dfd89584ca5b4d76c7908e8be4910ce994e7c35e",
+        "binarySha256": "f3af6634d08980744f6c9d18010f65b4fd2bbcf23f99e62fd81078ca9b35aa7e"
+      },
+      "darwin-x64": {
+        "url": "https://github.com/AztecProtocol/barretenberg/releases/download/v6.0.0/barretenberg-amd64-darwin.tar.gz",
+        "sha256": "b0f872ad96ba35a57a3b8b91a7e1b8baf39dbe6e33a8a5b969e5d110638f1161",
+        "binarySha256": "0b1929c13a46c87fd2ee026af6a665d9edee0e4a8957e5455666a876b4735a4c"
+      },
+      "linux-arm64": {
+        "url": "https://github.com/AztecProtocol/barretenberg/releases/download/v6.0.0/barretenberg-arm64-linux.tar.gz",
+        "sha256": "cbdf8cb01b80cca089b63834c543e49e65d1e4e0b969844ce7f302c3de30b432",
+        "binarySha256": "d43cdeac2e1506ee751e4428ebec224884108957dfaedcf69170671548b35b97"
+      },
+      "linux-x64": {
+        "url": "https://github.com/AztecProtocol/barretenberg/releases/download/v6.0.0/barretenberg-amd64-linux.tar.gz",
+        "sha256": "6a310ede6457cf47e6dcf11f8d6b59dd709328c272a70c03afb1417c5a798b67",
+        "binarySha256": "97242cb29cab39f22f001dfd9d7fa5937d414fd0ae326b000759ffb7a4544f31"
+      }
+    }
+  },
+  "crs": {
+    "bn254G1": {
+      "url": "https://crs.aztec.network/g1.dat",
+      "bytes": 268435456,
+      "sha256": "d777711ae9fb1951c47a0eaf7e0ebcaccc39e6731d9b3a560d7ff0c2fcdf2f0d"
+    },
+    "bn254G2": {
+      "url": "https://crs.aztec.network/g2.dat",
+      "sha256": "01797bfc4de5a96f0e516a9ea4537d18786dc30cb991aca4274c95822b69c32f"
+    },
+    "grumpkinG1": {
+      "url": "https://crs.aztec-cdn.foundation/grumpkin_g1_v2.dat",
+      "bytes": 4194304,
+      "sha256": "64236c9455e75aeea77a94587ea607eed2e978d2609a421d66bf10bb9698b8fd"
+    }
+  }
+}

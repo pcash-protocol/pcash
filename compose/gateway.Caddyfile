@@ -1,0 +1,50 @@
+{$PCASH_API_SITE} {
+	encode zstd gzip
+
+	@rpc path /rpc /rpc/*
+	handle @rpc {
+		rewrite * /
+		reverse_proxy node:8645
+	}
+
+	@pscan path /pscan /pscan/*
+	handle @pscan {
+		rewrite * /
+		reverse_proxy node:8648
+	}
+
+	@proving_options {
+		method OPTIONS
+		path /proving/*
+	}
+	handle @proving_options {
+		header Access-Control-Allow-Origin "*"
+		header Access-Control-Allow-Methods "GET, HEAD, OPTIONS"
+		header Access-Control-Allow-Headers "Range"
+		header Access-Control-Max-Age "86400"
+		respond "" 204
+	}
+
+	@proving_read {
+		method GET HEAD
+		path /proving/*
+	}
+	handle @proving_read {
+		root * /srv
+		header Access-Control-Allow-Origin "*"
+		header Cross-Origin-Resource-Policy "cross-origin"
+		header Access-Control-Expose-Headers "Accept-Ranges, Content-Length, Content-Range, Etag"
+		route {
+			@proving_file file
+			header @proving_file Cache-Control "public, max-age=31536000, immutable"
+			file_server
+		}
+	}
+
+	@proving_other path /proving/*
+	handle @proving_other {
+		respond "method not allowed" 405
+	}
+
+	respond 404
+}

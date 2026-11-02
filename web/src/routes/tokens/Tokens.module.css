@@ -1,0 +1,128 @@
+.stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; min-width: 0; }
+.columns { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+.columns > * { min-width: 0; }
+.panelHeading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 6px; }
+.panelHeading h2 { margin: 0; font: 700 26px/1.2 var(--font-serif); }
+.lede { margin: 0 0 18px; max-width: 62ch; }
+.muted { color: var(--color-text-muted); }
+
+/* The one visual claim on these pages: what the token ID proves. */
+.seal { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border: 1px solid var(--color-success-border); background: var(--color-success-surface); color: var(--color-success-text); font: 700 11px/1.5 var(--font-ui); letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
+.sealWarning { border-color: var(--color-warning-border); background: var(--color-warning-surface); color: var(--color-warning-text); }
+.sealDanger { border-color: var(--color-danger-border); background: var(--color-danger-surface); color: var(--color-danger-text); }
+.verified { margin: 0; padding: 18px 20px; border: 1px solid var(--color-success-border); border-left-width: 4px; background: var(--color-surface); }
+.verifiedNote { margin: 12px 0 0; font-size: 13px; }
+.facts { grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; margin: 14px 0 0; }
+.facts dd { overflow-wrap: anywhere; }
+.facts code { font-size: 12px; }
+.bigName { font: 700 22px/1.2 var(--font-serif); }
+.private { color: var(--color-private-text); }
+.outside { margin-top: 18px; padding-top: 16px; border-top: 1px dashed var(--color-border); }
+.outside h3 { margin: 0 0 8px; font: 600 13px/1.4 var(--font-ui); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: .08em; }
+
+/* Your tokens */
+.tokenList { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--color-border); }
+.tokenRow { display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 14px 4px; border-bottom: 1px solid var(--color-border); color: inherit; }
+.tokenRow:hover { background: var(--color-accent-wash); }
+.mark { display: grid; place-items: center; width: 46px; height: 46px; border: 1px solid var(--color-text); outline: 1px solid var(--color-text); outline-offset: 2px; font: 700 11px/1 var(--font-ui); letter-spacing: -.02em; overflow: hidden; }
+.markUnverified { border-style: dashed; outline-style: dashed; color: var(--color-text-muted); }
+.tokenText { display: grid; gap: 3px; min-width: 0; }
+.tokenText strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tokenText small { color: var(--color-text-muted); font-size: 12px; overflow-wrap: anywhere; }
+.tokenBalance { display: grid; justify-items: end; gap: 3px; text-align: right; }
+.tokenBalance small { color: var(--color-text-muted); font-size: 12px; }
+.tokenList[data-compact="true"] .tokenRow { grid-template-columns: 32px minmax(0, 1fr) auto; gap: 10px; padding: 9px 2px; }
+.tokenList[data-compact="true"] .mark { width: 32px; height: 32px; outline-offset: 1px; font-size: 9px; }
+.tokenList[data-compact="true"] .tokenText strong { font-size: 13px; }
+.tokenList[data-compact="true"] .tokenText small, .tokenList[data-compact="true"] .tokenBalance { font-size: 12px; }
+.empty { display: grid; gap: 6px; padding: 26px 0; }
+.empty strong { font: 700 20px/1.3 var(--font-serif); }
+
+/* Forms */
+.form { display: grid; gap: 16px; }
+.form label, .field { display: grid; gap: 7px; color: var(--color-text-muted); font-size: 13px; }
+.form input:not([type="radio"]):not([type="checkbox"]), .form textarea, .form select { width: 100%; min-width: 0; }
+.form textarea { min-height: 120px; resize: vertical; line-height: 1.5; font-size: 13px; }
+.fieldset { display: grid; gap: 12px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.fields { display: grid; gap: 16px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.legend { padding: 0; margin-bottom: 7px; color: var(--color-text-muted); font: 13px var(--font-ui); }
+.fieldRow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.hint { margin: 0; font-size: 13px; line-height: 1.55; }
+.fieldError { margin: 0; color: var(--color-danger-text); font-size: 13px; }
+.fieldOk { margin: 0; color: var(--color-success-text); font-size: 13px; }
+.check { display: flex !important; grid-template-columns: none; align-items: flex-start; gap: 10px !important; color: var(--color-text) !important; font-size: 14px !important; }
+.check input { margin-top: 3px; accent-color: var(--color-text); }
+.sources { display: flex; flex-wrap: wrap; gap: 4px; border: 1px solid var(--color-border); border-radius: 19px; padding: 3px; width: fit-content; max-width: 100%; }
+.sources label { position: relative; display: flex; align-items: center; padding: 7px 13px; border-radius: 999px; color: var(--color-text); font-size: 13px; cursor: pointer; }
+.sources input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: inherit; }
+.sources label:has(:checked) { background: var(--color-accent-soft); box-shadow: inset 0 0 0 1px var(--color-border); }
+.sources label:has(:focus-visible) { outline: 2px solid var(--color-text); outline-offset: 2px; }
+.digest { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--color-border); background: var(--color-canvas-deep); font-size: 13px; overflow-wrap: anywhere; }
+.digest code { color: var(--color-code-text-strong); font-size: 12px; }
+.feeEstimate { margin: 0; font-size: 13px; }
+
+/* Review */
+.review { grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; padding: 16px 0; margin: 0 0 18px; border-top: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); }
+.review dd { overflow-wrap: anywhere; }
+.fixed { margin: 0; padding: 10px 12px; border-left: 3px solid var(--color-text); background: var(--color-canvas-deep); color: var(--color-text); font-size: 13px; line-height: 1.55; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.danger { border-color: var(--color-danger-border) !important; background: var(--color-danger-text) !important; color: var(--color-accent-contrast) !important; font-weight: 750; }
+.linkButton { padding: 0; border: 0; background: none; color: var(--color-text); text-decoration: underline; text-underline-offset: 3px; }
+
+/* Actions on a token */
+.balanceLine { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; margin: 4px 0 18px; }
+.balanceLine output { font: 600 clamp(26px, 3vw, 36px)/1.1 var(--font-serif); letter-spacing: -.02em; }
+.balanceLine output > span { font-family: inherit; }
+.tabs { display: flex; gap: 2px; margin: 0 0 18px; border-bottom: 1px solid var(--color-border); overflow-x: auto; }
+.tabs button { padding: 10px 14px; border: 0; border-bottom: 2px solid transparent; border-radius: 0 !important; background: none; color: var(--color-text-muted); font-weight: 600; white-space: nowrap; }
+.tabs button[aria-selected="true"] { border-bottom-color: var(--color-text); color: var(--color-text); }
+
+/* Share */
+.share { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.share input { width: 100%; min-width: 0; font: 12px/1.4 var(--font-ui); color: var(--color-code-text); background: var(--color-canvas-deep); }
+
+/* Transaction status */
+.status { display: grid; gap: 10px; margin-top: 14px; }
+.status p { margin: 0; overflow-wrap: anywhere; }
+.statusLine { display: flex; align-items: center; gap: 8px; color: var(--color-text); }
+.done { color: var(--color-success-text); }
+
+/* Claim links and drops */
+.subheading { margin: 8px 0 6px; font: 700 18px/1.3 var(--font-serif); }
+.linkList { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.linkList li { display: grid; gap: 5px; }
+.linkMeta { color: var(--color-text-muted); font-size: 13px; }
+.dropRow { display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 14px 4px; border-bottom: 1px solid var(--color-border); color: inherit; }
+.dropRow:hover { background: var(--color-accent-wash); }
+.claimAmount { font: 600 clamp(30px, 4vw, 44px)/1.1 var(--font-serif); letter-spacing: -.02em; margin: 6px 0 14px; }
+.claimAmount > span { font-family: inherit; }
+
+/* Distribution */
+.lineErrors { margin: 0; padding-left: 18px; color: var(--color-danger-text); font-size: 13px; }
+.lineErrors li { margin: 3px 0; overflow-wrap: anywhere; }
+.job { display: grid; gap: 10px; padding: 16px 0; border-top: 1px solid var(--color-border); }
+.jobHead { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; }
+.jobHead strong { font-weight: 600; }
+.meter { position: relative; height: 8px; border: 1px solid var(--color-text); background: var(--color-canvas-deep); overflow: hidden; }
+.meterPaid, .meterSent { position: absolute; inset: 0 auto 0 0; }
+.meterPaid { background: var(--color-text); }
+.meterSent { background: repeating-linear-gradient(135deg, var(--color-text) 0 3px, transparent 3px 6px); opacity: .55; }
+.chunks { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: 13px; }
+.chunks li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; padding: 5px 0; border-bottom: 1px dotted var(--color-border); }
+.chip { padding: 2px 7px; border: 1px solid var(--color-border); font: 600 11px/1.5 var(--font-ui); letter-spacing: .03em; }
+.chipDone { border-color: var(--color-success-border); color: var(--color-success-text); background: var(--color-success-surface); }
+.chipWarn { border-color: var(--color-warning-border); color: var(--color-warning-text); background: var(--color-warning-surface); }
+.chipBad { border-color: var(--color-danger-border); color: var(--color-danger-text); background: var(--color-danger-surface); }
+
+@media (max-width: 900px) {
+  .columns { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 620px) {
+  .fieldRow { grid-template-columns: minmax(0, 1fr); }
+  .share { grid-template-columns: minmax(0, 1fr); }
+  .tokenRow { grid-template-columns: 38px minmax(0, 1fr); }
+  .mark { width: 38px; height: 38px; font-size: 10px; }
+  .tokenBalance { grid-column: 2; justify-items: start; text-align: left; }
+  .facts, .review { grid-template-columns: minmax(0, 1fr); gap: 2px 0; }
+  .facts dd, .review dd { margin-bottom: 10px; }
+}

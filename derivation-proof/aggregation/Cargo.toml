@@ -1,0 +1,26 @@
+[package]
+name = "derivation-proof-aggregation"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+description = "Aggregates a chain of PCASH range proofs into one proof"
+
+# Built for SP1's RISC-V target with SP1's toolchain, apart from the node workspace.
+[workspace]
+
+[dependencies]
+sp1-zkvm = { version = "=6.10.0", features = ["verify"] }
+sp1-lib = { version = "=6.10.0", features = ["verify"] }
+derivation-proof-types = { path = "../types" }
+alloy-primitives = { version = "1.7", features = ["rlp"] }
+alloy-rlp = "0.3"
+alloy-sol-types = { version = "1.7", default-features = false }
+sha2 = "0.10"
+
+[profile.release]
+opt-level = 3
+
+[patch.crates-io]
+sha2 = { git = "https://github.com/sp1-patches/RustCrypto-hashes", package = "sha2", tag = "patch-sha2-0.10.9-sp1-6.10.0" }
+sha3 = { git = "https://github.com/sp1-patches/RustCrypto-hashes", package = "sha3", tag = "patch-sha3-0.11.0-sp1-6.0.0" }

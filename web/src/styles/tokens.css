@@ -1,0 +1,75 @@
+/* Code, raw data and brand elements only: IBM Plex Mono (OFL, see fonts/OFL.txt),
+   IBM's unmodified Latin-1 subsets. */
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/ibm-plex-mono-latin-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./fonts/ibm-plex-mono-latin-500.woff2") format("woff2");
+}
+
+/* The PCASH identity: tan paper and green-black ink. */
+:root {
+  color-scheme: light;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --font-serif: "Source Serif 4", "Iowan Old Style", Georgia, serif;
+  /* Interface text (labels, tabs, buttons, column headers and form fields) and figures
+     (addresses, hashes, amounts, table numbers), which add tabular-nums. Large hero
+     figures use the serif. */
+  --font-ui: "Libre Franklin", ui-sans-serif, system-ui, sans-serif;
+  --font-text: var(--font-serif);
+  --color-canvas: #ece5cf;
+  --color-canvas-deep: #e3dac0;
+  --color-surface: #f4efe0;
+  --color-surface-raised: #f4efe0;
+  --color-control-surface: #f4efe0;
+  --color-header: #ece5cf;
+  --color-text: #1d2b22;
+  --color-text-muted: #4e5c51;
+  --color-border: #cdc3a5;
+  --color-accent: #1d2b22;
+  --color-accent-strong: #1d2b22;
+  --color-accent-soft: #ded3b6;
+  --color-accent-hover: #2b3d31;
+  --color-accent-wash: #e3dac0;
+  --color-focus-ring: #3f6b4f;
+  --color-accent-contrast: #f4efe0;
+  --color-warning-border: #c9a94f;
+  --color-warning-surface: #f3e6bf;
+  --color-warning-text: #6b5213;
+  --color-danger-border: #b33c34;
+  --color-danger-surface: #f4d9d4;
+  --color-danger-text: #8e2a23;
+  --color-success-border: #3f6b4f;
+  --color-success-surface: #d9e4d2;
+  --color-success-text: #2c5a3d;
+  --color-code-text: #355047;
+  --color-code-text-strong: #1d2b22;
+  --color-private-text: #2c5a3d;
+  --color-info-text: #334b8c;
+  /* Source code: a dark ink block with light syntax colors. */
+  --color-code-surface: #1d2b22;
+  --color-code-surface-text: #e7e1cd;
+  --color-syntax-keyword: #cfa9e6;
+  --color-syntax-type: #8fd0ad;
+  --color-syntax-function: #93c4ea;
+  --color-syntax-string: #e2c47f;
+  --color-syntax-number: #eda98f;
+  --color-syntax-comment: #94a594;
+  /* The field behind line work and featured sections. */
+  --color-tint: #c9d3ba;
+  --radius-sm: 3px;
+  --radius-control: 4px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --duration-fast: 180ms;
+  --layout-max: 1380px;
+  --layout-gutter: 5vw;
+}

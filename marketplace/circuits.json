@@ -1,0 +1,29 @@
+{
+  "owner": "marketplace",
+  "circuits": [
+    {
+      "package": "claim",
+      "path": "l2-contracts/escrow/claim",
+      "artifact": "contracts/escrow/claim",
+      "role": "application",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144
+    },
+    {
+      "package": "reclaim",
+      "path": "l2-contracts/escrow/reclaim",
+      "artifact": "contracts/escrow/reclaim",
+      "role": "application",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144
+    }
+  ]
+}

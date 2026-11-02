@@ -1,0 +1,23 @@
+{
+  "name": "@pcash/bench",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "predev": "npm --prefix .. run build:packages",
+    "dev": "node serve.mjs"
+  },
+  "dependencies": {
+    "@pcash/marketplace": "^0.1.0",
+    "@pcash/sdk": "^0.1.0",
+    "@pcash/test-support": "0.0.0",
+    "viem": "^2.55.1",
+    "@pcash/lineage": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.6"
+  }
+}

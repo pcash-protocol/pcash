@@ -1,0 +1,8 @@
+[package]
+name = "reference_rule_common"
+type = "lib"
+compiler_version = "=1.0.0"
+
+[dependencies]
+pcash_protocol = { path = "../../protocol/lib" }
+signature_common = { path = "../../signature" }

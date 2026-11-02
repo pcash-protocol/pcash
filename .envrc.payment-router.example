@@ -1,0 +1,22 @@
+# Copy to .envrc.payment-router. The operator reads only this funded-key file and
+# never the shell environment; do not source it. Use --envrc PATH to select
+# another, with the node's L1 chain ID.
+export PCASH_L1_RPC=
+export PCASH_L1_CHAIN_ID=11155111
+
+# Required only to deploy a new router. Never configure this in Vercel.
+export PCASH_L1_KEY=
+export PCASH_L1_MAX_FEE_PER_GAS=10000000000
+
+# Immutable router policy. Changing any value requires a new deployment.
+# Can pause new payments and nothing else.
+export PCASH_PAYMENT_ROUTER_GUARDIAN=
+export PCASH_PAYMENT_ROUTER_FEE_RECIPIENT=
+export PCASH_PAYMENT_ROUTER_FEE_BPS=500
+
+# Keep this key present and leave it empty for a new deploy. Set the verified address afterward so future
+# deploy commands reuse and check it instead of creating another contract.
+export PCASH_PAYMENT_ROUTER_ADDRESS=
+
+# Optional. Set only when deliberately publishing the deployed router's source to Etherscan.
+export PCASH_ETHERSCAN_API_KEY=

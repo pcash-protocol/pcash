@@ -1,0 +1,8 @@
+.bar { height: 6px; overflow: hidden; border-radius: 999px; background: var(--color-border); }
+.bar > span { display: block; width: 35%; height: 100%; border-radius: inherit; background: var(--color-accent); animation: progress 1.8s ease-in-out infinite; }
+.bar > span.filled { animation: none; transition: width .5s linear; }
+@keyframes progress { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+@media (prefers-reduced-motion: reduce) {
+  .bar > span { animation: none; width: 100%; opacity: .6; }
+  .bar > span.filled { opacity: 1; transition: none; }
+}

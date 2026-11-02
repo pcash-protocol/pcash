@@ -1,0 +1,72 @@
+/* Full-bleed sections escape the centered main column and line up with the header. */
+.hero, .points { --edge: max(4vw, calc((100vw - var(--layout-max)) / 2)); margin-inline: calc(50% - 50vw); padding-inline: var(--edge); }
+
+/* First screen: fills the viewport below the header (73px on one row, 122px on
+   two) and leaves a 76px sliver of the next section visible. */
+.hero { position: relative; display: flex; align-items: center; min-height: calc(100svh - 73px - 76px); margin-top: -54px; padding-block: 56px; overflow: hidden; }
+@media (max-width: 1480px) { .hero { min-height: calc(100svh - 122px - 76px); } }
+
+/* The art prints onto the paper: the group multiplies, so the images' white
+   backgrounds disappear. Nothing inside may create a stacking context, or the
+   seal would stop blending with the line work behind it. */
+.art {
+  position: absolute; inset: 0; pointer-events: none; mix-blend-mode: multiply;
+  /* Fades in after the text column, wherever the centered column ends. */
+  -webkit-mask-image: linear-gradient(to right, transparent calc(var(--edge) + 540px), #000 calc(var(--edge) + 880px));
+          mask-image: linear-gradient(to right, transparent calc(var(--edge) + 540px), #000 calc(var(--edge) + 880px));
+}
+.art img { position: absolute; display: block; max-width: none; }
+.lines {
+  height: 125%; width: auto; top: -12%; right: -10%;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 12%), linear-gradient(to bottom, transparent, #000 10%, #000 90%, transparent);
+  -webkit-mask-composite: source-in;
+          mask-image: linear-gradient(to right, transparent, #000 12%), linear-gradient(to bottom, transparent, #000 10%, #000 90%, transparent);
+          mask-composite: intersect;
+}
+.sealFrame { --w: min(96vh, 62vw); position: absolute; width: var(--w); aspect-ratio: 2400 / 2364; right: calc(var(--w) * -0.3); top: calc(50% - var(--w) * 0.4925); }
+/* A white layer cut to the seal's outline keeps the line work from showing
+   through the seal. */
+.sealFrame::before { content: ""; position: absolute; inset: 0; background: #fff; -webkit-mask: url(/brand/seal-silhouette.png) center / 100% 100% no-repeat; mask: url(/brand/seal-silhouette.png) center / 100% 100% no-repeat; }
+.art .seal { position: relative; width: 100%; height: auto; mix-blend-mode: multiply; }
+
+.copy { position: relative; max-width: 600px; }
+.copy h1 { margin: 0 0 22px; color: var(--color-text); font: 800 clamp(48px, 6.2vw, 96px)/0.98 var(--font-serif); letter-spacing: -0.025em; text-wrap: balance; }
+.copy p { margin: 0 0 32px; max-width: 30ch; color: var(--color-text); font-size: clamp(20px, 1.7vw, 24px); line-height: 1.4; }
+
+.actions { display: flex; flex-wrap: wrap; gap: 14px; }
+.copy .documents { max-width: none; margin: 22px 0 0; color: var(--color-text-muted); font-size: 16px; }
+.copy .documents a { color: var(--color-text); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.actions :global(.button) { display: inline-flex; align-items: center; justify-content: center; padding: 15px 26px; border: 1.5px solid var(--color-text); border-radius: 3px; background: transparent; color: var(--color-text); font: 600 17px/1 var(--font-ui); white-space: nowrap; }
+.actions :global(.button):hover { background: rgb(29 43 34 / 8%); }
+.actions :global(.button.primary) { background: var(--color-text); color: var(--color-accent-contrast); }
+.actions :global(.button.primary):hover { background: var(--color-accent-hover); }
+
+.points { position: relative; margin-bottom: -80px; padding-block: 72px 88px; border-top: 3px double var(--color-text); background: var(--color-tint); }
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 48px; max-width: var(--layout-max); margin: 0 auto; }
+.numeral { display: block; width: auto; height: 104px; margin-bottom: 18px; mix-blend-mode: multiply; }
+.grid h2 { margin: 0 0 10px; padding-top: 16px; border-top: 1px solid var(--color-text); color: var(--color-text); font: 700 30px/1.15 var(--font-serif); letter-spacing: -0.01em; }
+.grid p { margin: 0; max-width: 34ch; color: var(--color-text); font-size: 18px; line-height: 1.55; }
+.points .actions { justify-content: center; margin-top: 64px; }
+
+/* Narrow screens stack the seal above the headline, cropped larger than the screen. */
+@media (max-width: 1000px) {
+  .hero { display: block; min-height: 0; padding-block: 0 48px; }
+  .art {
+    position: relative; inset: auto; height: min(86vw, 640px); margin-inline: calc(-1 * var(--edge));
+    -webkit-mask-image: linear-gradient(to bottom, #000 62%, transparent);
+            mask-image: linear-gradient(to bottom, #000 62%, transparent);
+  }
+  .lines { height: 150%; top: -25%; right: -30%; }
+  .sealFrame { --w: min(118vw, 860px); right: calc(var(--w) * -0.32); top: calc(44% - var(--w) * 0.4925); }
+  .copy { max-width: 640px; margin-top: -6vw; }
+  .grid { grid-template-columns: minmax(0, 1fr); gap: 40px; max-width: 640px; }
+}
+
+@media (max-width: 760px) {
+  .copy h1 { font-size: clamp(40px, 11.5vw, 56px); }
+  .copy p { font-size: 20px; }
+  .actions :global(.button) { flex: 1 1 100%; }
+  .points { padding-block: 56px 64px; }
+  .numeral { height: 84px; }
+  .grid h2 { font-size: 26px; }
+}

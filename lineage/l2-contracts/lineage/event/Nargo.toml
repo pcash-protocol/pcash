@@ -1,0 +1,7 @@
+[package]
+name = "event_lineage"
+type = "bin"
+compiler_version = "=1.0.0"
+
+[dependencies]
+pcash_protocol = { path = "../../../../circuits/protocol/lib" }
