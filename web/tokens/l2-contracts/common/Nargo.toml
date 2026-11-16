@@ -1,0 +1,8 @@
+[package]
+name = "tokens_common"
+type = "lib"
+compiler_version = "=1.0.0"
+
+[dependencies]
+pcash_protocol = { path = "../../../../circuits/protocol/lib" }
+reference_rule_common = { path = "../../../../circuits/rules/lib" }

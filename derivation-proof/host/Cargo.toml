@@ -1,0 +1,38 @@
+[package]
+name = "derivation-proof-host"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+description = "Derives PCASH blocks from Ethereum, proves them with the SP1 programs, and submits the proofs to PcashState"
+
+# Depends on sp1-sdk, which the node workspace does not.
+[workspace]
+
+[dependencies]
+sp1-sdk = { version = "=6.10.0", features = ["blocking", "profiling", "network", "native-gnark"] }
+derivation-proof-core = { path = "../core" }
+pcash-derive = { path = "../../node/crates/derive" }
+pcash-state = { path = "../../node/crates/state" }
+pcash-verify = { path = "../../node/crates/verify" }
+alloy-consensus = "2.5"
+alloy-eips = "2.5"
+alloy-network = "2.5"
+alloy-primitives = "1.7"
+alloy-provider = { version = "2.5", default-features = false, features = ["reqwest", "reqwest-default-tls"] }
+alloy-rlp = "0.3"
+alloy-rpc-types-eth = "2.5"
+alloy-signer-local = "2.5"
+alloy-sol-types = "1.7"
+alloy-trie = "0.9"
+c-kzg = "2.1"
+clap = { version = "4", features = ["derive"] }
+eyre = "0.6"
+futures = "0.3"
+reqwest = { version = "0.13", features = ["json"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread"] }
+
+[dev-dependencies]
+sha2 = "0.10"
+sp1-verifier = "=6.10.0"

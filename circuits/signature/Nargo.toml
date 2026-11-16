@@ -1,0 +1,7 @@
+[package]
+name = "signature_common"
+type = "lib"
+compiler_version = "=1.0.0"
+
+[dependencies]
+keccak256 = { path = "../vendor/keccak256" }

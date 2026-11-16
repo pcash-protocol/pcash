@@ -1,0 +1,31 @@
+[package]
+name = "pcash-verify"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+description = "PCASH wire-proof verification behind a trait with a pinned-Barretenberg backend"
+
+[lints]
+workspace = true
+
+[features]
+default = ["bb"]
+# The pinned-Barretenberg worker backend. Without it the crate is the trait,
+# its errors, the cache and the refusal classifier.
+bb = ["dep:barretenberg-rs", "dep:rmp-serde", "dep:wait-timeout", "dep:rustix"]
+
+[dependencies]
+barretenberg-rs = { version = "=6.0.0", default-features = false, optional = true }
+thiserror = { workspace = true }
+hex = { workspace = true }
+rmp-serde = { version = "1", optional = true }
+sha2 = { workspace = true }
+wait-timeout = { version = "0.2", optional = true }
+
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", features = ["event"], optional = true }
+
+[dev-dependencies]
+rmpv = "1"
+tempfile = { workspace = true }

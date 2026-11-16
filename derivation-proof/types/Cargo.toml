@@ -1,0 +1,12 @@
+[package]
+name = "derivation-proof-types"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+description = "The derivation proof programs' inputs and public values"
+
+[dependencies]
+alloy-primitives = { version = "1.7", default-features = false, features = ["serde"] }
+alloy-sol-types = { version = "1.7", default-features = false }
+serde = { version = "1", default-features = false, features = ["derive", "alloc"] }

@@ -1,0 +1,385 @@
+{
+  "spec": "Merkle trees",
+  "fieldModulus": "0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001",
+  "node": "internal node = poseidon(left, right); empty leaf = 0",
+  "emptyLadderRule": "EMPTY[0]=0; EMPTY[h+1]=poseidon(EMPTY[h],EMPTY[h]); depth-D empty root = EMPTY[D]",
+  "pathRule": "D siblings leaf->root; key bit h (LSB-first) selects side; bit 0 => current node is LEFT child",
+  "emptyLadder": [
+    {
+      "height": 0,
+      "value": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "height": 1,
+      "value": "0x0b63a53787021a4a962a452c2921b3663aff1ffd8d5510540f8e659e782956f1"
+    },
+    {
+      "height": 2,
+      "value": "0x0e34ac2c09f45a503d2908bcb12f1cbae5fa4065759c88d501c097506a8b2290"
+    },
+    {
+      "height": 3,
+      "value": "0x21f9172d72fdcdafc312eee05cf5092980dda821da5b760a9fb8dbdf607c8a20"
+    },
+    {
+      "height": 4,
+      "value": "0x2373ea368857ec7af97e7b470d705848e2bf93ed7bef142a490f2119bcf82d8e"
+    },
+    {
+      "height": 5,
+      "value": "0x120157cfaaa49ce3da30f8b47879114977c24b266d58b0ac18b325d878aafddf"
+    },
+    {
+      "height": 6,
+      "value": "0x01c28fe1059ae0237b72334700697bdf465e03df03986fe05200cadeda66bd76"
+    },
+    {
+      "height": 7,
+      "value": "0x2d78ed82f93b61ba718b17c2dfe5b52375b4d37cbbed6f1fc98b47614b0cf21b"
+    },
+    {
+      "height": 8,
+      "value": "0x067243231eddf4222f3911defbba7705aff06ed45960b27f6f91319196ef97e1"
+    },
+    {
+      "height": 9,
+      "value": "0x1849b85f3c693693e732dfc4577217acc18295193bede09ce8b97ad910310972"
+    },
+    {
+      "height": 10,
+      "value": "0x2a775ea761d20435b31fa2c33ff07663e24542ffb9e7b293dfce3042eb104686"
+    },
+    {
+      "height": 11,
+      "value": "0x0f320b0703439a8114f81593de99cd0b8f3b9bf854601abb5b2ea0e8a3dda4a7"
+    },
+    {
+      "height": 12,
+      "value": "0x0d07f6e7a8a0e9199d6d92801fff867002ff5b4808962f9da2ba5ce1bdd26a73"
+    },
+    {
+      "height": 13,
+      "value": "0x1c4954081e324939350febc2b918a293ebcdaead01be95ec02fcbe8d2c1635d1"
+    },
+    {
+      "height": 14,
+      "value": "0x0197f2171ef99c2d053ee1fb5ff5ab288d56b9b41b4716c9214a4d97facc4c4a"
+    },
+    {
+      "height": 15,
+      "value": "0x2b9cdd484c5ba1e4d6efcc3f18734b5ac4c4a0b9102e2aeb48521a661d3feee9"
+    },
+    {
+      "height": 16,
+      "value": "0x14f44d672eb357739e42463497f9fdac46623af863eea4d947ca00a497dcdeb3"
+    },
+    {
+      "height": 17,
+      "value": "0x071d7627ae3b2eabda8a810227bf04206370ac78dbf6c372380182dbd3711fe3"
+    },
+    {
+      "height": 18,
+      "value": "0x2fdc08d9fe075ac58cb8c00f98697861a13b3ab6f9d41a4e768f75e477475bf5"
+    },
+    {
+      "height": 19,
+      "value": "0x20165fe405652104dceaeeca92950aa5adc571b8cafe192878cba58ff1be49c5"
+    },
+    {
+      "height": 20,
+      "value": "0x1c8c3ca0b3a3d75850fcd4dc7bf1e3445cd0cfff3ca510630fd90b47e8a24755"
+    },
+    {
+      "height": 21,
+      "value": "0x1f0c1a8fb16b0d2ac9a146d7ae20d8d179695a92a79ed66fc45d9da4532459b3"
+    },
+    {
+      "height": 22,
+      "value": "0x038146ec5a2573e1c30d2fb32c66c8440f426fbd108082df41c7bebd1d521c30"
+    },
+    {
+      "height": 23,
+      "value": "0x17d3d12b17fe762de4b835b2180b012e808816a7f2ff69ecb9d65188235d8fd4"
+    },
+    {
+      "height": 24,
+      "value": "0x0e1a6b7d63a6e5a9e54e8f391dd4e9d49cdfedcbc87f02cd34d4641d2eb30491"
+    },
+    {
+      "height": 25,
+      "value": "0x09244eec34977ff795fc41036996ce974136377f521ac8eb9e04642d204783d2"
+    },
+    {
+      "height": 26,
+      "value": "0x1646d6f544ec36df9dc41f778a7ef1690a53c730b501471b6acd202194a7e8e9"
+    },
+    {
+      "height": 27,
+      "value": "0x064769603ba3f6c41f664d266ecb9a3a0f6567cd3e48b40f34d4894ee4c361b3"
+    },
+    {
+      "height": 28,
+      "value": "0x1595bb3cd19f84619dc2e368175a88d8627a7439eda9397202cdb1167531fd3f"
+    },
+    {
+      "height": 29,
+      "value": "0x2a529be462b81ca30265b558763b1498289c9d88277ab14f0838cb1fce4b472c"
+    },
+    {
+      "height": 30,
+      "value": "0x0c08da612363088ad0bbc78abd233e8ace4c05a56fdabdd5e5e9b05e428bdaee"
+    },
+    {
+      "height": 31,
+      "value": "0x14748d0241710ef47f54b931ac5a58082b1d56b0f0c30d55fb71a6e8c9a6be14"
+    },
+    {
+      "height": 32,
+      "value": "0x0b59baa35b9dc267744f0ccb4e3b0255c1fc512460d91130c6bc19fb2668568d"
+    },
+    {
+      "height": 33,
+      "value": "0x2c45bb0c3d5bc1dc98e0baef09ff46d18c1a451e724f41c2b675549bb5c80e59"
+    },
+    {
+      "height": 34,
+      "value": "0x121468e6710bf1ffec6d0f26743afe6f88ef55dab40b83ca0a39bc44b196374c"
+    },
+    {
+      "height": 35,
+      "value": "0x2042c32c823a7440ceb6c342f9125f1fe426b02c527cd8fb28c85d02b705e759"
+    },
+    {
+      "height": 36,
+      "value": "0x0d582c10ff8115413aa5b70564fdd2f3cefe1f33a1e43a47bc495081e91e73e5"
+    },
+    {
+      "height": 37,
+      "value": "0x0f55a0d491a9da093eb999fa0dffaf904620cbc78d07e63c6f795c5c7512b523"
+    },
+    {
+      "height": 38,
+      "value": "0x21849764e1aa64b83a69e39d27eedaec2a8f97066e5ddb74634ffdb11388dd9a"
+    },
+    {
+      "height": 39,
+      "value": "0x2e33ee2008411c04b99c24b313513d097a0d21a5040b6193d1f978b8226892d6"
+    },
+    {
+      "height": 40,
+      "value": "0x1fd848aa69e1633722fe249a5b7f53b094f1c9cef9f5c694b073fd1cc5850dfb"
+    },
+    {
+      "height": 41,
+      "value": "0x1a180441acbe2e25177de322888800476d75191e3c2c753300dedf84de7d2053"
+    },
+    {
+      "height": 42,
+      "value": "0x2ac5dda169f6bb3b9ca09bbac34e14c94d1654597db740153a1288d859a8a30a"
+    },
+    {
+      "height": 43,
+      "value": "0x2de9cf8ca22a0c9f7ac822564e7e90726457ffdee6107772e7461aa6dacf876d"
+    },
+    {
+      "height": 44,
+      "value": "0x15e4cf322bd4693b5ba17d7d77599ed6b40e943b15d4b652dcd1b206f57a4c6e"
+    },
+    {
+      "height": 45,
+      "value": "0x02f79c24831208eb014af76127ee58b95cf9598ad1dad9c82e19f10b7fee8f6f"
+    },
+    {
+      "height": 46,
+      "value": "0x19d4d18c572a9b0b503094e1de87b8594e1d37dd1da42acdb3a19bd35f005a3a"
+    },
+    {
+      "height": 47,
+      "value": "0x24d3e3c36e11f6dac11d08927f0a925e2c4c42248a913c18da9f5cc0da73836a"
+    },
+    {
+      "height": 48,
+      "value": "0x131b0345b2f2564b2338810cd8d7b90a8d5a2fcc1a9a8876a494dbe3c8135c6c"
+    },
+    {
+      "height": 49,
+      "value": "0x0e765e363b659fafffce80bef02723bbbea3669cc9b07f327b4fc9c959c169a5"
+    },
+    {
+      "height": 50,
+      "value": "0x0f2d774b6dc7c8c6c49e2056f9f9e77d510637ff52368027fd8326821c83445a"
+    },
+    {
+      "height": 51,
+      "value": "0x16599e0bb19201fa33d4c00c3f7c5189552a26038ee219b1c8b08fd1b16ecd52"
+    },
+    {
+      "height": 52,
+      "value": "0x22f62d7c8204be97acc7644d4b14a422c17e573506e900a4788acbfb8c8b1aba"
+    },
+    {
+      "height": 53,
+      "value": "0x0691a1f6e7dd363914d2754f434659383019fe2a1d10a9ce92d152decccfc5f5"
+    },
+    {
+      "height": 54,
+      "value": "0x1250a6bd4582016e8af7d74a31a7d181864326e50cea97f643b70ec9d94e1efc"
+    },
+    {
+      "height": 55,
+      "value": "0x02d2011d328f63f5cb9eb68a6806f8ce624ceb84a876a390fda61d6d6bb5a530"
+    },
+    {
+      "height": 56,
+      "value": "0x1b593cc9332c0bb29333e5833284e18e765bb17fc0a7718f6b21d8a833a0765b"
+    },
+    {
+      "height": 57,
+      "value": "0x019bffd7d85c0863485890e50a717ebb21d4b888f0268d9c7258a3db25f969d9"
+    },
+    {
+      "height": 58,
+      "value": "0x12340d5bb49b5667c9194321fc364488d0f082a8fb1bc4f1b96359209b1bf110"
+    },
+    {
+      "height": 59,
+      "value": "0x2209d88df4bf41b2e002ff46f8ac45aa4ec8b222f4551c178fe50f99b505681f"
+    },
+    {
+      "height": 60,
+      "value": "0x04f95f7efd61e5dfab009860f0e53b7e65686c5dbb1b1a800d597ec130836f92"
+    },
+    {
+      "height": 61,
+      "value": "0x074b0f589c0d62b3ee0d70fd057f9d0e143a6b888d0a9f60ac1d0f1c77ddf863"
+    },
+    {
+      "height": 62,
+      "value": "0x05e7d0fbf97820e4f7e37899bee6f967bc67f5b396f760665eb5ce76f51cff90"
+    },
+    {
+      "height": 63,
+      "value": "0x0ee294cdea89cdfb6a3fd3f85316222c2e6e7482b9cd052cea388141037acdb5"
+    },
+    {
+      "height": 64,
+      "value": "0x073f3f1b95b5cafa069fe1bb5e08c8586775783cc6a11c35ab0107dbd0437dd6"
+    }
+  ],
+  "emptyRoots": {
+    "output_commitment_tree_depth_40": "0x1fd848aa69e1633722fe249a5b7f53b094f1c9cef9f5c694b073fd1cc5850dfb",
+    "address_account_state_tree_depth_40": "0x1fd848aa69e1633722fe249a5b7f53b094f1c9cef9f5c694b073fd1cc5850dfb",
+    "account_rule_set_tree_depth_8": "0x067243231eddf4222f3911defbba7705aff06ed45960b27f6f91319196ef97e1",
+    "l1_origin_tree_depth_40": "0x1fd848aa69e1633722fe249a5b7f53b094f1c9cef9f5c694b073fd1cc5850dfb",
+    "l1_log_tree_depth_64": "0x073f3f1b95b5cafa069fe1bb5e08c8586775783cc6a11c35ab0107dbd0437dd6",
+    "pcash_history_tree_depth_40": "0x1fd848aa69e1633722fe249a5b7f53b094f1c9cef9f5c694b073fd1cc5850dfb"
+  },
+  "membershipExamples": [
+    {
+      "label": "index-0-empty-siblings",
+      "depth": 4,
+      "leaf": "0x255ee8299be9389b21052fd317f8cae762f9c89f756ac79262fb648a70ee7a08",
+      "index": 0,
+      "indexBitsLSBFirst": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "siblings": [
+        "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "0x0b63a53787021a4a962a452c2921b3663aff1ffd8d5510540f8e659e782956f1",
+        "0x0e34ac2c09f45a503d2908bcb12f1cbae5fa4065759c88d501c097506a8b2290",
+        "0x21f9172d72fdcdafc312eee05cf5092980dda821da5b760a9fb8dbdf607c8a20"
+      ],
+      "steps": [
+        {
+          "height": 0,
+          "keyBit": 0,
+          "side": "left",
+          "left": "0x255ee8299be9389b21052fd317f8cae762f9c89f756ac79262fb648a70ee7a08",
+          "right": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "parent": "0x20af64238176ac79d0603510130c12de650b0067f265bb543b830553576405d1"
+        },
+        {
+          "height": 1,
+          "keyBit": 0,
+          "side": "left",
+          "left": "0x20af64238176ac79d0603510130c12de650b0067f265bb543b830553576405d1",
+          "right": "0x0b63a53787021a4a962a452c2921b3663aff1ffd8d5510540f8e659e782956f1",
+          "parent": "0x2a4f86b0c3a06004cec2d1ae9356677cc31deb4900662c2ce3f738ae380c945f"
+        },
+        {
+          "height": 2,
+          "keyBit": 0,
+          "side": "left",
+          "left": "0x2a4f86b0c3a06004cec2d1ae9356677cc31deb4900662c2ce3f738ae380c945f",
+          "right": "0x0e34ac2c09f45a503d2908bcb12f1cbae5fa4065759c88d501c097506a8b2290",
+          "parent": "0x1f3fbb511b41ec9e1988280318ca7cd08e191a7e871aee0979458e6b5426a8fe"
+        },
+        {
+          "height": 3,
+          "keyBit": 0,
+          "side": "left",
+          "left": "0x1f3fbb511b41ec9e1988280318ca7cd08e191a7e871aee0979458e6b5426a8fe",
+          "right": "0x21f9172d72fdcdafc312eee05cf5092980dda821da5b760a9fb8dbdf607c8a20",
+          "parent": "0x1adc9df66c937f2f546ea4e460491b72882b7e6257baa9e42fe25f9d095e16ff"
+        }
+      ],
+      "expectedRoot": "0x1adc9df66c937f2f546ea4e460491b72882b7e6257baa9e42fe25f9d095e16ff"
+    },
+    {
+      "label": "index-11-mixed-sides",
+      "depth": 4,
+      "leaf": "0x1f7a903ff6ebf6088f018bef42d630d28cc499eec89bec2ba6cc2763da3b957c",
+      "index": 11,
+      "indexBitsLSBFirst": [
+        1,
+        1,
+        0,
+        1
+      ],
+      "siblings": [
+        "0x25ac755e82d9f956e42d7555c9b2cddb4becf4153b4e8f297253f20c0adf552b",
+        "0x0c8666db884a9f767ac7476e323f808b0d6ff33dc0c2729071f19acfb1ce8699",
+        "0x022a7c09345b915e583a159df68df37ae07af6c0d192c41a01b87b801bb8e34c",
+        "0x0290dae1610ff548cb70b44541697b651efc9b1591b18e475835975c378af8ae"
+      ],
+      "steps": [
+        {
+          "height": 0,
+          "keyBit": 1,
+          "side": "right",
+          "left": "0x25ac755e82d9f956e42d7555c9b2cddb4becf4153b4e8f297253f20c0adf552b",
+          "right": "0x1f7a903ff6ebf6088f018bef42d630d28cc499eec89bec2ba6cc2763da3b957c",
+          "parent": "0x0bff3aaffc9ee8dc3d327bb240ff2d1011171d735d88bf0d18e2ca6d0ee9d7ac"
+        },
+        {
+          "height": 1,
+          "keyBit": 1,
+          "side": "right",
+          "left": "0x0c8666db884a9f767ac7476e323f808b0d6ff33dc0c2729071f19acfb1ce8699",
+          "right": "0x0bff3aaffc9ee8dc3d327bb240ff2d1011171d735d88bf0d18e2ca6d0ee9d7ac",
+          "parent": "0x0ddd32a43160cf1c9665a556cb5dd17ab389fc59f40eb8d2df99f75f5598def5"
+        },
+        {
+          "height": 2,
+          "keyBit": 0,
+          "side": "left",
+          "left": "0x0ddd32a43160cf1c9665a556cb5dd17ab389fc59f40eb8d2df99f75f5598def5",
+          "right": "0x022a7c09345b915e583a159df68df37ae07af6c0d192c41a01b87b801bb8e34c",
+          "parent": "0x024eec8bbc24bcac17531651c91d773c554941957dadfbd32f13c4e205877e4a"
+        },
+        {
+          "height": 3,
+          "keyBit": 1,
+          "side": "right",
+          "left": "0x0290dae1610ff548cb70b44541697b651efc9b1591b18e475835975c378af8ae",
+          "right": "0x024eec8bbc24bcac17531651c91d773c554941957dadfbd32f13c4e205877e4a",
+          "parent": "0x0f45a2dbfbec0cc0b1caf2e826e03a55a3115e7a525074a712399d070f944b05"
+        }
+      ],
+      "expectedRoot": "0x0f45a2dbfbec0cc0b1caf2e826e03a55a3115e7a525074a712399d070f944b05"
+    }
+  ]
+}

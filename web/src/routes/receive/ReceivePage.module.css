@@ -1,0 +1,15 @@
+.stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; min-width: 0; }
+.columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 22px; align-items: start; }
+.columns > * { min-width: 0; }
+.columns h2 { margin: 0 0 6px; font: 700 26px/1.2 var(--font-serif); }
+.amount { font: 600 clamp(30px, 4vw, 44px)/1.1 var(--font-serif); letter-spacing: -.02em; margin: 6px 0 14px; }
+.amount > span { font-family: inherit; }
+.hint { margin: 0; font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
+.memo { margin: 0 0 14px; padding-left: 12px; border-left: 3px solid var(--color-border); font: italic 18px/1.5 var(--font-serif); white-space: pre-wrap; overflow-wrap: anywhere; }
+.status { display: grid; gap: 12px; margin: 14px 0 0; }
+.status > p { margin: 0; overflow-wrap: anywhere; }
+.receiving { font: 600 20px/1.3 var(--font-serif); }
+
+@media (max-width: 760px) {
+  .columns { grid-template-columns: minmax(0, 1fr); }
+}

@@ -1,0 +1,49 @@
+.app-shell { min-height: 100vh; display: flex; flex-direction: column; background: var(--color-canvas); color: var(--color-text); font-family: var(--font-text); }
+/* The header wraps instead of clipping: when one row cannot hold the logo and
+   the wallet controls, the links move to a row of their own. */
+.site-header { position: sticky; top: 0; z-index: 10; display: flex; flex-flow: row wrap; align-items: center; column-gap: 28px; row-gap: 10px; min-height: 72px; padding: 12px max(4vw, calc((100vw - var(--layout-max)) / 2)); border-bottom: 3px double var(--color-text); background: var(--color-header); }
+/* Shown on every build whose L1 is not Ethereum mainnet. */
+.testnet-banner { margin: 0; padding: 8px 4vw; background: var(--color-text); color: var(--color-accent-contrast); font-size: 13px; line-height: 1.4; text-align: center; }
+.site-header > nav { display: flex; align-items: center; gap: 6px; margin-right: auto; }
+.site-header nav a { padding: 9px 12px; border-radius: var(--radius-control); color: var(--color-text); font-size: 15px; font-weight: 600; white-space: nowrap; }
+.site-header nav a.active, .site-header nav a:hover { background: var(--color-surface-raised); }
+/* Marketplace trades that wait on the signed-in owner. */
+.nav-badge { display: inline-block; min-width: 18px; margin-left: 6px; padding: 0 5px; border-radius: 9px; background: var(--color-text); color: var(--color-accent-contrast); font-size: 11px; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; vertical-align: 1px; }
+/* Products marked as alpha carry a matching page notice. */
+.nav-alpha { display: inline-block; margin-left: 6px; padding: 0 5px; border: 1px solid currentColor; border-radius: 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; line-height: 15px; text-transform: uppercase; vertical-align: 1px; }
+.site-header a:focus-visible, footer a:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 3px; }
+/* The seal and wordmark have white backgrounds and multiply onto the header's
+   paper, so the header background must stay opaque. */
+.brand { display: flex; align-items: center; gap: 10px; mix-blend-mode: multiply; }
+.brand img { display: block; height: auto; }
+.brand-seal { width: 46px; }
+.brand-word { width: 148px; }
+.header-wallet { display: flex; align-items: center; gap: 10px; min-width: 0; margin-left: auto; }
+main { width: min(var(--layout-max), 92vw); margin: 0 auto; padding: 54px 0 80px; flex: 1; }
+footer { display: flex; align-items: center; justify-content: space-between; gap: 25px; border-top: 1px solid var(--color-border); padding: 24px var(--layout-gutter); color: var(--color-text-muted); font-size: 12px; }
+footer nav { display: flex; flex-wrap: wrap; gap: 18px; }
+footer a:hover { color: var(--color-text); }
+.skip-link { position: fixed; left: 16px; top: -60px; padding: 12px; background: var(--color-accent); color: var(--color-accent-contrast); z-index: 100; }
+.skip-link:focus { top: 12px; }
+
+/* One row needs about 1,440px at the widest wallet state and the fallback font;
+   below 1480px the links take their own row. */
+@media (max-width: 1480px) {
+  .site-header > nav { order: 3; flex-basis: 100%; margin-right: 0; overflow-x: auto; scrollbar-width: none; padding-right: 32px; mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); }
+  .site-header > nav::-webkit-scrollbar { display: none; }
+}
+@media (max-width: 1000px) { .site-header > nav { gap: 0; } .site-header nav a { padding-inline: 9px; } }
+@media (max-width: 760px) {
+  .site-header { column-gap: 12px; padding: 12px 4vw 8px; }
+  .site-header nav a { padding-inline: 7px; font-size: 14px; }
+  .brand-seal { width: 36px; }
+  .brand-word { width: 108px; }
+}
+@media (max-width: 620px) {
+  .site-header { position: static; }
+  .site-header nav a { padding-block: 8px; }
+  footer { align-items: flex-start; flex-direction: column; }
+}
+/* On the smallest phones the seal stands alone; the link keeps the name. */
+@media (max-width: 480px) { .brand-word { display: none; } }
+@media (max-width: 420px) { .header-wallet { gap: 6px; } }

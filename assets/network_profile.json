@@ -1,0 +1,24 @@
+{
+  "defaultNetwork": "testnet",
+  "networks": {
+    "testnet": {
+      "profile": "pcash-sepolia",
+      "pcashChainId": "23100",
+      "l1ChainId": "11155111",
+      "inboxAddress": "0x00000000000000000000000000000000000CA511"
+    },
+    "mainnet": {
+      "profile": "pcash-mainnet",
+      "pcashChainId": "231",
+      "l1ChainId": "1",
+      "inboxAddress": "0x00000000000000000000000000000000000CA511"
+    }
+  },
+  "eip712": {
+    "name": "PCASH",
+    "version": "1",
+    "domainType": "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)",
+    "userAccountCreationType": "PcashUserAccountCreation(uint256 pcashChainId,uint256 nullifierKeyCommitment,uint256 ruleSetCommitment,bytes32 receiveKeyHash,bytes32 recentPcashBlockHash,uint256 validUntilTimestamp)",
+    "userAccountUpdateType": "PcashUserAccountUpdate(uint256 pcashChainId,address account,uint256 currentAccountRevision,uint256 nullifierKeyCommitment,uint256 currentRuleSetCommitment,bytes32 currentReceiveKeyHash,uint256 newRuleSetCommitment,bytes32 newReceiveKeyHash,uint256 openFeeAmount,uint256 relayFeeAmount,uint256 relayFeeOwnerCommitment,uint256 transactionContext,uint64 notBefore,uint64 validUntil)"
+  }
+}

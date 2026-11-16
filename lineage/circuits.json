@@ -1,0 +1,30 @@
+{
+  "owner": "lineage",
+  "circuits": [
+    {
+      "package": "event_lineage",
+      "path": "l2-contracts/lineage/event",
+      "artifact": "event_lineage",
+      "role": "application",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144,
+      "contractManifest": false
+    },
+    {
+      "package": "lineage_gated",
+      "path": "l2-contracts/lineage/gated",
+      "artifact": "lineage_gated",
+      "role": "application",
+      "publicInputs": 0,
+      "provingRuntimes": [
+        "native",
+        "browser"
+      ],
+      "srsPoints": 262144
+    }
+  ]
+}

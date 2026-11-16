@@ -1,0 +1,20 @@
+[package]
+name = "derivation-proof-core"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+description = "What the derivation proof's guest and host share: Ethereum block authentication and the compiled rules"
+
+[dependencies]
+derivation-proof-types = { path = "../types" }
+pcash-derive = { path = "../../node/crates/derive" }
+pcash-da = { path = "../../node/crates/da" }
+pcash-l1 = { path = "../../node/crates/l1", default-features = false }
+alloy-primitives = { version = "1.7", default-features = false, features = ["serde"] }
+alloy-consensus = { version = "2.5", default-features = false, features = ["std", "k256"] }
+alloy-eips = { version = "2.5", default-features = false, features = ["std"] }
+alloy-rlp = "0.3"
+alloy-trie = { version = "0.9", default-features = false, features = ["std"] }
+alloy-sol-types = { version = "1.7", default-features = false }
+kzg-rs = "=0.2.8"

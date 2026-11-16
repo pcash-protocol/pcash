@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#11110f" />
+    <title>PCASH browser proof lab</title>
+    <link rel="icon" href="data:," />
+    <style>
+      :root { color-scheme: dark; --bg:#11110f; --panel:#1a1916; --rule:#34312b; --text:#f0ede6; --muted:#a39e94; --gold:#efb34c; --green:#67d391; --red:#ff7e73; }
+      * { box-sizing:border-box; }
+      body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+      main { width:min(1180px,calc(100% - 32px)); margin:0 auto; padding:52px 0 90px; }
+      h1 { margin:8px 0 12px; font-size:clamp(32px,7vw,58px); line-height:1.02; letter-spacing:-.04em; }
+      h2 { margin:0 0 14px; font-size:18px; }
+      p { color:var(--muted); }
+      .kicker { color:var(--gold); font:12px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:.12em; text-transform:uppercase; }
+      .lede { max-width:720px; font-size:18px; }
+      .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:12px; margin:30px 0; }
+      .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; margin:18px 0; }
+      .card { padding:16px; border:1px solid var(--rule); border-radius:10px; background:var(--panel); }
+      .label { display:block; color:var(--muted); font-size:12px; }
+      .value { display:block; margin-top:4px; font:15px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace; overflow-wrap:anywhere; }
+      .actions { display:flex; flex-wrap:wrap; gap:10px; margin:24px 0; }
+      button { appearance:none; border:1px solid var(--rule); border-radius:8px; padding:12px 16px; background:var(--panel); color:var(--text); font:600 15px/1.2 inherit; cursor:pointer; }
+      select, input[type=text] { width:100%; margin-top:7px; border:1px solid var(--rule); border-radius:7px; padding:9px 10px; background:#11110f; color:var(--text); font:14px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace; }
+      button.primary { border-color:var(--gold); background:var(--gold); color:#17120a; }
+      button:disabled { opacity:.48; cursor:not-allowed; }
+      .scenario-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:24px 0; }
+      .scenario { display:flex; flex-direction:column; align-items:flex-start; gap:7px; min-height:112px; padding:14px; text-align:left; }
+      .scenario strong { font-size:15px; }
+      .scenario span { color:var(--muted); font-size:13px; font-weight:400; line-height:1.4; }
+      .scenario em { color:var(--red); font-size:12px; font-style:normal; font-weight:400; }
+      .scenario small { color:var(--gold); font-size:12px; font-weight:400; }
+      .status { display:flex; align-items:center; gap:10px; margin:22px 0; min-height:28px; }
+      .dot { width:10px; height:10px; border-radius:50%; background:var(--muted); flex:0 0 auto; }
+      .running .dot { background:var(--gold); box-shadow:0 0 0 5px #efb34c22; }
+      .success .dot { background:var(--green); }
+      .failure .dot { background:var(--red); }
+      .status-text { font-weight:650; }
+      .meter { height:5px; background:var(--panel); border-radius:999px; overflow:hidden; }
+      .meter > div { width:0; height:100%; background:var(--gold); transition:width .2s ease; }
+      section { margin-top:28px; }
+      .headline { font-size:19px; font-weight:600; margin:0 0 4px; }
+      .counting { color:#6b7280; font-size:13px; margin:0 0 14px; max-width:70ch; }
+      table.summary { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }
+      table.summary th { font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:#6b7280; font-weight:600; padding:6px 10px; border-bottom:1px solid #e5e7eb; }
+      table.summary td { padding:6px 10px; border-bottom:1px solid #f3f4f6; }
+      table.summary td.num, table.summary th { text-align:right; white-space:nowrap; }
+      table.summary th:first-child { text-align:left; }
+      table.summary td.total { font-weight:600; }
+      table.summary tr.scenario-row td { font-weight:500; }
+      table.summary tr.scenario-row.failed td.name { color:#b91c1c; }
+      table.summary tr.circuit-row td { color:#6b7280; font-size:13px; }
+      table.summary td.indent { padding-left:26px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; }
+      .table-scroll { overflow-x:auto; }
+      table.summary th .device, table.summary td .total { display:block; }
+      table.summary .device-detail { display:block; color:#9ca3af; font-size:11px; font-weight:400; text-transform:none; letter-spacing:0; }
+      table.summary .failed-cell { color:var(--red); }
+      .saved { color:var(--muted); font-size:13px; margin:8px 0 0; overflow-wrap:anywhere; }
+      ol { margin:0; padding:0; list-style:none; border:1px solid var(--rule); border-radius:10px; overflow:hidden; }
+      li { display:grid; grid-template-columns:86px 1fr; gap:12px; padding:10px 13px; border-top:1px solid var(--rule); background:var(--panel); }
+      li:first-child { border-top:0; }
+      time { color:var(--gold); font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
+      .phase { color:var(--muted); font-size:14px; overflow-wrap:anywhere; }
+      pre { min-height:120px; max-height:420px; margin:0; padding:14px; overflow:auto; border:1px solid var(--rule); border-radius:10px; background:#0b0b09; color:#d8d4cb; font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; white-space:pre-wrap; word-break:break-word; }
+      .warning { padding:13px 15px; border-left:3px solid var(--gold); background:#efb34c10; color:var(--muted); }
+      .hidden { display:none; }
+      @media (max-width:680px) { main { width:min(100% - 22px,920px); padding-top:28px; } .grid,.controls,.scenario-grid { grid-template-columns:1fr; } button { width:100%; } li { grid-template-columns:66px 1fr; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="kicker">PCASH · manual browser qualification</div>
+      <h1>Measure the final proving paths</h1>
+      <p class="lede">Each scenario creates a final proof through the SDK's browser prover worker and the bb.js Wasm prover. The witnesses are synthetic, but the ordered CHONK stack, public inputs, and final proof bytes have the same shape as a submitted transaction.</p>
+
+      <div class="grid">
+        <div class="card"><span class="label">Security context</span><span class="value" id="isolation">checking…</span></div>
+        <div class="card"><span class="label">Browser concurrency</span><span class="value" id="concurrency">—</span></div>
+        <div class="card"><span class="label">Reported device memory</span><span class="value" id="memory">not exposed</span></div>
+        <div class="card"><span class="label">Asset source</span><span class="value" id="source">loading…</span></div>
+      </div>
+
+      <div class="controls">
+        <label class="card"><span class="label">Prover lifetime</span><select id="lifecycle"><option value="one-shot" selected>One action, fresh prover</option><option value="warm">Warm consecutive actions</option></select></label>
+        <label class="card"><span class="label">Wasm worker threads</span><select id="threads"><option value="1">1 (mobile diagnostic)</option><option value="2">2</option><option value="4">4</option><option value="auto" selected>Automatic, at most 8</option></select></label>
+        <label class="card"><span class="label">Wasm memory ceiling</span><select id="memory-limit"><option value="256">256 MiB</option><option value="512">512 MiB</option><option value="768">768 MiB</option><option value="1024">1024 MiB</option><option value="auto" selected>bb.js default</option></select></label>
+        <label class="card"><span class="label">Runs per scenario</span><select id="runs"><option value="1">1</option><option value="3" selected>3 (report the median)</option><option value="5">5 (report the median)</option></select></label>
+        <label class="card"><span class="label">Device name, saved with results</span><input type="text" id="device-name" placeholder="e.g. Pixel 7a" autocomplete="off" /></label>
+      </div>
+
+      <div class="warning" id="warning">Automatic threads and the bb.js default memory ceiling are what the website uses; bb.js caps iPhone and iPad at 1 GiB and other browsers at 4 GiB. A lower ceiling or one thread is a diagnostic. Each scenario loads only the SRS its CHONK stack requires. The first run in a browser also downloads the proving parameters. Keep this tab in the foreground.</div>
+      <div class="warning hidden" id="interrupted"><strong>Previous run did not finish.</strong><pre id="interrupted-result"></pre></div>
+
+      <div class="scenario-grid" id="scenarios"></div>
+
+      <div class="actions">
+        <button id="setup-only">Initialize 2¹⁸ prover only</button>
+        <button class="primary" id="run-all">Run all available scenarios</button>
+        <button id="share" disabled>Share results</button>
+        <button id="download" disabled>Download result JSON</button>
+        <button id="download-diagnostics" disabled>Download diagnostics</button>
+        <button id="clear">Clear cached proving parameters</button>
+      </div>
+
+      <div class="status" id="status"><span class="dot"></span><span class="status-text" id="status-text">Ready</span></div>
+      <div class="meter"><div id="meter"></div></div>
+
+      <section>
+        <h2>Results</h2>
+        <div id="summary"><p class="counting">Run a scenario to see what it costs.</p></div>
+        <p class="saved" id="saved"></p>
+      </section>
+
+      <section>
+        <h2>Compare devices</h2>
+        <div class="actions">
+          <button id="load-saved" class="hidden">Load results saved this session</button>
+          <label class="card"><span class="label">Add result files</span><input type="file" id="result-files" accept="application/json,.json" multiple /></label>
+        </div>
+        <div id="compare"><p class="counting">Finished runs and loaded result files appear here side by side.</p></div>
+      </section>
+
+      <section>
+        <h2>Current run</h2>
+        <ol id="phases"><li><time>0.0 s</time><span class="phase">Waiting to start</span></li></ol>
+      </section>
+
+      <section>
+        <h2>Result</h2>
+        <pre id="result">No proof has been generated.</pre>
+      </section>
+    </main>
+    <script type="module" src="/main.ts"></script>
+  </body>
+</html>

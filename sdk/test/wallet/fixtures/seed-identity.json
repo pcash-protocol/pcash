@@ -1,0 +1,24 @@
+{
+  "privateKey": "0x1053fae1b3ac64f178bcc21026fd06a3f4544ec2f35338b001f02d1d8efa3d5f",
+  "address": "0xf278cf59f82edcf871d630f28ecc8056f25c1cdb",
+  "pubX": "0xdc286c821c7490afbe20a79d13123b9f41f3d7ef21e4a9caacd22f5983b28eca",
+  "pubY": "0x0e4dbd5624505a2c968fec15f25990c7324736890f6d0f74241f98e4259c1d42",
+  "nkRoot": "0x1aa25b23ddd084f3d1b3e78e24c34bf26042ba1b8b0171f452c30bb4b722d403",
+  "nullifierKeyCommitment": "0x0f086ebe4996b62172b7e643364e79a5c5863bb2cdccbddddf66e54855cf2b4b",
+  "mlKemPublicKeySha256": "0x2d6f2a78b06ce023dc9856c15d9e8b9244f53c414fa61ae85f059cc33d569b68",
+  "mlKemSecretKeySha256": "0x7b7c9fddc2b8a31c5393072afb490023907ccc223ed79e92bffc77e99842b489",
+  "applicationSeed": "0x2753da19f833ec08efb8eb87f55033c9fa2532a274e66c9a20a622c93a40e50a",
+  "payoutSeed": "0x2094133c0d1bcedca73a38bfb66b17330a5e9f511a8bcf2ab1020147914d3ee5",
+  "defaultUserRuleSecrets": {
+    "paymentCommitmentBlinder": "0x2e5c2af7124b3787b32ba225b8a9a5d25e278708dd0ddc4a5e72daf2ac166f84",
+    "assetCreationCommitmentBlinder": "0x1033aad97a3fa5517f7b18e326a3e01a45d3205f7b5fb02cc30fbb8f9d6ff31d",
+    "assetPaymentCommitmentBlinder": "0x1fbdfe2d93c6df68805439d7f64f6676977c15e0f1ba94d87e16473bcb3debf1",
+    "assetBurnCommitmentBlinder": "0x2f73db3e594f4f2254ad91adeb37ca6932eb40c0723c70d5b3406db8667825e0",
+    "batchTransferCommitmentBlinder": "0x13c69dd5cd40bb5a0a9810d805c79a80269c43a7906fd51fac1465b8d238eab2",
+    "largeBatchTransferCommitmentBlinder": "0x18b3f15400550f02e8c604c7adf49a41321d8320e6c0b6586fa56353c1db5726",
+    "largeAssetCreationCommitmentBlinder": "0x0fba2379b49de1622486fb80ab90af057242d2a257bf9b6662b060de95cb2836",
+    "largeContractFeeCommitmentBlinder": "0x1a2ad0dd1437c8cd13c7f93e14e0f0dd9fbd9ac4e836c2fb9ce7993970b952f3",
+    "accountAdminCommitmentBlinder": "0x15a7b1aed9f8bfb3cc17923c53c454d6e40527948d4fc91dfcea88cddf2e53a0",
+    "contractFeeCommitmentBlinder": "0x213ced3c60516602274f669ae4f2dc32dacea7146df6475c8d71ae474b785d00"
+  }
+}

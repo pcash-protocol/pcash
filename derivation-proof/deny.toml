@@ -1,0 +1,17 @@
+# Advisory policy for the derivation proof's host, guest and aggregation
+# workspaces, checked by `cargo deny --manifest-path <workspace>/Cargo.toml
+# check --config derivation-proof/deny.toml advisories`.
+
+[graph]
+all-features = true
+
+[advisories]
+# The SP1 SDK pins its own dependency tree, so an unmaintained crate under it
+# has no replacement short of an SP1 release. Vulnerabilities and unsound code
+# fail anywhere in the graph.
+unmaintained = "workspace"
+unsound = "all"
+yanked = "deny"
+ignore = [
+    { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5 has no patched release and arrives through k256 0.13, which every alloy and SP1 release still uses. The guest and aggregation programs hold no secrets. The host signs its L1 transactions with a local key, so its operator should run it on a machine where no untrusted code can time the signing process." },
+]

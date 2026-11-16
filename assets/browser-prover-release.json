@@ -1,0 +1,296 @@
+{
+  "version": 1,
+  "assetSetId": "9e0851b4ff957505a275ca36629b254ea0b2175e0100119af9fd453516a16681",
+  "artifacts": [
+    {
+      "path": "/chonk-vks/account_rule_admin_ecdsa.vk",
+      "bytes": 4832,
+      "sha256": "cb0405bc807326c3f56e48817c5fe8ad0aedcb282d5963c87f24d2484e83c847"
+    },
+    {
+      "path": "/chonk-vks/account_rule_asset_burn_ecdsa.vk",
+      "bytes": 4832,
+      "sha256": "e7bdd27cc6c452f99ebc93e9dd9e06cd876c2bc3c6761248a25dc2f137041d00"
+    },
+    {
+      "path": "/chonk-vks/account_rule_asset_creation_ecdsa.vk",
+      "bytes": 4832,
+      "sha256": "b673ef5b3b4f8b274e156db49b96fafbf68a53d84e5cfe2e00640369cfdb9d05"
+    },
+    {
+      "path": "/chonk-vks/account_rule_asset_payment_ecdsa.vk",
+      "bytes": 4832,
+      "sha256": "6fd29a832195e38a615849489c1e90e61c4ee3a20ba85db7d48c169eae335f36"
+    },
+    {
+      "path": "/chonk-vks/account_rule_batch_transfer_ecdsa.vk",
+      "bytes": 4832,
+      "sha256": "7d5647e6515dcf18a20b16f4f83233e70954aba8b2c3092e6f2f2749e9bf8b12"
+    },
+    {
+      "path": "/chonk-vks/account_rule_contract_fee_sponsorship_ecdsa.vk",
+      "bytes": 4832,
+      "sha256": "c6e81d38bbd8df3a2a43f15b8ff9d86a14ca5c922e00a498d57f73424f766e55"
+    },
+    {
+      "path": "/chonk-vks/account_rule_large_asset_creation_ecdsa.vk",
+      "bytes": 4832,
+      "sha256": "0084dafc7cd0106d4f21a456647cafba2404b79a49d3b7395e30cf95f6fed958"
+    },
+    {
+      "path": "/chonk-vks/account_rule_large_batch_transfer_ecdsa.vk",
+      "bytes": 4832,
+      "sha256": "b5fd9ca59202bbe8b061d3c9928507f661a528e9657872c7e51a2ebe2db33c88"
+    },
+    {
+      "path": "/chonk-vks/account_rule_large_contract_fee_sponsorship_ecdsa.vk",
+      "bytes": 4832,
+      "sha256": "ea6bcd5cb560f313a9c81c8eb575b406e62e4a276a2c1ba7fd9960e47d1fcf28"
+    },
+    {
+      "path": "/chonk-vks/account_rule_mine.vk",
+      "bytes": 4832,
+      "sha256": "67431e04daf3c2e03279dfb552f4a2c8b11f09a70dc200ff2d79d6a521c0cb31"
+    },
+    {
+      "path": "/chonk-vks/account_rule_payment_ecdsa.vk",
+      "bytes": 4832,
+      "sha256": "b94eb28d9eae8a7fbe1602a1cf86d1f2ac201de889832edf302babd0e4732740"
+    },
+    {
+      "path": "/chonk-vks/contracts/claim-link/claim.vk",
+      "bytes": 4832,
+      "sha256": "84c97a871dab012ac89fcc0a7d470bf1da214dd58b382bc41765c14fa54dc5bc"
+    },
+    {
+      "path": "/chonk-vks/contracts/drop/claim.vk",
+      "bytes": 4832,
+      "sha256": "c31d1f157fddcd409ba9339a90d79368b00a83cc45cdbdd3e2f00775aac935eb"
+    },
+    {
+      "path": "/chonk-vks/contracts/drop/reclaim.vk",
+      "bytes": 4832,
+      "sha256": "348517d68229c93e614f0eb6b83bd64f6f9fa3f46cce060a431341561084e8dd"
+    },
+    {
+      "path": "/chonk-vks/contracts/escrow/claim.vk",
+      "bytes": 4832,
+      "sha256": "6393266044eb23ce663ff75965f9c0a100c291c05307646c94750a9bf7cb4558"
+    },
+    {
+      "path": "/chonk-vks/contracts/escrow/reclaim.vk",
+      "bytes": 4832,
+      "sha256": "d75edf0048ba1672d49dc0e7c3625ae4970cc770fb9488a436f77cf42915f01d"
+    },
+    {
+      "path": "/chonk-vks/no_op_event_application.vk",
+      "bytes": 4832,
+      "sha256": "48affcab2cf973078c0685a4942c3e3b8a7f0f6eb9cfa9b140a2fb145a2cda3b"
+    },
+    {
+      "path": "/chonk-vks/private_value_asset_creation_kernel.vk",
+      "bytes": 4832,
+      "sha256": "6d53c1aff4e3716d6cd0a608ebde9181421ae196485f52802a325eb3cf8f257c"
+    },
+    {
+      "path": "/chonk-vks/private_value_hiding_kernel.vk",
+      "bytes": 3808,
+      "sha256": "c328f85d91f5f2349ea4109b9175300aa1de537541d2279e2a62622cbb2d9c98"
+    },
+    {
+      "path": "/chonk-vks/private_value_large_asset_creation_kernel.vk",
+      "bytes": 4832,
+      "sha256": "ed0c8b3e7642caa8e358c7a8fa4c3a5b7ec451c5e1c23aaa2cb32cb213439759"
+    },
+    {
+      "path": "/chonk-vks/private_value_large_hiding_kernel.vk",
+      "bytes": 3808,
+      "sha256": "bece75427dac00c15d3c78a034fe3dbcebf6fd5cfc55b0d0b835b015cd54d4ef"
+    },
+    {
+      "path": "/chonk-vks/private_value_large_sponsored_transfer_kernel.vk",
+      "bytes": 4832,
+      "sha256": "37bbf7b962060f784892fbf7eb54ee028dec60634270c6ef551fdecbe30221e1"
+    },
+    {
+      "path": "/chonk-vks/private_value_large_transfer_kernel.vk",
+      "bytes": 4832,
+      "sha256": "bebe80b4095f1971f66463463cab51b386d144116d31886e07048c8e1113e76f"
+    },
+    {
+      "path": "/chonk-vks/private_value_sponsored_transfer_kernel.vk",
+      "bytes": 4832,
+      "sha256": "28cf4302670976f2a38c031e65912145b295fc7f358a67e293ef04199035a313"
+    },
+    {
+      "path": "/chonk-vks/private_value_transfer_kernel.vk",
+      "bytes": 4832,
+      "sha256": "7d541790359e6be2512c02e1063ef8e65f01bf2f04f6e5c6a1136843a83aa600"
+    },
+    {
+      "path": "/chonk-vks/user_account_update_hiding_kernel.vk",
+      "bytes": 3808,
+      "sha256": "489a50a33b7834d0b0458befd00092e408c908d0cacc8b074838eb50041627ca"
+    },
+    {
+      "path": "/chonk-vks/user_account_update_kernel.vk",
+      "bytes": 4832,
+      "sha256": "6b4478ec71cdf99e84934c7d1e07b1109879e1c2effc1082759769e40d37e4ac"
+    },
+    {
+      "path": "/crs/1048576/bn254_g1.dat",
+      "bytes": 67108864,
+      "sha256": "5d0ff516149e0c6644ab16567b914c9d02bf41f872c1129af8436b41d4d82c62"
+    },
+    {
+      "path": "/crs/262144/bn254_g1.dat",
+      "bytes": 16777216,
+      "sha256": "75dd9d569337dc90417c5f50460bc7ac285e72139d49a1d8a3af929ec96943f0"
+    },
+    {
+      "path": "/crs/bn254_g2.dat",
+      "bytes": 128,
+      "sha256": "01797bfc4de5a96f0e516a9ea4537d18786dc30cb991aca4274c95822b69c32f"
+    },
+    {
+      "path": "/crs/grumpkin_g1_v2.flat.dat",
+      "bytes": 4194304,
+      "sha256": "64236c9455e75aeea77a94587ea607eed2e978d2609a421d66bf10bb9698b8fd"
+    },
+    {
+      "path": "/prover/account_rule_admin_ecdsa.json",
+      "bytes": 116896,
+      "sha256": "0463d658a3c7b7a3146ac10ab6f25103e4904d9d7a14d7466405a0ff92b42c18"
+    },
+    {
+      "path": "/prover/account_rule_asset_burn_ecdsa.json",
+      "bytes": 106764,
+      "sha256": "da6db3530303f0ae7a559be6c8093c0a58dde14c374a78c760b79d01debcba7a"
+    },
+    {
+      "path": "/prover/account_rule_asset_creation_ecdsa.json",
+      "bytes": 210655,
+      "sha256": "ea80ec0fb322bbdda212ea092130282280637884c71e3c206bb632020b45a06b"
+    },
+    {
+      "path": "/prover/account_rule_asset_payment_ecdsa.json",
+      "bytes": 113035,
+      "sha256": "c27b4ec5c70347b06608a92d49c40d40752651282838ed90ef127b35713e57b9"
+    },
+    {
+      "path": "/prover/account_rule_batch_transfer_ecdsa.json",
+      "bytes": 200026,
+      "sha256": "5eed6afb5b875224b000dbfc12ed7f2c8611eff69da86b201b2c0ea23c050641"
+    },
+    {
+      "path": "/prover/account_rule_contract_fee_sponsorship_ecdsa.json",
+      "bytes": 99163,
+      "sha256": "1b0b89eca1d4db61e10b8e8e6332c4ff2e69f6ea76b7ec59e28ef614b2f83c58"
+    },
+    {
+      "path": "/prover/account_rule_large_asset_creation_ecdsa.json",
+      "bytes": 731735,
+      "sha256": "5cf41a94ffbe232e551f8b9d584ecb8fd403512b85a5b1a1ee309038a167cc5d"
+    },
+    {
+      "path": "/prover/account_rule_large_batch_transfer_ecdsa.json",
+      "bytes": 722150,
+      "sha256": "63831da27472a95b4efc90e7144b02f1175776a88cf1e043315555c481900cae"
+    },
+    {
+      "path": "/prover/account_rule_large_contract_fee_sponsorship_ecdsa.json",
+      "bytes": 125888,
+      "sha256": "ac4297952e745be564e733135f03ee82ef3efb04bbebd1ec4ee6e4ab754c5c75"
+    },
+    {
+      "path": "/prover/account_rule_mine.json",
+      "bytes": 4290,
+      "sha256": "3d8aabfe6ec04f9f5c94a34a32ca3e7da09ff6f8c3e25e2d75f64ec65fa98ff9"
+    },
+    {
+      "path": "/prover/account_rule_payment_ecdsa.json",
+      "bytes": 104999,
+      "sha256": "f272c88cbe3186eb3ada54bdab01168ee7e54541f872b397ce3e594bb4083157"
+    },
+    {
+      "path": "/prover/contracts/claim-link/claim.json",
+      "bytes": 7005,
+      "sha256": "002521753946a3b6f8fa417d9dc4913239caff11d96bc55785f03a563300d24f"
+    },
+    {
+      "path": "/prover/contracts/drop/claim.json",
+      "bytes": 22189,
+      "sha256": "54d44f19cf0912ab8db99780ff3297d5468afedd83c9b16952d87f64a8fc5ca5"
+    },
+    {
+      "path": "/prover/contracts/drop/reclaim.json",
+      "bytes": 8523,
+      "sha256": "2ef5f37e4bc9900134e61b2ca435caae32e7e376a840e5e9df7de9f66463dda5"
+    },
+    {
+      "path": "/prover/contracts/escrow/claim.json",
+      "bytes": 32621,
+      "sha256": "ccab5f29873f90d4b2e5f76eb5b6553f65e63d558553c8a6b02bedc05a52ebcf"
+    },
+    {
+      "path": "/prover/contracts/escrow/reclaim.json",
+      "bytes": 129193,
+      "sha256": "96af0e327b2741ba3481751552f0587511ea76fc2f4380bb008217f333da7d84"
+    },
+    {
+      "path": "/prover/no_op_event_application.json",
+      "bytes": 616,
+      "sha256": "2c679d3af7b018393d0e973b8b699bce226f4ce789fad37e38364fe56cabe168"
+    },
+    {
+      "path": "/prover/private_value_asset_creation_kernel.json",
+      "bytes": 47335,
+      "sha256": "24dddd81162660d6a3aebd24f1e300c957063f21c62911e6bb3ab8846a6fbfec"
+    },
+    {
+      "path": "/prover/private_value_hiding_kernel.json",
+      "bytes": 7803,
+      "sha256": "54c7095306b5b1af16b801fa02f77912fdb1d7c0d6bb5640e4e4ecc2d78a009f"
+    },
+    {
+      "path": "/prover/private_value_large_asset_creation_kernel.json",
+      "bytes": 198322,
+      "sha256": "9e57ffe4d1e7c33428e22d8bfb34f17c8a6950bbaea6855de706ad8b142dc155"
+    },
+    {
+      "path": "/prover/private_value_large_hiding_kernel.json",
+      "bytes": 12918,
+      "sha256": "97342bda3017166f9b361105fccf83d87a062360378710e8d4a44bd7db1bf995"
+    },
+    {
+      "path": "/prover/private_value_large_sponsored_transfer_kernel.json",
+      "bytes": 220829,
+      "sha256": "091bcc13fba45d156e324e4010f5eb33bca434a01f90e02a4915d58812c6dc4d"
+    },
+    {
+      "path": "/prover/private_value_large_transfer_kernel.json",
+      "bytes": 200794,
+      "sha256": "91b63f4e903d276304db43423026e3dec29b07c5a4d1165aad1ed82c99acdd66"
+    },
+    {
+      "path": "/prover/private_value_sponsored_transfer_kernel.json",
+      "bytes": 61374,
+      "sha256": "9c26a519e7684d40f2b32195f4eda6337873a5b013c9c0f357fbe3a581ffafae"
+    },
+    {
+      "path": "/prover/private_value_transfer_kernel.json",
+      "bytes": 46863,
+      "sha256": "1404d9353c125edb99233a355af9ca35e51fc4758fe42819ce56693d52289e96"
+    },
+    {
+      "path": "/prover/user_account_update_hiding_kernel.json",
+      "bytes": 7406,
+      "sha256": "4f40cdad92c6abf392b9cd2bb0d9b173fbc92f3326c07965567d86c632f562b5"
+    },
+    {
+      "path": "/prover/user_account_update_kernel.json",
+      "bytes": 43038,
+      "sha256": "3badc0b056fb79486d646a2fe3a323d47fa3669e36cc03b98de96da0571dbe9a"
+    }
+  ]
+}

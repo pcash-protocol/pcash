@@ -1,0 +1,7 @@
+[package]
+name = "reference_event_common"
+type = "lib"
+compiler_version = "=1.0.0"
+
+[dependencies]
+pcash_protocol = { path = "../../protocol/lib" }

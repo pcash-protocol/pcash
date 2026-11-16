@@ -1,0 +1,21 @@
+.failure { padding: 20px 24px; border: 1px solid var(--color-danger-border); border-left: 3px solid var(--color-danger-border); border-radius: 8px; background: var(--color-danger-surface); }
+.failure h2 { margin: 0 0 16px; color: var(--color-danger-text); font-size: 17px; }
+.personalPayment { display: grid; gap: 12px; padding: 20px 24px; border: 1px solid color-mix(in srgb, var(--color-accent) 42%, var(--color-border)); border-radius: 8px; background: color-mix(in srgb, var(--color-accent) 7%, var(--color-surface)); }
+.personalPaymentHeading { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.personalPaymentHeading p { margin: 0 0 5px; color: var(--color-text-muted); font: 600 11px var(--font-ui); text-transform: uppercase; letter-spacing: .12em; }
+.personalPaymentHeading h2 { margin: 0; font-size: 22px; letter-spacing: -.02em; }
+.personalPaymentNote { margin: 0; color: var(--color-text-muted); font-size: 13px; }
+.personalPayment dl > div { border-top: 1px solid var(--color-border); }
+.personalPayment dl > div:first-child { margin-top: 2px; }
+.privacy { font-size: 13px; color: var(--color-text-muted); margin: 20px 0 0; }
+.rawBytes { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-all; font-size: 12px; line-height: 1.7; max-height: 380px; overflow: auto; padding: 18px; background: var(--color-surface); border-radius: 6px; }
+@media (max-width: 540px) { .failure, .personalPayment { padding: 16px; } .personalPaymentHeading { align-items: flex-start; } }
+.arena { display: grid; gap: 14px; min-width: 0; }
+.arenaHeading { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.arenaHeading p { margin: 0; color: var(--color-text-muted); font-size: 13px; }
+.arenaActions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.decoded { display: grid; gap: 14px; min-width: 0; padding: 4px 20px 18px; border: 1px solid var(--color-border); border-radius: 8px; }
+.decoded > dl + dl { border-top: 3px double var(--color-border); }
+.decoded .privacy { margin: 0; }
+.recordText { white-space: pre-wrap; }
+@media (max-width: 540px) { .arenaHeading { display: grid; } .decoded { padding: 4px 14px 14px; } }

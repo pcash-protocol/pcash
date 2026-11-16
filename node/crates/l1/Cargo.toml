@@ -1,0 +1,57 @@
+[package]
+name = "pcash-l1"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+description = "PCASH L1 follower: Ethereum JSON-RPC block/receipt ingestion and reorg-aware cursor"
+
+[lints]
+workspace = true
+
+[features]
+default = ["rpc", "parallel"]
+# The JSON-RPC client and follower. Without it the crate is the domain types,
+# carrier classification and the log commitment.
+rpc = [
+    "dep:alloy-provider",
+    "dep:alloy-rpc-client",
+    "dep:alloy-rpc-types-eth",
+    "dep:alloy-transport-http",
+    "dep:alloy-consensus",
+    "dep:alloy-network-primitives",
+    "dep:alloy-transport",
+    "dep:alloy-json-rpc",
+    "dep:reqwest",
+    "dep:tower",
+    "dep:backon",
+    "dep:futures",
+]
+# Hash large log sets on a rayon pool. Without it hashing runs on the caller.
+parallel = ["dep:rayon"]
+
+[dependencies]
+pcash-da = { path = "../da" }
+
+alloy-provider = { version = "2.1", default-features = false, features = ["reqwest", "throttle"], optional = true }
+alloy-rpc-client = { workspace = true, optional = true }
+alloy-rpc-types-eth = { workspace = true, optional = true }
+alloy-primitives = { workspace = true }
+alloy-transport-http = { workspace = true, optional = true }
+alloy-consensus = { workspace = true, optional = true }
+alloy-network-primitives = { workspace = true, optional = true }
+alloy-transport = { workspace = true, optional = true }
+alloy-json-rpc = { workspace = true, optional = true }
+reqwest = { version = "0.13", default-features = false, features = ["gzip"], optional = true }
+tower = { workspace = true, optional = true }
+backon = { version = "1.6", default-features = false, features = ["std", "tokio-sleep"], optional = true }
+futures = { workspace = true, optional = true }
+thiserror = { workspace = true }
+pcash-crypto = { path = "../crypto" }
+ark-ff = { version = "0.5", default-features = false }
+rayon = { version = "1.10", optional = true }
+
+[dev-dependencies]
+alloy-sol-types = { workspace = true }
+serde_json = { workspace = true }
+tokio = { version = "1", features = ["rt-multi-thread", "test-util"] }

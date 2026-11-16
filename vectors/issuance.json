@@ -1,0 +1,727 @@
+{
+  "exponentRadix": 65536,
+  "fractionBits": 128,
+  "supplyCap": "1000000000000000000000000000",
+  "vectors": [
+    {
+      "elapsedSeconds": 0,
+      "name": "genesis-empty",
+      "parent": {
+        "issuedSoFar": "0",
+        "lagQ": "0"
+      },
+      "qualifyingActions": 0,
+      "quote": {
+        "baseline": "761035007610350076103",
+        "blockAllowance": "2283105022831050228310",
+        "exhausted": false,
+        "internalOffer": "761035007610350076103",
+        "maxSingleActionReward": "761035007610350076103",
+        "multiplierQ": "340282366920938463463374607431768211456",
+        "rewardPossible": true
+      },
+      "result": {
+        "issuedSoFar": "0",
+        "lagQ": "0",
+        "newIssuance": "0",
+        "rewardEach": "0"
+      }
+    },
+    {
+      "elapsedSeconds": 0,
+      "name": "genesis-one",
+      "parent": {
+        "issuedSoFar": "0",
+        "lagQ": "0"
+      },
+      "qualifyingActions": 1,
+      "quote": {
+        "baseline": "761035007610350076103",
+        "blockAllowance": "2283105022831050228310",
+        "exhausted": false,
+        "internalOffer": "761035007610350076103",
+        "maxSingleActionReward": "761035007610350076103",
+        "multiplierQ": "340282366920938463463374607431768211456",
+        "rewardPossible": true
+      },
+      "result": {
+        "issuedSoFar": "761035007610350076103",
+        "lagQ": "-4083389179951938283925163537416903088000",
+        "newIssuance": "761035007610350076103",
+        "rewardEach": "761035007610350076103"
+      }
+    },
+    {
+      "elapsedSeconds": 0,
+      "name": "genesis-65",
+      "parent": {
+        "issuedSoFar": "0",
+        "lagQ": "0"
+      },
+      "qualifyingActions": 65,
+      "quote": {
+        "baseline": "761035007610350076103",
+        "blockAllowance": "2283105022831050228310",
+        "exhausted": false,
+        "internalOffer": "761035007610350076103",
+        "maxSingleActionReward": "761035007610350076103",
+        "multiplierQ": "340282366920938463463374607431768211456",
+        "rewardPossible": true
+      },
+      "result": {
+        "issuedSoFar": "2283105022831050228265",
+        "lagQ": "-12250172201265196431354642446358543072000",
+        "newIssuance": "2283105022831050228265",
+        "rewardEach": "35124692658939234281"
+      }
+    },
+    {
+      "elapsedSeconds": 2592000,
+      "name": "idle-30-days",
+      "parent": {
+        "issuedSoFar": "0",
+        "lagQ": "0"
+      },
+      "qualifyingActions": 1,
+      "quote": {
+        "baseline": "761035007610350076103",
+        "blockAllowance": "2283105022831050228310",
+        "exhausted": false,
+        "internalOffer": "3044140030441400304414",
+        "maxSingleActionReward": "2283105022831050228310",
+        "multiplierQ": "1361129467683753853853498429727072845824",
+        "rewardPossible": true
+      },
+      "result": {
+        "issuedSoFar": "2283105022831050228310",
+        "lagQ": "117589335835675067776510668234940833705945600",
+        "newIssuance": "2283105022831050228310",
+        "rewardEach": "2283105022831050228310"
+      }
+    },
+    {
+      "elapsedSeconds": 7776000,
+      "name": "idle-90-days",
+      "parent": {
+        "issuedSoFar": "0",
+        "lagQ": "0"
+      },
+      "qualifyingActions": 1,
+      "quote": {
+        "baseline": "761035007610350076103",
+        "blockAllowance": "2283105022831050228310",
+        "exhausted": false,
+        "internalOffer": "3044140030441400304414",
+        "maxSingleActionReward": "2283105022831050228310",
+        "multiplierQ": "1361129467683753853853498429727072845824",
+        "rewardPossible": true
+      },
+      "result": {
+        "issuedSoFar": "2283105022831050228310",
+        "lagQ": "117589335835675067776510668234940833705945600",
+        "newIssuance": "2283105022831050228310",
+        "rewardEach": "2283105022831050228310"
+      }
+    },
+    {
+      "elapsedSeconds": 0,
+      "name": "seventy-five-percent",
+      "parent": {
+        "issuedSoFar": "750000000000000000000000000",
+        "lagQ": "0"
+      },
+      "qualifyingActions": 1,
+      "quote": {
+        "baseline": "380517503805175038051",
+        "blockAllowance": "1141552511415525114155",
+        "exhausted": false,
+        "internalOffer": "380517503805175038051",
+        "maxSingleActionReward": "380517503805175038051",
+        "multiplierQ": "340282366920938463463374607431768211456",
+        "rewardPossible": true
+      },
+      "result": {
+        "issuedSoFar": "750000380517503805175038051",
+        "lagQ": "-4083389956853206255518271904865545280000",
+        "newIssuance": "380517503805175038051",
+        "rewardEach": "380517503805175038051"
+      }
+    },
+    {
+      "elapsedSeconds": 0,
+      "name": "remaining-smaller-than-count",
+      "parent": {
+        "issuedSoFar": "999999999999999999999999997",
+        "lagQ": "0"
+      },
+      "qualifyingActions": 4,
+      "quote": {
+        "baseline": "41683604",
+        "blockAllowance": "125050812",
+        "exhausted": false,
+        "internalOffer": "41683604",
+        "maxSingleActionReward": "3",
+        "multiplierQ": "340282366920938463463374607431768211456",
+        "rewardPossible": true
+      },
+      "result": {
+        "issuedSoFar": "999999999999999999999999997",
+        "lagQ": "0",
+        "newIssuance": "0",
+        "rewardEach": "0"
+      }
+    },
+    {
+      "elapsedSeconds": 0,
+      "name": "final-three-atoms",
+      "parent": {
+        "issuedSoFar": "999999999999999999999999997",
+        "lagQ": "0"
+      },
+      "qualifyingActions": 1,
+      "quote": {
+        "baseline": "41683604",
+        "blockAllowance": "125050812",
+        "exhausted": false,
+        "internalOffer": "41683604",
+        "maxSingleActionReward": "3",
+        "multiplierQ": "340282366920938463463374607431768211456",
+        "rewardPossible": true
+      },
+      "result": {
+        "issuedSoFar": "1000000000000000000000000000",
+        "lagQ": "-587769003275942273303242353168000",
+        "newIssuance": "3",
+        "rewardEach": "3"
+      }
+    },
+    {
+      "elapsedSeconds": 18446744073709551615,
+      "name": "exhausted",
+      "parent": {
+        "issuedSoFar": "1000000000000000000000000000",
+        "lagQ": "340282366920938463463374607431768211456"
+      },
+      "qualifyingActions": 1,
+      "quote": {
+        "baseline": "0",
+        "blockAllowance": "0",
+        "exhausted": true,
+        "internalOffer": "0",
+        "maxSingleActionReward": "0",
+        "multiplierQ": "0",
+        "rewardPossible": false
+      },
+      "result": {
+        "issuedSoFar": "1000000000000000000000000000",
+        "lagQ": "340282366920938463463374607431768211456",
+        "newIssuance": "0",
+        "rewardEach": "0"
+      }
+    },
+    {
+      "elapsedSeconds": 0,
+      "name": "lag-minus-six-days",
+      "parent": {
+        "issuedSoFar": "0",
+        "lagQ": "-176402379011814499459413396492628640818790400"
+      },
+      "qualifyingActions": 0,
+      "quote": {
+        "baseline": "761035007610350076103",
+        "blockAllowance": "2283105022831050228310",
+        "exhausted": false,
+        "internalOffer": "95129375951293759512",
+        "maxSingleActionReward": "95129375951293759512",
+        "multiplierQ": "42535295865117307932921825928971026432",
+        "rewardPossible": true
+      },
+      "result": {
+        "issuedSoFar": "0",
+        "lagQ": "-176402379011814499459413396492628640818790400",
+        "newIssuance": "0",
+        "rewardEach": "0"
+      }
+    },
+    {
+      "elapsedSeconds": 0,
+      "name": "lag-minus-four-days",
+      "parent": {
+        "issuedSoFar": "0",
+        "lagQ": "-117601586007876332972942264328419093879193600"
+      },
+      "qualifyingActions": 0,
+      "quote": {
+        "baseline": "761035007610350076103",
+        "blockAllowance": "2283105022831050228310",
+        "exhausted": false,
+        "internalOffer": "190258751902587519025",
+        "maxSingleActionReward": "190258751902587519025",
+        "multiplierQ": "85070591730234615865843651857942052864",
+        "rewardPossible": true
+      },
+      "result": {
+        "issuedSoFar": "0",
+        "lagQ": "-117601586007876332972942264328419093879193600",
+        "newIssuance": "0",
+        "rewardEach": "0"
+      }
+    },
+    {
+      "elapsedSeconds": 0,
+      "name": "lag-minus-two-days",
+      "parent": {
+        "issuedSoFar": "0",
+        "lagQ": "-58800793003938166486471132164209546939596800"
+      },
+      "qualifyingActions": 0,
+      "quote": {
+        "baseline": "761035007610350076103",
+        "blockAllowance": "2283105022831050228310",
+        "exhausted": false,
+        "internalOffer": "380517503805175038051",
+        "maxSingleActionReward": "380517503805175038051",
+        "multiplierQ": "170141183460469231731687303715884105728",
+        "rewardPossible": true
+      },
+      "result": {
+        "issuedSoFar": "0",
+        "lagQ": "-58800793003938166486471132164209546939596800",
+        "newIssuance": "0",
+        "rewardEach": "0"
+      }
+    },
+    {
+      "elapsedSeconds": 0,
+      "name": "lag-zero",
+      "parent": {
+        "issuedSoFar": "0",
+        "lagQ": "0"
+      },
+      "qualifyingActions": 0,
+      "quote": {
+        "baseline": "761035007610350076103",
+        "blockAllowance": "2283105022831050228310",
+        "exhausted": false,
+        "internalOffer": "761035007610350076103",
+        "maxSingleActionReward": "761035007610350076103",
+        "multiplierQ": "340282366920938463463374607431768211456",
+        "rewardPossible": true
+      },
+      "result": {
+        "issuedSoFar": "0",
+        "lagQ": "0",
+        "newIssuance": "0",
+        "rewardEach": "0"
+      }
+    },
+    {
+      "elapsedSeconds": 0,
+      "name": "lag-plus-two-days",
+      "parent": {
+        "issuedSoFar": "0",
+        "lagQ": "58800793003938166486471132164209546939596800"
+      },
+      "qualifyingActions": 0,
+      "quote": {
+        "baseline": "761035007610350076103",
+        "blockAllowance": "2283105022831050228310",
+        "exhausted": false,
+        "internalOffer": "1522070015220700152207",
+        "maxSingleActionReward": "1522070015220700152207",
+        "multiplierQ": "680564733841876926926749214863536422912",
+        "rewardPossible": true
+      },
+      "result": {
+        "issuedSoFar": "0",
+        "lagQ": "58800793003938166486471132164209546939596800",
+        "newIssuance": "0",
+        "rewardEach": "0"
+      }
+    },
+    {
+      "elapsedSeconds": 0,
+      "name": "lag-plus-four-days",
+      "parent": {
+        "issuedSoFar": "0",
+        "lagQ": "117601586007876332972942264328419093879193600"
+      },
+      "qualifyingActions": 0,
+      "quote": {
+        "baseline": "761035007610350076103",
+        "blockAllowance": "2283105022831050228310",
+        "exhausted": false,
+        "internalOffer": "3044140030441400304414",
+        "maxSingleActionReward": "2283105022831050228310",
+        "multiplierQ": "1361129467683753853853498429727072845824",
+        "rewardPossible": true
+      },
+      "result": {
+        "issuedSoFar": "0",
+        "lagQ": "117601586007876332972942264328419093879193600",
+        "newIssuance": "0",
+        "rewardEach": "0"
+      }
+    },
+    {
+      "elapsedSeconds": 0,
+      "name": "lag-plus-four-days-minus-one",
+      "parent": {
+        "issuedSoFar": "0",
+        "lagQ": "117601586007876332972942264328419093879193599"
+      },
+      "qualifyingActions": 1,
+      "quote": {
+        "baseline": "761035007610350076103",
+        "blockAllowance": "2283105022831050228310",
+        "exhausted": false,
+        "internalOffer": "3044116805496099695585",
+        "maxSingleActionReward": "2283105022831050228310",
+        "multiplierQ": "1361119083090036784198241368734414405632",
+        "rewardPossible": true
+      },
+      "result": {
+        "issuedSoFar": "2283105022831050228310",
+        "lagQ": "117589335835675067776510668234940833705945599",
+        "newIssuance": "2283105022831050228310",
+        "rewardEach": "2283105022831050228310"
+      }
+    },
+    {
+      "elapsedSeconds": 0,
+      "name": "exponent-step-minus-one",
+      "parent": {
+        "issuedSoFar": "0",
+        "lagQ": "897228897154818214210069765689232588799"
+      },
+      "qualifyingActions": 1,
+      "quote": {
+        "baseline": "761035007610350076103",
+        "blockAllowance": "2283105022831050228310",
+        "exhausted": false,
+        "internalOffer": "761035007610350076103",
+        "maxSingleActionReward": "761035007610350076103",
+        "multiplierQ": "340282366920938463463374607431768211456",
+        "rewardPossible": true
+      },
+      "result": {
+        "issuedSoFar": "761035007610350076103",
+        "lagQ": "-3186160282797120069715093771727670499201",
+        "newIssuance": "761035007610350076103",
+        "rewardEach": "761035007610350076103"
+      }
+    },
+    {
+      "elapsedSeconds": 0,
+      "name": "negative-exponent-step-minus-one",
+      "parent": {
+        "issuedSoFar": "0",
+        "lagQ": "-897228897154818214210069765689232588799"
+      },
+      "qualifyingActions": 1,
+      "quote": {
+        "baseline": "761035007610350076103",
+        "blockAllowance": "2283105022831050228310",
+        "exhausted": false,
+        "internalOffer": "761035007610350076103",
+        "maxSingleActionReward": "761035007610350076103",
+        "multiplierQ": "340282366920938463463374607431768211456",
+        "rewardPossible": true
+      },
+      "result": {
+        "issuedSoFar": "761035007610350076103",
+        "lagQ": "-4980618077106756498135233303106135676799",
+        "newIssuance": "761035007610350076103",
+        "rewardEach": "761035007610350076103"
+      }
+    },
+    {
+      "elapsedSeconds": 0,
+      "name": "exponent-step",
+      "parent": {
+        "issuedSoFar": "0",
+        "lagQ": "897228897154818214210069765689232588800"
+      },
+      "qualifyingActions": 1,
+      "quote": {
+        "baseline": "761035007610350076103",
+        "blockAllowance": "2283105022831050228310",
+        "exhausted": false,
+        "internalOffer": "761046620083000380517",
+        "maxSingleActionReward": "761046620083000380517",
+        "multiplierQ": "340287559217796998291003137928097431552",
+        "rewardPossible": true
+      },
+      "result": {
+        "issuedSoFar": "761046620083000380517",
+        "lagQ": "-3186222590383131800141153802090063907200",
+        "newIssuance": "761046620083000380517",
+        "rewardEach": "761046620083000380517"
+      }
+    },
+    {
+      "elapsedSeconds": 0,
+      "name": "negative-exponent-step",
+      "parent": {
+        "issuedSoFar": "0",
+        "lagQ": "-897228897154818214210069765689232588800"
+      },
+      "qualifyingActions": 1,
+      "quote": {
+        "baseline": "761035007610350076103",
+        "blockAllowance": "2283105022831050228310",
+        "exhausted": false,
+        "internalOffer": "761029201374024923896",
+        "maxSingleActionReward": "761029201374024923896",
+        "multiplierQ": "340279770772509196049560342183603601408",
+        "rewardPossible": true
+      },
+      "result": {
+        "issuedSoFar": "761029201374024923896",
+        "lagQ": "-4980586923313750768587019996295255500800",
+        "newIssuance": "761029201374024923896",
+        "rewardEach": "761029201374024923896"
+      }
+    },
+    {
+      "elapsedSeconds": 0,
+      "name": "exponent-step-plus-one",
+      "parent": {
+        "issuedSoFar": "0",
+        "lagQ": "897228897154818214210069765689232588801"
+      },
+      "qualifyingActions": 1,
+      "quote": {
+        "baseline": "761035007610350076103",
+        "blockAllowance": "2283105022831050228310",
+        "exhausted": false,
+        "internalOffer": "761046620083000380517",
+        "maxSingleActionReward": "761046620083000380517",
+        "multiplierQ": "340287559217796998291003137928097431552",
+        "rewardPossible": true
+      },
+      "result": {
+        "issuedSoFar": "761046620083000380517",
+        "lagQ": "-3186222590383131800141153802090063907199",
+        "newIssuance": "761046620083000380517",
+        "rewardEach": "761046620083000380517"
+      }
+    },
+    {
+      "elapsedSeconds": 0,
+      "name": "negative-exponent-step-plus-one",
+      "parent": {
+        "issuedSoFar": "0",
+        "lagQ": "-897228897154818214210069765689232588801"
+      },
+      "qualifyingActions": 1,
+      "quote": {
+        "baseline": "761035007610350076103",
+        "blockAllowance": "2283105022831050228310",
+        "exhausted": false,
+        "internalOffer": "761029201374024923896",
+        "maxSingleActionReward": "761029201374024923896",
+        "multiplierQ": "340279770772509196049560342183603601408",
+        "rewardPossible": true
+      },
+      "result": {
+        "issuedSoFar": "761029201374024923896",
+        "lagQ": "-4980586923313750768587019996295255500801",
+        "newIssuance": "761029201374024923896",
+        "rewardEach": "761029201374024923896"
+      }
+    },
+    {
+      "elapsedSeconds": 0,
+      "name": "underflow-above",
+      "parent": {
+        "issuedSoFar": "0",
+        "lagQ": "-7526501504504085310268304917018822008268390399"
+      },
+      "qualifyingActions": 1,
+      "quote": {
+        "baseline": "761035007610350076103",
+        "blockAllowance": "2283105022831050228310",
+        "exhausted": false,
+        "internalOffer": "0",
+        "maxSingleActionReward": "0",
+        "multiplierQ": "1",
+        "rewardPossible": false
+      },
+      "result": {
+        "issuedSoFar": "0",
+        "lagQ": "-7526501504504085310268304917018822008268390399",
+        "newIssuance": "0",
+        "rewardEach": "0"
+      }
+    },
+    {
+      "elapsedSeconds": 0,
+      "name": "underflow-boundary",
+      "parent": {
+        "issuedSoFar": "0",
+        "lagQ": "-7526501504504085310268304917018822008268390400"
+      },
+      "qualifyingActions": 1,
+      "quote": {
+        "baseline": "761035007610350076103",
+        "blockAllowance": "2283105022831050228310",
+        "exhausted": false,
+        "internalOffer": "0",
+        "maxSingleActionReward": "0",
+        "multiplierQ": "1",
+        "rewardPossible": false
+      },
+      "result": {
+        "issuedSoFar": "0",
+        "lagQ": "-7526501504504085310268304917018822008268390400",
+        "newIssuance": "0",
+        "rewardEach": "0"
+      }
+    },
+    {
+      "elapsedSeconds": 0,
+      "name": "underflow-below",
+      "parent": {
+        "issuedSoFar": "0",
+        "lagQ": "-7526501504504085310268304917018822008268390401"
+      },
+      "qualifyingActions": 1,
+      "quote": {
+        "baseline": "761035007610350076103",
+        "blockAllowance": "2283105022831050228310",
+        "exhausted": false,
+        "internalOffer": "0",
+        "maxSingleActionReward": "0",
+        "multiplierQ": "0",
+        "rewardPossible": false
+      },
+      "result": {
+        "issuedSoFar": "0",
+        "lagQ": "-7526501504504085310268304917018822008268390401",
+        "newIssuance": "0",
+        "rewardEach": "0"
+      }
+    },
+    {
+      "elapsedSeconds": 17280000,
+      "name": "underflow-recovery",
+      "parent": {
+        "issuedSoFar": "0",
+        "lagQ": "-7526501504504085310268304917018822008268390401"
+      },
+      "qualifyingActions": 1,
+      "quote": {
+        "baseline": "761035007610350076103",
+        "blockAllowance": "2283105022831050228310",
+        "exhausted": false,
+        "internalOffer": "2835076330640",
+        "maxSingleActionReward": "2835076330640",
+        "multiplierQ": "1267650600228229401496703205376",
+        "rewardPossible": true
+      },
+      "result": {
+        "issuedSoFar": "2835076330640",
+        "lagQ": "-1646422204110283873428394435465659185113430401",
+        "newIssuance": "2835076330640",
+        "rewardEach": "2835076330640"
+      }
+    },
+    {
+      "elapsedSeconds": 12,
+      "name": "trajectory-0",
+      "parent": {
+        "issuedSoFar": "0",
+        "lagQ": "0"
+      },
+      "qualifyingActions": 65,
+      "quote": {
+        "baseline": "761035007610350076103",
+        "blockAllowance": "2283105022831050228310",
+        "exhausted": false,
+        "internalOffer": "761069845028300989345",
+        "maxSingleActionReward": "761069845028300989345",
+        "multiplierQ": "340297943811514067946260198920755871744",
+        "rewardPossible": true
+      },
+      "result": {
+        "issuedSoFar": "2283105022831050228265",
+        "lagQ": "-8166783798213934869794147157177324534528",
+        "newIssuance": "2283105022831050228265",
+        "rewardEach": "35124692658939234281"
+      }
+    },
+    {
+      "elapsedSeconds": 12,
+      "name": "trajectory-1",
+      "parent": {
+        "issuedSoFar": "2283105022831050228265",
+        "lagQ": "-8166783798213934869794147157177324534528"
+      },
+      "qualifyingActions": 1,
+      "quote": {
+        "baseline": "761034138848429994416",
+        "blockAllowance": "2283102416545289983248",
+        "exhausted": false,
+        "internalOffer": "761005107699944870591",
+        "maxSingleActionReward": "761005107699944870591",
+        "multiplierQ": "340269386178792126394303281190945161216",
+        "rewardPossible": true
+      },
+      "result": {
+        "issuedSoFar": "3044110130530995098856",
+        "lagQ": "-8166628806150470655963351616078086541056",
+        "newIssuance": "761005107699944870591",
+        "rewardEach": "761005107699944870591"
+      }
+    },
+    {
+      "elapsedSeconds": 259200,
+      "name": "trajectory-2",
+      "parent": {
+        "issuedSoFar": "3044110130530995098856",
+        "lagQ": "-8166628806150470655963351616078086541056"
+      },
+      "qualifyingActions": 0,
+      "quote": {
+        "baseline": "761033849272280370569",
+        "blockAllowance": "2283101547816841111709",
+        "exhausted": false,
+        "internalOffer": "2152113055693560432692",
+        "maxSingleActionReward": "2152113055693560432692",
+        "multiplierQ": "962277992198542534740299823701701951488",
+        "rewardPossible": true
+      },
+      "result": {
+        "issuedSoFar": "3044110130530995098856",
+        "lagQ": "88193022877101099259050734894698242322854144",
+        "newIssuance": "0",
+        "rewardEach": "0"
+      }
+    },
+    {
+      "elapsedSeconds": 12,
+      "name": "trajectory-3",
+      "parent": {
+        "issuedSoFar": "3044110130530995098856",
+        "lagQ": "88193022877101099259050734894698242322854144"
+      },
+      "qualifyingActions": 65,
+      "quote": {
+        "baseline": "761033849272280370569",
+        "blockAllowance": "2283101547816841111709",
+        "exhausted": false,
+        "internalOffer": "2152229180243315114145",
+        "maxSingleActionReward": "2152229180243315114145",
+        "multiplierQ": "962329915167127883016585128664994152448",
+        "rewardPossible": true
+      },
+      "result": {
+        "issuedSoFar": "5327211678347836210541",
+        "lagQ": "88184856093302874681765788070726516215471616",
+        "newIssuance": "2283101547816841111685",
+        "rewardEach": "35124639197182170949"
+      }
+    }
+  ]
+}
