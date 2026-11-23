@@ -53,8 +53,8 @@ impl Network {
         match self {
             Self::Mainnet => None,
             Self::Testnet => Some((
-                12_048_791,
-                b256!("0xe79f9d0caa7f4c48f360b4926ae087515d8d680b2f3ccdfbaadfdb616484c17a"),
+                12_183_223,
+                b256!("0x96197228c6aa7dc98abc3ec93afc00a3d598a04a14b778ecb76483ab33028fe5"),
             )),
         }
     }
@@ -117,10 +117,10 @@ mod tests {
             testnet.inbox,
             address!("00000000000000000000000000000000000CA511")
         );
-        assert_eq!(testnet.genesis_l1_block, 12_048_791);
+        assert_eq!(testnet.genesis_l1_block, 12_183_223);
         assert_eq!(
             testnet.genesis_l1_block_hash,
-            b256!("e79f9d0caa7f4c48f360b4926ae087515d8d680b2f3ccdfbaadfdb616484c17a")
+            b256!("96197228c6aa7dc98abc3ec93afc00a3d598a04a14b778ecb76483ab33028fe5")
         );
         assert!(!Network::Testnet.bootnodes().is_empty());
     }

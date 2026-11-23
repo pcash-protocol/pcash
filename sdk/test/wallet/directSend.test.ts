@@ -23,7 +23,7 @@ import { addressHex, fromHex, toHex } from "@pcash/sdk/utils";
 import { resumeValueTransaction } from "../../src/wallet/actions/resumeValueTransaction.ts";
 import type { PcashNodeClient } from "@pcash/sdk/clients";
 import { syncWallet } from "../../src/wallet/actions/syncWallet.ts";
-import { historyReplayStore, replayHistory } from "../../src/wallet/actions/historyReplay.ts";
+import { scanHistory } from "../../src/wallet/actions/historyScan.ts";
 import { createWalletRuntime } from "../../src/wallet/actions/walletRuntime.ts";
 import { NativeActivityReader } from "../../src/wallet/actions/nativeActivity.ts";
 import type { DurableSubmissionAdapter } from "../../src/wallet/actions/durableSubmission.ts";
@@ -264,14 +264,26 @@ describe("receiving a direct send", () => {
     expect(spendableBalance(restored)).toBe(4n);
     expect(restored.notes.find((candidate) => BigInt(candidate.noteSecret) === opening.noteSecret)?.cursor)
       .toMatchObject({ kind: "ordinary", transactionId: note.cursor!.transactionId });
+
+    // A restore that opens at the current block and scans back finds it in the
+    // same chunk as the setup record, on an earlier page, without naming it.
+    const background = storeFor(sim, payee);
+    await syncWallet({ node: sim.client(), wallet: payee.profile, chainId: CHAIN_ID, store: background, headFirst: true });
+    sim.calls.length = 0;
+    await scanHistory({ node: sim.client(), wallet: payee.profile, chainId: CHAIN_ID, store: background });
+    const scanned = (await background.load())!;
+    expect(scanned.historyReplayRequired).toBeUndefined();
+    expect(receivedDirectSends(scanned)).toEqual([{ opening, state: "received", saved: true }]);
+    expect(spendableBalance(scanned)).toBe(4n);
+    expect(sim.calls.map((call) => call.method)).not.toContain("getReceipt");
   });
 
-  it("keeps a link imported during a history replay, with its path, when the replay is adopted at the same block", async () => {
+  it("keeps a link imported during a history scan, with its path", async () => {
     const payee = actor();
     const { sim, opening } = await directSend(4n, payee);
     const store = storeFor(sim, payee);
     await syncWallet({ node: sim.client(), wallet: payee.profile, chainId: CHAIN_ID, store, headFirst: true });
-    // The link arrives while the replay reads its first page, and the live wallet recovers it without a new block.
+    // The link arrives while the scan reads its first page, and the live wallet recovers it without a new block.
     const client = sim.client();
     const getOutputs = client.getOutputs.bind(client);
     let imported = false;
@@ -289,7 +301,7 @@ describe("receiving a direct send", () => {
         return page;
       },
     }) as PcashNodeClient;
-    await replayHistory({ node, wallet: payee.profile, chainId: CHAIN_ID, store, replay: historyReplayStore(store) });
+    await scanHistory({ node, wallet: payee.profile, chainId: CHAIN_ID, store });
     const data = (await store.load())!;
     expect(data.historyReplayRequired).toBeUndefined();
     expect(receivedDirectSends(data)).toEqual([{ opening, state: "received", saved: false }]);
@@ -299,12 +311,12 @@ describe("receiving a direct send", () => {
     expect(rootFromIndex(directSendOutputCommitment(opening, leafIndex), leafIndex, paths.siblings)).toBe(paths.root);
   });
 
-  it("keeps a payout to an imported link's owner that arrives while the history replay catches up", async () => {
+  it("keeps a payout to an imported link's owner that arrives during a history scan", async () => {
     const payee = actor();
     const { sim, opening } = await directSend(4n, payee);
     const store = storeFor(sim, payee);
     await syncWallet({ node: sim.client(), wallet: payee.profile, chainId: CHAIN_ID, store, headFirst: true });
-    // While the replay reads its first page, the link is imported and a block pays its owner opening.
+    // While the scan reads its first page, the link is imported and a block pays its owner opening.
     const client = sim.client();
     const getOutputs = client.getOutputs.bind(client);
     let imported = false;
@@ -324,7 +336,7 @@ describe("receiving a direct send", () => {
         return page;
       },
     }) as PcashNodeClient;
-    await replayHistory({ node, wallet: payee.profile, chainId: CHAIN_ID, store, replay: historyReplayStore(store) });
+    await scanHistory({ node, wallet: payee.profile, chainId: CHAIN_ID, store });
     const data = (await store.load())!;
     expect(data.historyReplayRequired).toBeUndefined();
     expect(spendableBalance(data)).toBe(81n);
@@ -334,12 +346,12 @@ describe("receiving a direct send", () => {
     expect(rootFromIndex(BigInt(payout.commitment!), leafIndex, paths.siblings)).toBe(paths.root);
   });
 
-  it("keeps a payout to an imported link's owner that a live sync finds between the replay's reads", async () => {
+  it("keeps a payout to an imported link's owner that a live sync finds between the history scan's reads", async () => {
     const payee = actor();
     const { sim, opening } = await directSend(4n, payee);
     const store = storeFor(sim, payee);
     await syncWallet({ node: sim.client(), wallet: payee.profile, chainId: CHAIN_ID, store, headFirst: true });
-    // As the replay reads the live document, the link is imported and a live sync reaches a block paying its owner.
+    // As the scan reads the live document, the link is imported and a live sync reaches a block paying its owner.
     let interleaved = false;
     const watched: WalletStateStore = {
       ...store,
@@ -357,7 +369,7 @@ describe("receiving a direct send", () => {
         return data;
       },
     };
-    await replayHistory({ node: sim.client(), wallet: payee.profile, chainId: CHAIN_ID, store: watched, replay: historyReplayStore(store) });
+    await scanHistory({ node: sim.client(), wallet: payee.profile, chainId: CHAIN_ID, store: watched });
     const data = (await store.load())!;
     expect(data.historyReplayRequired).toBeUndefined();
     expect(spendableBalance(data)).toBe(81n);

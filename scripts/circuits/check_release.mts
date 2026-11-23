@@ -52,6 +52,7 @@ interface CircuitSpec {
   kind: ChonkCircuitKind;
   provingRuntimes: Array<"native" | "browser">;
   srsPoints: number;
+  pin: string | undefined;
 }
 
 // This file builds the checkout it sits in. A bundle build runs the copy in

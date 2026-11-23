@@ -179,8 +179,8 @@ function DecodedRecordRows({ record }: { record: DecodedRecord }) {
     <Row label="Schema">Message board post</Row>
     <Row label="Application ID"><code>{record.schema}</code></Row>
     <Row label="Text"><span className={txStyles.recordText}>{record.text}</span></Row>
-    <Row label="Post"><Link to={`/messages/${record.postId}`}><Hash value={record.postId} short /></Link></Row>
-    <Row label="Reply to">{record.parent === null ? "None" : <Link to={`/messages/${record.parent}`}><Hash value={record.parent} short /></Link>}</Row>
+    <Row label="Post"><Link to={`/board/${record.postId}`}><Hash value={record.postId} short /></Link></Row>
+    <Row label="Reply to">{record.parent === null ? "None" : <Link to={`/board/${record.parent}`}><Hash value={record.parent} short /></Link>}</Row>
     <Row label="Board"><Hash value={record.board} short /></Row>
   </dl>;
   return <dl aria-label="Application record">

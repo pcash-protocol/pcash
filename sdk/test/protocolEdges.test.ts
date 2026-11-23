@@ -17,10 +17,20 @@ import {
   type TransactionOutcome,
   type TransactionResultCommitment,
 } from "../src/protocol/block.ts";
-import { ASSET_ID_DOMAIN, TRANSACTION_RESULTS_ROOT_DOMAIN } from "../src/constants/domainTags.ts";
+import {
+  ASSET_CORE_DOMAIN,
+  ASSET_ID_DOMAIN,
+  ASSET_MINT_RULE_DOMAIN,
+  ASSET_TRANSFER_RULE_DOMAIN,
+  TRANSACTION_RESULTS_ROOT_DOMAIN,
+} from "../src/constants/domainTags.ts";
 import { emptyLadder, rootFromIndex } from "../src/crypto/merkle.ts";
 import { poseidon, poseidonBytes } from "../src/crypto/poseidon2.ts";
-import { REFERENCE_FUNGIBLE_METADATA_DOMAIN } from "../src/constants/referenceRuleConstants.ts";
+import {
+  REFERENCE_FIXED_SUPPLY_CONFIGURATION_DOMAIN,
+  REFERENCE_FIXED_SUPPLY_SECRET_DOMAIN,
+  REFERENCE_FUNGIBLE_METADATA_DOMAIN,
+} from "../src/constants/referenceRuleConstants.ts";
 import {
   assertCatalogRecordIdentity,
   buildCatalogArtifact,
@@ -31,15 +41,24 @@ import {
   encodeCatalogListQuery,
 } from "../src/protocol/catalog.ts";
 import {
-  assetSecretCommitment,
-  createStandardFungibleAsset,
-  deriveStandardFungibleAssetFromEntropy,
+  deriveAssetDescriptor,
+  findAssetDescriptor,
   fungibleMetadataCommitment,
-  standardFungibleAssetId,
+  isRestrictedAssetId,
   verifyAssetDescriptor,
   type FungibleMetadata,
 } from "../src/protocol/asset.ts";
-import { AMOUNT_BITS } from "../src/constants/params.ts";
+import {
+  MAX_FIXED_SUPPLY,
+  createFixedSupplyAsset,
+  decodeFixedSupplyConfiguration,
+  deriveFixedSupplyAsset,
+  fixedSupplyMintRule,
+  fixedSupplySecretCommitment,
+} from "../src/rules/fixedSupply.ts";
+import { FIXED_SUPPLY_RULE_VK_HASH } from "../src/constants/rulePins.ts";
+import { AMOUNT_BITS, ASSET_CLASS_BITS } from "../src/constants/params.ts";
+import { BN254_SCALAR_MODULUS } from "../src/crypto/field.ts";
 import { toHex } from "../src/utils/hex.ts";
 
 describe("transaction results root", () => {
@@ -234,49 +253,99 @@ describe("standard fungible asset metadata", () => {
       .toThrow("metadata contentDigest must contain 32 bytes");
   });
 
-  const derived = () => deriveStandardFungibleAssetFromEntropy({
+  const derived = () => deriveFixedSupplyAsset({
     metadata,
-    initialSupply: 1_000n,
-    assetSecret: 13n,
+    supply: 1_000n,
+    secret: 13n,
   });
 
   it("verifies a derived descriptor and rejects one that no longer matches its asset id", () => {
     const asset = derived();
     expect(verifyAssetDescriptor(asset.descriptor)).toBe(asset.descriptor.assetId);
-    expect(() => verifyAssetDescriptor({ ...asset.descriptor, initialSupply: 1_001n }))
-      .toThrow("asset descriptor does not match assetId");
+    // Another configuration under the same salt whose ID stays in its class, so only the ID comparison rejects it.
+    const changed = Array.from({ length: 64 }, (_, i) => ({
+      ...asset.descriptor,
+      mintRule: { ...asset.descriptor.mintRule, configurationCommitment: asset.descriptor.mintRule.configurationCommitment + 1n + BigInt(i) },
+    })).find((descriptor) => { try { deriveAssetDescriptor(descriptor); return true; } catch { return false; } })!;
+    expect(() => verifyAssetDescriptor(changed)).toThrow("asset descriptor does not match assetId");
     expect(() => verifyAssetDescriptor({ ...asset.descriptor, assetId: 1n }))
       .toThrow("asset descriptor does not match assetId");
   });
 
+  it("derives the same asset from the same secret and publishes a salt that does not reveal the secret", () => {
+    for (const secret of [0n, 13n, BN254_SCALAR_MODULUS - 1n]) {
+      const { descriptor, definition } = deriveFixedSupplyAsset({ metadata, supply: 1_000n, secret });
+      expect(deriveFixedSupplyAsset({ metadata, supply: 1_000n, secret }).descriptor).toEqual(descriptor);
+      const secretCommitment = decodeFixedSupplyConfiguration(definition.mintRule.configuration)!.secretCommitment;
+      expect(secretCommitment).toBe(fixedSupplySecretCommitment(secret));
+      // The salt search moves at most a few steps from its seed; none of those steps opens the commitment.
+      for (let step = 0n; step < 512n; step += 1n) {
+        const candidate = (descriptor.instanceSalt - step + BN254_SCALAR_MODULUS) % BN254_SCALAR_MODULUS;
+        expect(fixedSupplySecretCommitment(candidate)).not.toBe(secretCommitment);
+      }
+    }
+  });
+
   it("creates fresh, self-consistent assets with a defensive metadata copy", () => {
     const digest = new Uint8Array(32).fill(7);
-    const first = createStandardFungibleAsset({ metadata: { ...metadata, contentDigest: digest }, initialSupply: 5n });
-    const second = createStandardFungibleAsset({ metadata, initialSupply: 5n });
+    const first = createFixedSupplyAsset({ metadata: { ...metadata, contentDigest: digest }, supply: 5n });
+    const second = createFixedSupplyAsset({ metadata, supply: 5n });
     expect(verifyAssetDescriptor(first.descriptor)).toBe(first.descriptor.assetId);
     expect(first.descriptor.assetId).not.toBe(second.descriptor.assetId);
-    expect(first.assetSecret).not.toBe(second.assetSecret);
+    expect(first.secret).not.toBe(second.secret);
     digest[0] = 0;
-    expect(first.metadata.contentDigest[0]).toBe(7);
+    expect(first.definition.metadata.contentDigest[0]).toBe(7);
   });
 
-  it("derives an asset with zero supply, zero secret, and zero metadata commitment", () => {
-    const empty = deriveStandardFungibleAssetFromEntropy({ metadata, initialSupply: 0n, assetSecret: 0n });
-    expect(empty.descriptor.initialSupply).toBe(0n);
-    expect(empty.descriptor.assetSecretCommitment).toBe(assetSecretCommitment(0n));
+  it("derives a fixed-supply asset with zero supply, zero secret, and zero metadata commitment", () => {
+    const empty = deriveFixedSupplyAsset({ metadata, supply: 0n, secret: 0n });
+    expect(decodeFixedSupplyConfiguration(empty.definition.mintRule.configuration))
+      .toEqual({ supply: 0n, secretCommitment: fixedSupplySecretCommitment(0n) });
     expect(verifyAssetDescriptor(empty.descriptor)).toBe(empty.descriptor.assetId);
-    const bare = { metadataCommitment: 0n, initialSupply: 0n, assetSecretCommitment: assetSecretCommitment(0n) };
-    expect(standardFungibleAssetId(bare))
-      .toBe(poseidon([ASSET_ID_DOMAIN, 0n, 0n, assetSecretCommitment(0n)]));
+    const mintRule = fixedSupplyMintRule({ supply: 0n, secretCommitment: fixedSupplySecretCommitment(0n) });
+    const bare = findAssetDescriptor({ metadataCommitment: 0n, mintRule }, 0n);
+    const secretCommitment = poseidon([REFERENCE_FIXED_SUPPLY_SECRET_DOMAIN, 0n]);
+    const configurationCommitment = poseidon([REFERENCE_FIXED_SUPPLY_CONFIGURATION_DOMAIN, 0n, secretCommitment]);
+    const rule = poseidon([ASSET_MINT_RULE_DOMAIN, FIXED_SUPPLY_RULE_VK_HASH, FIXED_SUPPLY_RULE_VK_HASH, configurationCommitment]);
+    expect(bare.assetId)
+      .toBe(poseidon([ASSET_ID_DOMAIN, poseidon([ASSET_CORE_DOMAIN, bare.instanceSalt, 0n, rule]), 0n]));
   });
 
-  it("bounds the initial supply to five maximal asset outputs", () => {
-    const maximum = 5n * ((1n << BigInt(AMOUNT_BITS)) - 1n);
-    const make = (initialSupply: bigint) =>
-      deriveStandardFungibleAssetFromEntropy({ metadata, initialSupply, assetSecret: 13n });
-    expect(make(maximum).descriptor.initialSupply).toBe(maximum);
-    expect(() => make(maximum + 1n)).toThrow("initialSupply exceeds five maximal asset outputs");
-    expect(() => createStandardFungibleAsset({ metadata, initialSupply: maximum + 1n }))
-      .toThrow("initialSupply exceeds five maximal asset outputs");
+  it("derives a mint rule and a transfer rule into its asset id", () => {
+    const mintRule = { sVkHash: 3n, lVkHash: 0n, configurationCommitment: 4n };
+    const transferRule = { sVkHash: 1n, lVkHash: 0n, configurationCommitment: 2n };
+    const minted = findAssetDescriptor({ metadataCommitment: 0n, mintRule, transferRule }, 0n);
+    const mint = poseidon([ASSET_MINT_RULE_DOMAIN, 3n, 0n, 4n]);
+    const rule = poseidon([ASSET_TRANSFER_RULE_DOMAIN, 1n, 0n, 2n]);
+    expect(minted.assetId)
+      .toBe(poseidon([ASSET_ID_DOMAIN, poseidon([ASSET_CORE_DOMAIN, minted.instanceSalt, 0n, mint]), rule]));
+  });
+
+  it("puts an asset without a transfer rule below 2^252 and one with a rule in [2^252, 2^253)", () => {
+    const classBound = 1n << BigInt(ASSET_CLASS_BITS);
+    const mintRule = { sVkHash: 3n, lVkHash: 3n, configurationCommitment: 4n };
+    const transferRule = { sVkHash: 1n, lVkHash: 1n, configurationCommitment: 2n };
+    const plain = findAssetDescriptor({ metadataCommitment: 0n, mintRule }, 0n);
+    const restricted = findAssetDescriptor({ metadataCommitment: 0n, mintRule, transferRule }, 0n);
+    expect(plain.assetId < classBound && !isRestrictedAssetId(plain.assetId)).toBe(true);
+    expect(restricted.assetId >= classBound && restricted.assetId < 2n * classBound && isRestrictedAssetId(restricted.assetId)).toBe(true);
+    expect(() => isRestrictedAssetId(2n * classBound)).toThrow("asset ID is in neither asset class");
+    // A salt the search skipped derives an ID outside the class the rule implies.
+    for (const fields of [{ metadataCommitment: 0n, mintRule }, { metadataCommitment: 0n, mintRule, transferRule }]) {
+      const found = findAssetDescriptor(fields, 0n);
+      if (found.instanceSalt === 0n) continue;
+      expect(() => deriveAssetDescriptor({ ...fields, instanceSalt: found.instanceSalt - 1n }))
+        .toThrow("instance salt leaves the asset ID outside the class its transfer rule implies");
+    }
+  });
+
+  it("bounds a fixed supply to every profile L output maximal", () => {
+    expect(MAX_FIXED_SUPPLY).toBe(32n * ((1n << BigInt(AMOUNT_BITS)) - 1n));
+    const make = (supply: bigint) =>
+      deriveFixedSupplyAsset({ metadata, supply, secret: 13n });
+    expect(decodeFixedSupplyConfiguration(make(MAX_FIXED_SUPPLY).definition.mintRule.configuration)!.supply).toBe(MAX_FIXED_SUPPLY);
+    expect(() => make(MAX_FIXED_SUPPLY + 1n)).toThrow("supply exceeds what one mint can carry");
+    expect(() => createFixedSupplyAsset({ metadata, supply: MAX_FIXED_SUPPLY + 1n }))
+      .toThrow("supply exceeds what one mint can carry");
   });
 });

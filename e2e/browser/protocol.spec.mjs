@@ -77,10 +77,11 @@ test("proves protocol actions in browser WASM with pinned release assets", async
   const circuitNames = [
     "account_rule_payment_ecdsa",
     "account_rule_asset_payment_ecdsa",
-    "account_rule_asset_creation_ecdsa",
+    "account_rule_mint_ecdsa",
+    "mint_rule_fixed_supply",
     "account_rule_asset_covenant",
     "no_op_event_application",
-    "private_value_asset_creation_kernel",
+    "private_value_mint_kernel",
     "private_value_transfer_kernel",
     "private_value_hiding_kernel",
   ];

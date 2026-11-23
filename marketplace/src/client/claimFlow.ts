@@ -42,10 +42,10 @@ import {
   type StatusResult,
   type WitnessSnapshotResult,
 } from "@pcash/sdk/browser";
-import { deferSubmission, WalletConflictError, type PcashProfile } from "@pcash/sdk/wallet";
+import { deferSubmission, WalletConflictError, type DenyLists, type PcashProfile } from "@pcash/sdk/wallet";
 import { InsufficientNotesError, ProtocolFeeFundingError } from "@pcash/sdk/wallet/actions";
 import { bytes32Hex, randomFieldEntropy } from "@pcash/sdk/utils";
-import { buildContractFunctionCall, snapshotFromAccountProof } from "@pcash/sdk/builders";
+import { buildContractFunctionCall, snapshotFromAccountProof, type AssetActionBuild } from "@pcash/sdk/builders";
 import type { AssetProver, Prover, ProveStatus } from "@pcash/sdk/browser-prover";
 import { MARKETPLACE_CIRCUITS } from "../circuits.ts";
 import { claimKeyCommitment, paymentCarrierContext, paymentCarrierContextHash } from "../commitments.mts";
@@ -70,6 +70,7 @@ import { escrowPayoutAmount } from "./networkFee.ts";
 import { escrowCommitments } from "./offerAvailability.ts";
 import type { ClaimTxFinality } from "./offerPersistence.ts";
 import { defaultMarketplaceProver } from "./prover.ts";
+import { escrowRestriction } from "./restrictedEscrow.ts";
 import type { PaymentAnchor } from "./verification.ts";
 
 /** Browser proving for both native claims and token escrow releases. */
@@ -319,6 +320,8 @@ export type ProveClaimParams = {
   voluntaryBurnAmount?: bigint;
   /** The buyer's wallet, which funds a token claim's burn. */
   sponsor?: MarketplaceFeeSponsor;
+  /** The deny lists a restricted token's claim proves its escrow against. */
+  denyLists?: DenyLists;
   snapshot: ClaimSnapshot;
   /** Resolve the buyer's owned receive key from the account directory at the snapshot's account root. */
   buyerReceiveKey(accountStateRoot: bigint): Promise<Uint8Array>;
@@ -417,7 +420,7 @@ export async function proveCarriedClaim(params: ProveClaimParams): Promise<Prove
           outputs: [{ outputIndex: escrow.leafIndex, outputCommitment: escrowOutputCommitment }],
           nullifiers: [bytes32Hex(claimNullifiers[0]!)],
         },
-        primary: (context) => {
+        primary: async (context) => {
           if (context.snapshot.nullifiers.statuses[0]?.spent) {
             throw new Error("the escrow note is already spent; refresh to see whether your claim landed");
           }
@@ -436,11 +439,20 @@ export async function proveCarriedClaim(params: ProveClaimParams): Promise<Prove
             assetDefinition,
             payout: { recipientAddress: params.buyer.address, receiveKey: context.selfReceiveKey() },
           });
+          const restriction = await escrowRestriction({
+            definition: assetDefinition, denyLists: params.denyLists, node: params.node, escrow: material.l2Contract.address,
+            anchor: context.contractAccount.boundary, genesisL1Block: context.status.genesisL1Block, validUntilTimestamp,
+          });
           return {
             authorization: side.authorization,
             assetId: escrow.assetId,
             inputs: [{ slot: ESCROW_INPUT_SLOT, input: side.input }],
             realizeOutputs: () => ({ outputs: [{ slot: ESCROW_PAYOUT_SLOT, output: side.output }], ownedOutputs: [] }),
+            ...(restriction === undefined ? {} : { restricted: {
+              opening: restriction.plan.restricted,
+              validUntilCeiling: restriction.plan.validUntilTimestamp,
+              policy: (build: AssetActionBuild) => restriction.policy(build, "sponsored"),
+            } }),
             circuitUrl: MARKETPLACE_CIRCUITS.claim,
             label: "claim circuit",
             witness: (build) => witness({
@@ -519,34 +531,47 @@ export async function proveCarriedClaim(params: ProveClaimParams): Promise<Prove
     return transactionIdentity(transfer.encodeTransaction(proof.proof));
   }
 
+  const tokenDefinition = publicationAssetDefinition(params.offer)!;
+  const restriction = await escrowRestriction({
+    definition: tokenDefinition, denyLists: params.denyLists, node: params.node, escrow: material.l2Contract.address,
+    anchor: snapshot.account.boundary, genesisL1Block: status.genesisL1Block, validUntilTimestamp,
+  });
   const build = buildUnsponsoredTokenEscrowRelease({
     pcashChainId,
     l2Contract: material.l2Contract,
     selector: material.claim.selector,
     contractAccount: snapshot.account,
     escrow: { ...escrow, siblings: snapshot.escrowSiblings },
-    assetDefinition: publicationAssetDefinition(params.offer)!,
+    assetDefinition: tokenDefinition,
     payout: { recipientAddress: params.buyer.address, receiveKey },
     issuanceOwnerCommitment: issuance.ownerCommitment,
     designatedIssuanceOpening,
-    validUntilTimestamp,
+    validUntilTimestamp: restriction?.plan.validUntilTimestamp ?? validUntilTimestamp,
     carrierContextHash,
     ...(params.accountCreation === undefined ? {} : { accountCreation: params.accountCreation }),
     dummyInputSeed: dummyInputEntropy,
+    ...(restriction === undefined ? {} : { restricted: restriction.plan.restricted }),
   });
-  const proof = await prover.proveAssetAction({
+  const claimAuthorization = {
+    circuitUrl: MARKETPLACE_CIRCUITS.claim,
+    witnessMap: witness({
+      recentPcashBlockHash: build.recentPcashBlockHash,
+      address: build.address,
+      transaction: build.transaction,
+      payoutNoteSecret: build.outputNoteSecrets[ESCROW_PAYOUT_SLOT]!,
+    }),
+    label: "claim circuit",
+  };
+  const proof = await prover.proveAssetAction(restriction === undefined ? {
     operation: "transfer",
-    authorization: {
-      circuitUrl: MARKETPLACE_CIRCUITS.claim,
-      witnessMap: witness({
-        recentPcashBlockHash: build.recentPcashBlockHash,
-        address: build.address,
-        transaction: build.transaction,
-        payoutNoteSecret: build.outputNoteSecrets[ESCROW_PAYOUT_SLOT]!,
-      }),
-      label: "claim circuit",
-    },
+    authorization: claimAuthorization,
     buildKernelWitnessMap: build.buildKernelWitnessMap,
+    expectedPublicInputs: build.publicInputs,
+  } : {
+    operation: "restricted-transfer",
+    authorization: claimAuthorization,
+    policy: restriction.policy(build, "transfer"),
+    buildKernelWitnessMap: build.buildRestrictedKernelWitnessMap,
     expectedPublicInputs: build.publicInputs,
   }, params.onStatus);
   return transactionIdentity(build.encodeTransaction(proof.proof));

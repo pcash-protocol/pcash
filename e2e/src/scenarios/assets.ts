@@ -2,14 +2,17 @@ import { randomBytes } from "node:crypto";
 import {
   SlotClass,
   buildAssetAction,
-  createStandardFungibleAsset,
+  createFixedSupplyAsset,
+  decodeFixedSupplyConfiguration,
+  FIXED_SUPPLY_RULE_CIRCUIT,
+  fixedSupplyMintWitness,
   fullOutputCommitment,
   openedAssetActionOutput,
   ownerChangeAssetActionOutput,
   prepareAssetAction,
   createReleaseChonkCircuitResolver,
   nativeChonkBackend,
-  proveAssetCreationChonk,
+  proveMintChonk,
   proveTransferTransactionChonk,
   requestPcashAuthorization,
   bytes32Hex,
@@ -22,7 +25,8 @@ import {
   type AssetActionBuild,
   type AssetActionInput,
   type AssetActionOutput,
-  type CreatedStandardFungibleAsset,
+  type CreatedFixedSupplyAsset,
+  type MintRuleApplication,
   type NetworkConfigLike,
   type PcashNodeClient,
   type PreparedAssetAction,
@@ -150,7 +154,7 @@ function assert(condition: unknown, message: string): asserts condition {
  * the two creation shapes are genuinely compared through the builder.
  */
 function creationMarker(build: AssetActionBuild): bigint {
-  const marker = build.transaction.inputs.find((input) => input.slotClass === SlotClass.ASSET_CREATION);
+  const marker = build.transaction.inputs.find((input) => input.slotClass === SlotClass.MINT);
   if (marker === undefined) throw new Error("assets: a creation build carries no marker slot");
   return toField(marker.nullifier, "creation marker");
 }
@@ -253,6 +257,8 @@ async function proveOwnedAction(params: {
   build: AssetActionBuild;
   actor: ScenarioWalletActor;
   network: NetworkConfigLike;
+  /** The asset's mint rule, for a mint. */
+  mintRule?: MintRuleApplication;
 }): Promise<Uint8Array> {
   const prepared = params.build.prepareOwnerAuthorization({
     wallet: params.actor.wallet,
@@ -261,10 +267,17 @@ async function proveOwnedAction(params: {
   const authorization = await requestPcashAuthorization(params.actor.signer, prepared.request);
   const witness = prepared.authorize(authorization).witnessMap;
   const resolve = createReleaseChonkCircuitResolver();
-  if (params.build.operation === "assetCreation") {
-    return (await proveAssetCreationChonk({build:params.build,authorization:{packageName:prepared.authorizationCircuit,witnessMap:witness},resolve,backend:nativeChonkBackend()})).proof;
+  if (params.build.operation === "mint") {
+    if (params.mintRule === undefined) throw new Error("a mint folds the asset's mint rule");
+    return (await proveMintChonk({build:params.build,authorization:{packageName:prepared.authorizationCircuit,witnessMap:witness},mintRule:params.mintRule,resolve,backend:nativeChonkBackend()})).proof;
   }
   return (await proveTransferTransactionChonk({build:params.build,authorizationPackage:prepared.authorizationCircuit,authorizationWitnessMap:witness,resolve,backend:nativeChonkBackend()})).proof;
+}
+
+/** The fixed-supply rule's application for a mint of `created`. */
+function fixedSupplyRule(build: AssetActionBuild, created: CreatedFixedSupplyAsset): MintRuleApplication {
+  const configuration = decodeFixedSupplyConfiguration(created.definition.mintRule.configuration)!;
+  return { packageName: FIXED_SUPPLY_RULE_CIRCUIT, witnessMap: fixedSupplyMintWitness({ mint: build, configuration, secret: created.secret }) };
 }
 
 /**
@@ -366,7 +379,7 @@ function creationSplit(initialSupply: bigint): { first: bigint; second: bigint; 
 
 /**
  * Exercise the standard fungible asset relations against the selected network:
- * one-shot asset creation through the asset-creation kernel, an owner-authorized
+ * one-shot asset creation under the fixed-supply mint rule, an owner-authorized
  * transfer that funds a positive native fee, a merge that folds two asset
  * inputs and one native input into a single owner batch while burning, and the
  * consensus refusal of a second creation of the same asset.
@@ -376,14 +389,14 @@ export async function runAssetScenarioFlow(
 ): Promise<AssetScenarioResult> {
   const chainId = ctx.network.pcashChainId;
   const { creator, holder, recipient } = ctx;
-  const created: CreatedStandardFungibleAsset = createStandardFungibleAsset({
+  const created: CreatedFixedSupplyAsset = createFixedSupplyAsset({
     metadata: {
       name: "E2E Scenario Token",
       symbol: "LJT",
       decimals: 6,
       contentDigest: randomBytes(32),
     },
-    initialSupply: ctx.initialSupply,
+    supply: ctx.initialSupply,
   });
   const assetId = toField(created.descriptor.assetId, "assetId");
   const split = creationSplit(ctx.initialSupply);
@@ -395,7 +408,7 @@ export async function runAssetScenarioFlow(
     network: ctx.network,
     notes: [],
     defaultRuleSecrets: creator.wallet.defaultUserRuleSecrets,
-    selectedDefaultRule: "asset-creation",
+    selectedDefaultRule: "mint",
   });
   const creationOutputs = [
     assetOutputTo({ actor: creator, chainId, assetId, outputIndex: 0, amount: split.first, kind: "asset" }),
@@ -406,9 +419,8 @@ export async function runAssetScenarioFlow(
     pcashChainId: chainId,
     snapshot: creationSnapshot.snapshot,
     owner: creationSnapshot.owner,
-    assetDescriptor: created.descriptor,
-    assetSecret: created.assetSecret,
-    inputs: inputSlots([{ kind: "creation-marker" }]),
+    mint: { descriptor: created.descriptor },
+    inputs: inputSlots([{ kind: "mint-marker", replayId: created.secret }]),
     outputs: outputSlots(creationOutputs.map((entry) => entry.output)),
     openFeeAmount: 0n,
     issuanceOwnerCommitment: 0n,
@@ -416,7 +428,7 @@ export async function runAssetScenarioFlow(
   });
   const creationPrepared = encodeAssetEntry({
     build: creationBuild,
-    proof: await proveOwnedAction({build:creationBuild,actor:creator,network:ctx.network}),
+    proof: await proveOwnedAction({build:creationBuild,actor:creator,network:ctx.network,mintRule:fixedSupplyRule(creationBuild,created)}),
     ownedOutputs: [
       { outputIndex: 0, assetId, amount: split.first, owner: creator.wallet.address, noteSecret: creationOutputs[0]!.noteSecret },
       { outputIndex: 1, assetId, amount: split.second, owner: creator.wallet.address, noteSecret: creationOutputs[1]!.noteSecret },
@@ -580,7 +592,7 @@ export async function runAssetScenarioFlow(
     network: ctx.network,
     notes: [],
     defaultRuleSecrets: creator.wallet.defaultUserRuleSecrets,
-    selectedDefaultRule: "asset-creation",
+    selectedDefaultRule: "mint",
   });
   const recreateOutput = assetOutputTo({
     actor: creator,
@@ -594,9 +606,8 @@ export async function runAssetScenarioFlow(
     pcashChainId: chainId,
     snapshot: recreateSnapshot.snapshot,
     owner: recreateSnapshot.owner,
-    assetDescriptor: created.descriptor,
-    assetSecret: created.assetSecret,
-    inputs: inputSlots([{ kind: "creation-marker" }]),
+    mint: { descriptor: created.descriptor },
+    inputs: inputSlots([{ kind: "mint-marker", replayId: created.secret }]),
     outputs: outputSlots([recreateOutput.output]),
     openFeeAmount: 0n,
     issuanceOwnerCommitment: 0n,
@@ -604,7 +615,7 @@ export async function runAssetScenarioFlow(
   });
   const recreatePrepared = encodeAssetEntry({
     build: recreateBuild,
-    proof: await proveOwnedAction({build:recreateBuild,actor:creator,network:ctx.network}),
+    proof: await proveOwnedAction({build:recreateBuild,actor:creator,network:ctx.network,mintRule:fixedSupplyRule(recreateBuild,created)}),
     ownedOutputs: [
       { outputIndex: 0, assetId, amount: ctx.initialSupply, owner: creator.wallet.address, noteSecret: recreateOutput.noteSecret },
     ],
@@ -633,9 +644,9 @@ export async function runAssetScenarioFlow(
   return {
     assetId: `0x${assetId.toString(16)}`,
     metadata: {
-      name: created.metadata.name,
-      symbol: created.metadata.symbol,
-      decimals: created.metadata.decimals,
+      name: created.definition.metadata.name,
+      symbol: created.definition.metadata.symbol,
+      decimals: created.definition.metadata.decimals,
     },
     initialSupply: ctx.initialSupply.toString(),
     creation: {

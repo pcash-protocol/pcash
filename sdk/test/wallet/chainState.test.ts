@@ -57,7 +57,6 @@ function step(
             timestamp: output.origin.timestamp,
             transactionId: output.transactionId,
             contentHash: output.contentHash,
-            nullifiers: [...output.nullifiers],
           });
         }
       }

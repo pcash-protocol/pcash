@@ -30,7 +30,8 @@ import {
 import { decodePayload, sizeClassFiller, trialOpenEnvelope } from "../src/protocol/envelope.ts";
 import { outputRecords } from "../src/protocol/sectionDelivery.ts";
 import { TX_KIND_PRIVATE_VALUE } from "../src/protocol/codec.ts";
-import { assetDefinitionAssetId, type AssetDefinition } from "../src/protocol/assetDefinition.ts";
+import { assetDefinitionAssetId, findAssetDefinition, type AssetDefinition } from "../src/protocol/assetDefinition.ts";
+import { fixedSupplyMintRule } from "../src/rules/fixedSupply.ts";
 import { DEFAULT_NETWORK_CONFIG } from "../src/protocol/network.ts";
 import {
   fullOutputCommitment,
@@ -132,11 +133,11 @@ describe("native transfer owner change", () => {
 });
 
 describe("asset action owner change", () => {
-  const definition: AssetDefinition = {
-    initialSupply: 10n,
-    assetSecretCommitment: 0x52n,
-    metadata: { name: "Change Token", symbol: "CHG", decimals: 0, contentDigest: new Uint8Array(32) },
-  };
+  const metadata = { name: "Change Token", symbol: "CHG", decimals: 0, contentDigest: new Uint8Array(32) };
+  const definition: AssetDefinition = findAssetDefinition({
+    mintRule: fixedSupplyMintRule({ supply: 10n, secretCommitment: 0x52n }),
+    metadata,
+  }, 0n);
   const assetId = assetDefinitionAssetId(definition);
   const assetSecret = 0x111n;
   const nativeSecret = 0x112n;

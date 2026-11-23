@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { assetDefinitionAssetId, formatAssetDefinition } from "@pcash/sdk/protocol";
+import { createAccountMintAsset, senderDenyListTransferRule } from "@pcash/sdk/rules";
 import { WebsiteSettingsContext, WebsiteSettingsStore } from "../../lib/WebsiteSettings.tsx";
 import { assetIdHex } from "./model.ts";
 import { testDefinition } from "./tokenTestSupport.ts";
@@ -71,6 +72,30 @@ describe("token page", () => {
     expect(element.querySelector("h1")?.textContent).toBe("Unverified token");
   });
 
+  describe("a token under the standard deny list", () => {
+    const contractAddress = 0x5fbdb2315678afecb367f032d93f642f64180aa3n;
+    const rule = senderDenyListTransferRule({ contractAddress, listId: new Uint8Array(32).fill(9), maxDelta: 7_200n });
+    const genuine = createAccountMintAsset({
+      metadata: { name: "Pilot USD", symbol: "pUSD", decimals: 2, contentDigest: new Uint8Array(32) }, accountAddress: 0xabcn, transferRule: rule,
+    }).definition;
+    const ruledId = assetDefinitionAssetId(genuine);
+
+    it("shows the deny list's ID beside its contract", async () => {
+      await render(`/token/${assetIdHex(ruledId)}#d=${formatAssetDefinition(genuine)}`);
+      expect(verifiedBox()?.textContent).toContain(`through deny list 0x${"09".repeat(32)} of the contract at 0x5fbdb2315678afecb367f032d93f642f64180aa3 on Ethereum`);
+    });
+
+    it("does not verify a link whose rule configuration does not open its commitment", async () => {
+      // Another list's configuration under the genuine commitment: the token ID does not change.
+      const other = senderDenyListTransferRule({ contractAddress, listId: new Uint8Array(32).fill(10), maxDelta: 7_200n });
+      const corrupted = { ...genuine, transferRule: { ...rule, configuration: other.configuration } };
+      await render(`/token/${assetIdHex(ruledId)}#d=${formatAssetDefinition(corrupted)}`);
+      expect(verifiedBox()).toBeNull();
+      expect(text()).toContain("This link’s token definition could not be read.");
+      expect(element.querySelector("h1")?.textContent).toBe("Unverified token");
+    });
+  });
+
   it("uses the wallet's definition for the balance, actions and share link", async () => {
     state.wallet.snapshot = { assets: [{ assetId, definition, private: 12_345n, spendable: 12_300n, created: true }], pendingContentHashes: [] };
     await render(`/token/${assetIdHex(assetId)}`);
@@ -79,6 +104,7 @@ describe("token page", () => {
     expect(text()).toContain("You created this token.");
     expect(tabs()).toEqual(["Send", "Drop"]);
     expect(sendModes()).toEqual(["One recipient", "Many recipients", "Claim links", "Burn"]);
+    expect(text()).not.toContain("not available for tokens with a transfer rule");
     expect(element.querySelector('form[aria-label="Send token"]')).not.toBeNull();
     await act(async () => sendMode("Many recipients").click());
     expect(element.querySelector('form[aria-label="Send token"]')).toBeNull();
@@ -88,6 +114,18 @@ describe("token page", () => {
     const link = element.querySelector<HTMLInputElement>('input[aria-label="Token link"]')!.value;
     expect(link).toBe(`${window.location.origin}/token/${assetIdHex(assetId)}#d=${shareText}`);
     expect(button("Add to your wallet")).toBeUndefined();
+  });
+
+  it("offers no claim links or drops for a token with a transfer rule", async () => {
+    const rule = senderDenyListTransferRule({ contractAddress: 0x5fbdb2315678afecb367f032d93f642f64180aa3n, listId: new Uint8Array(32).fill(9), maxDelta: 7_200n });
+    const created = createAccountMintAsset({ metadata: { name: "Pilot USD", symbol: "pUSD", decimals: 2, contentDigest: new Uint8Array(32) }, accountAddress: 0xabcn, transferRule: rule });
+    const ruled = created.definition;
+    state.wallet.snapshot = { assets: [{ assetId: created.descriptor.assetId, definition: ruled, private: 500n, spendable: 500n, created: false }], pendingContentHashes: [] };
+    await render(`/token/${assetIdHex(created.descriptor.assetId)}`);
+    expect(tabs()).toEqual([]);
+    expect(sendModes()).toEqual(["One recipient", "Many recipients", "Burn"]);
+    expect(text()).toContain("Claim links and drops are not available for tokens with a transfer rule.");
+    expect(element.querySelector('form[aria-label="Send token"]')).not.toBeNull();
   });
 
   it("shows a held token without a definition by ID and accepts only its own definition", async () => {

@@ -40,7 +40,7 @@ beforeEach(async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   localStorage.clear();
   state.connection = { ...state.connection, status: "connected", address: `0x${"ab".repeat(20)}` };
-  session = new NameResolutionSession(() => ({ resolveName: vi.fn(), reverseAddress: vi.fn(), getAvatar: vi.fn() }), () => localStorage);
+  session = new NameResolutionSession(() => ({ resolveName: vi.fn(), reverseAddress: vi.fn(), getAvatar: vi.fn(), readAddress: vi.fn() }), () => localStorage);
   element = document.createElement("div"); root = createRoot(element);
   await act(async () => root.render(tree()));
   await vi.waitFor(async () => {

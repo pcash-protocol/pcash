@@ -60,11 +60,12 @@ it("opens setup in the drawer and keeps it open while setup progresses", async (
   expect(element.textContent).toContain("Getting PCASH…");
   expect(element.querySelector(`a[href="/${address}"]`)).not.toBeNull();
 });
-it("keeps balance, receiving and activity in the drawer and links to Get PCASH", async () => {
+it("keeps balance, receiving and activity in the drawer and links to earning and the full account page", async () => {
   state.wallet.phase = "ready"; state.wallet.profile = { address: BigInt(address), nkRoot: 22n }; state.wallet.accountRecord = "present";
   await render();
   expect(element.textContent).toContain("<1 PCASH");
-  expect(element.querySelector('a[href="/get"]')).not.toBeNull();
+  expect(element.querySelector('a[href="/get/earn"]')?.textContent).toBe("Get PCASH");
+  expect(element.querySelector('a[href="/account"]')?.textContent).toBe("Full account page →");
   expect(button("Send")).toBeDefined();
   expect(element.querySelector("#wallet-activity")).not.toBeNull();
   await act(async () => button("Receive").click());
@@ -73,6 +74,20 @@ it("keeps balance, receiving and activity in the drawer and links to Get PCASH",
   expect(element.querySelector("#receive svg[role=img]")).not.toBeNull();
   expect(element.querySelector("textarea")).toBeNull();
   expect(element.querySelector("dialog")?.open).toBe(true);
+});
+it("opens Send with the funds recovered so far while earlier payments are still being scanned", async () => {
+  const pcash = 10n ** 18n;
+  Object.assign(state.wallet, {
+    phase: "ready", accountRecord: "present", profile: { address: BigInt(address), nkRoot: 22n },
+    funds: { total: 20n * pcash, spendablePrivate: 12n * pcash },
+    history: { pending: true, outputs: { scanned: 1n, total: 4n } }, resetPrivateSend: vi.fn(),
+  });
+  await render();
+  expect(element.querySelector('[data-testid="wallet-sidebar-balance"]')?.textContent).toContain("20 PCASH");
+  expect(element.textContent).toContain("25%");
+  expect(button("Send").disabled).toBe(false);
+  await act(async () => button("Send").click());
+  expect(element.querySelector("#send")?.textContent).toContain("Available 12 PCASH");
 });
 it("lists token balances by symbol, or by ID when unverified, linking to each token page", async () => {
   const { testDefinition } = await import("../routes/tokens/tokenTestSupport.ts");
@@ -92,7 +107,7 @@ it("lists token balances by symbol, or by ID when unverified, linking to each to
   expect(rows[0]!.textContent).toContain("1,234.56 HBR");
   expect(rows[1]!.textContent).toContain("Unverified token");
   expect(rows[1]!.textContent).toContain("5 units");
-  expect(element.querySelector('a[href="/tokens"]')?.textContent).toBe("All tokens →");
+  expect(element.querySelector('a[href="/account#tokens"]')?.textContent).toBe("All tokens →");
 });
 
 it("offers one network switch action inside the drawer", async () => {
@@ -171,7 +186,7 @@ it("offers Show ENS names, checked by default, under Connect wallet, aligned wit
   expect(connectButton.compareDocumentPosition(ens) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   await act(async () => ens.click());
   expect(ens.checked).toBe(false);
-  expect(JSON.parse(localStorage.getItem(WEBSITE_SETTINGS_KEY)!)).toEqual({ ensEnabled: false, defaultSubmissionMode: "slow" });
+  expect(JSON.parse(localStorage.getItem(WEBSITE_SETTINGS_KEY)!)).toMatchObject({ ensEnabled: false });
 });
 
 describe("a payment that fails after its review is discarded", () => {

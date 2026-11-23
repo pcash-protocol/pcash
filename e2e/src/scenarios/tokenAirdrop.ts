@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { PRIVATE_VALUE_PROFILES } from "@pcash/sdk/constants";
 import { buildExtendedCode } from "@pcash/sdk/delivery";
 import { formatAssetDefinition } from "@pcash/sdk/protocol";
+import { recognizeMintRule } from "@pcash/sdk/rules";
 import { openMemoryNodeWallet } from "@pcash/wallet";
 import type { ScenarioActor } from "../actors/actor.ts";
 import type { ScenarioFixture } from "../fixture/scenarioFixture.ts";
@@ -28,14 +29,15 @@ export async function runTokenAirdropScenario(fixture: ScenarioFixture): Promise
   const contentDigest = createHash("sha256").update("FOO token terms").digest();
   const created = await (await alice.client()).createAsset({
     metadata: { name: "Foo", symbol: "FOO", decimals: 6, contentDigest },
-    initialSupply: supply,
+    supply,
     submission: self(alice),
   });
   await accept(created.contentHash, "token-create");
   logger.context("token-airdrop").info("token created");
   const { assetId, definition } = created;
   const text = formatAssetDefinition(definition);
-  if (definition.metadata.symbol !== "FOO" || definition.metadata.decimals !== 6 || definition.initialSupply !== supply
+  const mintRule = recognizeMintRule(definition.mintRule);
+  if (definition.metadata.symbol !== "FOO" || definition.metadata.decimals !== 6 || mintRule.kind !== "fixed-supply" || mintRule.configuration.supply !== supply
     || !Buffer.from(definition.metadata.contentDigest).equals(contentDigest)) throw new Error("created FOO definition differs from its request");
   /** The actor's FOO balance, after checking its wallet holds the verified definition. */
   const holding = async (actor: ScenarioActor): Promise<bigint> => {

@@ -10,6 +10,7 @@ import { runCoreScenario } from "./core.ts";
 import { runDirectSendScenario } from "./directSend.ts";
 import { runIssuanceBoundaryScenario } from "./issuanceBoundary.ts";
 import { runMarketplaceScenario } from "./marketplace.ts";
+import { runMerchantScenario } from "./merchant.ts";
 import { runP2pScenario } from "./p2p.ts";
 import { runPersistenceScenario } from "./persistence.ts";
 import { runPrivateValueProfilesScenario } from "./privateValueProfiles.ts";
@@ -20,6 +21,7 @@ import { runSeedScenario } from "./seed.ts";
 import { runSeedWalletScenario } from "./seedWallet.ts";
 import { runSelectedRelayScenario } from "./selectedRelay.ts";
 import { runSourceVerificationScenario } from "./sourceVerification.ts";
+import { runStablecoinScenario } from "./stablecoin.ts";
 import { runTokenAirdropScenario } from "./tokenAirdrop.ts";
 import { runTokenClaimsScenario } from "./tokenClaims.ts";
 import { runTokenMarketScenario } from "./tokenMarket.ts";
@@ -38,12 +40,14 @@ const RUNNERS: Readonly<Record<string, (fixture: ScenarioFixture) => Promise<unk
   "token-airdrop": runTokenAirdropScenario,
   "token-claims": runTokenClaimsScenario,
   "token-market": runTokenMarketScenario,
+  stablecoin: runStablecoinScenario,
   marketplace: runMarketplaceScenario,
   "contract-posting": runContractPostingScenario,
   "selected-relay": runSelectedRelayScenario,
   "private-value-profiles": runPrivateValueProfilesScenario,
   "registration-mining": runRegistrationMiningScenario,
   "direct-send": runDirectSendScenario,
+  merchant: runMerchantScenario,
   "seed-wallet": runSeedWalletScenario,
   reorg: runReorgScenario,
   "issuance-boundary": runIssuanceBoundaryScenario,

@@ -3,9 +3,15 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { computeBlockHash, computeStateRoot } from "../src/protocol/boundary.ts";
 import {
-  assetCreationMarker,
-  assetSecretCommitment,
-  standardFungibleAssetId,
+  assetCoreCommitment,
+  assetIdOf,
+  deriveAssetDescriptor,
+  isRestrictedAssetId,
+  mintContext,
+  mintMarker,
+  mintRuleCommitment,
+  policyContext,
+  transferRuleCommitment,
 } from "../src/protocol/asset.ts";
 import {
   buildContractBody,
@@ -73,9 +79,9 @@ import {
 import { arenaHash, deliveryCommitmentFromHashes, outputDataHash } from "../src/protocol/transfer.ts";
 import {
   accountUpdateActionCommitment,
-  assetCreationActionCommitment,
   authorizationCommitment,
   contractFeeSponsorshipActionCommitment,
+  mintActionCommitment,
   sponsoredTransferActionCommitment,
   transferActionCommitment,
 } from "../src/protocol/statement.ts";
@@ -232,10 +238,10 @@ describe("protocol conformance vectors", () => {
     const commitment = BigInt(actions.privateValueCommitment);
     expect(BigInt(actions.transfer.extraData)).toBe(0n);
     expect(transferActionCommitment(chain, commitment)).toBe(BigInt(actions.transfer.value));
-    expect(BigInt(actions.assetCreation.extraData)).toBe(BigInt(V.assetComposition.assetId));
-    expect(assetCreationActionCommitment(chain, commitment, BigInt(actions.assetCreation.extraData)))
-      .toBe(BigInt(actions.assetCreation.value));
-    expect(BigInt(actions.assetCreation.value)).not.toBe(BigInt(actions.transfer.value));
+    expect(BigInt(actions.mint.extraData)).toBe(BigInt(V.assetComposition.assetId));
+    expect(mintActionCommitment(chain, commitment, BigInt(actions.mint.extraData)))
+      .toBe(BigInt(actions.mint.value));
+    expect(BigInt(actions.mint.value)).not.toBe(BigInt(actions.transfer.value));
     expect(BigInt(actions.sponsoredTransfer.extraData)).toBe(0n);
     expect(sponsoredTransferActionCommitment(chain, commitment)).toBe(BigInt(actions.sponsoredTransfer.value));
     expect(contractFeeSponsorshipActionCommitment(chain, commitment, BigInt(actions.contractFeeSponsorship.extraData)))
@@ -244,19 +250,52 @@ describe("protocol conformance vectors", () => {
       .toBe(BigInt(actions.accountUpdate.value));
   });
 
-  it("derives the asset ID and creation marker", () => {
+  it("derives an unrestricted asset ID from its mint rule, a mint marker per replay ID, and its mint context", () => {
     const vector = V.assetComposition;
-    expect(assetSecretCommitment(BigInt(vector.assetSecret))).toBe(
-      BigInt(vector.assetSecretCommitment),
-    );
-    expect(standardFungibleAssetId({
-      metadataCommitment: BigInt(vector.metadataCommitment),
-      initialSupply: BigInt(vector.initialSupply),
-      assetSecretCommitment: BigInt(vector.assetSecretCommitment),
-    })).toBe(BigInt(vector.assetId));
-    expect(assetCreationMarker(BigInt(vector.assetId), BigInt(vector.assetSecret))).toBe(
-      BigInt(vector.marker),
-    );
+    const mintRule = {
+      sVkHash: BigInt(vector.mintRule.sVkHash),
+      lVkHash: BigInt(vector.mintRule.lVkHash),
+      configurationCommitment: BigInt(vector.mintRule.configurationCommitment),
+    };
+    expect(mintRuleCommitment(mintRule)).toBe(BigInt(vector.mintRule.commitment));
+    const fields = { instanceSalt: BigInt(vector.instanceSalt), metadataCommitment: BigInt(vector.metadataCommitment), mintRule };
+    expect(assetCoreCommitment(fields)).toBe(BigInt(vector.coreCommitment));
+    expect(assetIdOf(BigInt(vector.coreCommitment), 0n)).toBe(BigInt(vector.assetId));
+    expect(deriveAssetDescriptor(fields).assetId).toBe(BigInt(vector.assetId));
+    expect(isRestrictedAssetId(BigInt(vector.assetId))).toBe(false);
+    expect(mintMarker(BigInt(vector.assetId), BigInt(vector.replayId))).toBe(BigInt(vector.marker));
+    expect(mintContext({
+      assetId: BigInt(vector.assetId),
+      configurationCommitment: mintRule.configurationCommitment,
+      accountAddress: BigInt(vector.mintContext.accountAddress),
+      validUntilTimestamp: BigInt(vector.mintContext.validUntilTimestamp),
+    })).toBe(BigInt(vector.mintContext.value));
+  });
+
+  it("derives a restricted asset ID from the same mint rule and its transfer rule, and its policy context", () => {
+    const vector = V.assetComposition.restricted;
+    const mintRule = {
+      sVkHash: BigInt(V.assetComposition.mintRule.sVkHash),
+      lVkHash: BigInt(V.assetComposition.mintRule.lVkHash),
+      configurationCommitment: BigInt(V.assetComposition.mintRule.configurationCommitment),
+    };
+    const transferRule = {
+      sVkHash: BigInt(vector.transferRule.sVkHash),
+      lVkHash: BigInt(vector.transferRule.lVkHash),
+      configurationCommitment: BigInt(vector.transferRule.configurationCommitment),
+    };
+    expect(transferRuleCommitment(transferRule)).toBe(BigInt(vector.transferRule.commitment));
+    const fields = { instanceSalt: BigInt(vector.instanceSalt), metadataCommitment: BigInt(V.assetComposition.metadataCommitment), mintRule };
+    expect(assetCoreCommitment(fields)).toBe(BigInt(vector.coreCommitment));
+    expect(assetIdOf(BigInt(vector.coreCommitment), BigInt(vector.transferRule.commitment))).toBe(BigInt(vector.assetId));
+    expect(deriveAssetDescriptor({ ...fields, transferRule }).assetId).toBe(BigInt(vector.assetId));
+    expect(isRestrictedAssetId(BigInt(vector.assetId))).toBe(true);
+    expect(policyContext({
+      assetId: BigInt(vector.assetId),
+      configurationCommitment: transferRule.configurationCommitment,
+      ownerAddress: BigInt(vector.policyContext.ownerAddress),
+      validUntilTimestamp: BigInt(vector.policyContext.validUntilTimestamp),
+    })).toBe(BigInt(vector.policyContext.value));
   });
 
   it("derives output note secrets from the complete transaction nullifier set", () => {

@@ -4,14 +4,12 @@ import type { ExplorerCursor, TransactionQuery, TransactionSummaryResult } from 
 import { PcashAmount } from "../../../components/PcashAmount.tsx";
 import { useReadyExplorer } from "../ExplorerProvider.tsx";
 import {
-  describeEffect,
   formatBytes,
   formatKind,
   outcomeLabel,
   outcomeTone,
 } from "../format.ts";
 import {
-  AddressLink,
   BlockLink,
   Empty,
   Failure,
@@ -20,6 +18,7 @@ import {
   Pager,
   TableScroll,
   Tag,
+  TransactionEffects,
   TransactionLink,
   useCursorStack,
   useRead,
@@ -34,17 +33,6 @@ const KINDS = [
   "userAccountUpdate",
   "contractAccount",
 ] as const;
-
-/**
- * The effect string is the account address only for a succeeded account
- * transaction; a failure describes itself instead, and is not a link.
- */
-function Effect({ summary }: { summary: TransactionSummaryResult }) {
-  const text = describeEffect(summary);
-  const { account } = summary;
-  if (account !== null && text === account.address) return <AddressLink address={account.address} />;
-  return <>{text}</>;
-}
 
 function Fee({ summary }: { summary: TransactionSummaryResult }) {
   if (summary.declaredOpenFeeAmount === null) return <>—</>;
@@ -110,7 +98,7 @@ export function TransactionsPage() {
               <th className={styles.num}>Block</th>
               <th className={styles.num}>Age</th>
               <th>Kind</th>
-              <th>Effect</th>
+              <th>Effects</th>
               <th className={styles.num}>Fee</th>
               <th className={styles.num}>Burn</th>
               <th className={styles.num}>Size</th>
@@ -122,8 +110,8 @@ export function TransactionsPage() {
               <td><TransactionLink transactionId={summary.transactionId} /></td>
               <td className={styles.num}><BlockLink number={summary.block.blockNumber} /></td>
               <td className={styles.num}><RelativeTime seconds={summary.timestamp} /></td>
-              <td>{formatKind(summary.kind)}</td>
-              <td><Effect summary={summary} /></td>
+              <td>{formatKind(summary.kind, summary.accountCreation)}</td>
+              <td><TransactionEffects summary={summary} /></td>
               <td className={styles.num}><Fee summary={summary} /></td>
               <td className={styles.num}><Burn summary={summary} /></td>
               <td className={styles.num}>{formatBytes(summary.byteSize)}</td>

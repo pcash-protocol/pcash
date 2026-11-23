@@ -172,7 +172,7 @@ test("registers with zero PCASH, mines without payment signatures, and displays 
     await expect(miningHistory).not.toContainText("Sent 0");
     const previousBalance = await page.getByTestId("wallet-sidebar-balance").textContent();
     await page.getByTestId("wallet-panel").getByRole("link", { name: "Get PCASH", exact: true }).click();
-    await expect(page).toHaveURL(/\/get$/);
+    await expect(page).toHaveURL(/\/get\/earn$/);
     await expect(page.getByTestId("wallet-panel")).not.toBeVisible();
     await expect(page.getByTestId("mining-estimate")).toContainText("PCASH");
     const current = await fixture.nodeA.client.status();

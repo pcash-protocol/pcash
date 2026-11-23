@@ -4,14 +4,14 @@ import { applicationSchemaId, encodeUserAccountCreation, transactionIdentity as 
 import { buildDirectReferenceUserAccountCreation } from "@pcash/sdk/builders";
 import type { DurableSubmissionAdapter } from "@pcash/sdk/wallet";
 import type { RelayJournalEntry } from "@pcash/sdk/relay";
-import { assetDefinitionAssetId, encodePrivateValueTransaction, WIRE_PROOF_BYTES, encodePayload, encryptEnvelope, formatAssetDefinition, noteBodyCommitment, outputCommitment, ownerCommitment, type AssetDefinition, type CurrentBoundaryEnvelope } from "@pcash/sdk/protocol";
+import { assetDefinitionAssetId, encodePrivateValueTransaction, findAssetDefinition, WIRE_PROOF_BYTES, encodePayload, encryptEnvelope, formatAssetDefinition, noteBodyCommitment, outputCommitment, ownerCommitment, type AssetDefinition, type CurrentBoundaryEnvelope, type FungibleMetadata } from "@pcash/sdk/protocol";
 import { PGlite } from "@electric-sql/pglite";
 import { describe, expect, it, vi } from "vitest";
 import { OPEN_WALLET_INTERNAL, Wallet } from "@pcash/sdk/wallet";
 import { WalletCapabilityError } from "@pcash/sdk/wallet";
 import type { PcashNodeClient, StatusResult } from "@pcash/sdk/clients";
 import { privateKeyPcashActionSigner, type PcashActionSigner } from "@pcash/sdk/eip712";
-import { defaultUserAccountRuleSet } from "@pcash/sdk/rules";
+import { defaultUserAccountRuleSet, fixedSupplyMintRule } from "@pcash/sdk/rules";
 import { derivePcashProfileFromPrivateKey } from "@pcash/sdk/wallet";
 import type { WalletFileData } from "@pcash/sdk/wallet/testing";
 import { noteStore } from "@pcash/sdk/wallet/testing";
@@ -49,6 +49,10 @@ function chain(): ChainSim {
 const GENESIS_HASH = chain().genesisHash;
 const status = chain().status();
 const hashOf = (block: { hash: bigint }): string => `0x${block.hash.toString(16).padStart(64, "0")}`;
+
+function fixedSupplyDefinition(supply: bigint, secretCommitment: bigint, metadata: FungibleMetadata): AssetDefinition {
+  return findAssetDefinition({ mintRule: fixedSupplyMintRule({ supply, secretCommitment }), metadata }, 0n);
+}
 
 function node(sim: ChainSim = chain()): PcashNodeClient {
   return sim.client();
@@ -772,11 +776,8 @@ describe("high-level Wallet", () => {
   it("imports a verified definition and lists assets from definitions and notes", async () => {
     const db = await database();
     const account = profile();
-    const definition: AssetDefinition = {
-      initialSupply: 700n,
-      assetSecretCommitment: 0x92n,
-      metadata: { name: "Imported", symbol: "IMP", decimals: 3, contentDigest: new Uint8Array(32).fill(4) },
-    };
+    const definition = fixedSupplyDefinition(700n, 0x92n,
+      { name: "Imported", symbol: "IMP", decimals: 3, contentDigest: new Uint8Array(32).fill(4) });
     const assetId = assetDefinitionAssetId(definition);
     const unknownAssetId = 0x55n;
     const data = emptyWalletState(identityFor(account));
@@ -839,10 +840,8 @@ describe("high-level Wallet", () => {
     }];
     await db[WALLET_DATABASE_STATE_STORE](identity).save(data);
     const wallet = await Wallet[OPEN_WALLET_INTERNAL]({ database: db, node: node(), profile: account });
-    const definition: AssetDefinition = {
-      initialSupply: 100n, assetSecretCommitment: 0x95n,
-      metadata: { name: "Unheld", symbol: "UHD", decimals: 0, contentDigest: new Uint8Array(32).fill(9) },
-    };
+    const definition = fixedSupplyDefinition(100n, 0x95n,
+      { name: "Unheld", symbol: "UHD", decimals: 0, contentDigest: new Uint8Array(32).fill(9) });
     const metadataAssetId = (await wallet.importAssetDefinition(definition)).assetId;
     const reservations = vi.spyOn(noteStore, "reservedNoteCommitments");
 
@@ -1727,10 +1726,8 @@ it.each(["send", "burn"] as const)("synchronizes a self-published asset %s befor
   const db = await database();
   const sim = chain();
   const account = profile();
-  const definition: AssetDefinition = {
-    initialSupply: 100n, assetSecretCommitment: 0x72n,
-    metadata: { name: "Settlement Token", symbol: "SET", decimals: 0, contentDigest: new Uint8Array(32) },
-  };
+  const definition = fixedSupplyDefinition(100n, 0x72n,
+    { name: "Settlement Token", symbol: "SET", decimals: 0, contentDigest: new Uint8Array(32) });
   const assetId = assetDefinitionAssetId(definition);
   const rules = defaultUserAccountRuleSet({ wallet: account, secrets: account.defaultUserRuleSecrets,
     network: { pcashChainId: BigInt(CHAIN_ID), l1ChainId: sim.l1ChainId, inboxAddress: sim.inboxAddress } });

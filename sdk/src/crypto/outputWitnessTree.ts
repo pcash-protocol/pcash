@@ -30,6 +30,30 @@ export function outputFrontierRoot(frontier: OutputFrontier): bigint {
   return frontierRoot(frontier.count, ommersByHeight(frontier));
 }
 
+/**
+ * Extend a leaf's opening from the scanned prefix through its last leaf (`edge`)
+ * to the tree in which the edge was opened. Below their common ancestor the
+ * earlier leaf's branch is complete; above it both leaves share a path.
+ */
+export function extendOutputWitness(
+  index: bigint,
+  prefixSiblings: readonly bigint[],
+  edge: { index: bigint; commitment: bigint; siblings: readonly bigint[] },
+): bigint[] {
+  if (index === edge.index) return [...edge.siblings];
+  const split = (index ^ edge.index).toString(2).length - 1;
+  const lowerBits = (1n << BigInt(split)) - 1n;
+  const edgeSubtree = rootFromIndex(edge.commitment, edge.index & lowerBits, edge.siblings.slice(0, split));
+  return [...prefixSiblings.slice(0, split), edgeSubtree, ...edge.siblings.slice(split + 1)];
+}
+
+/** The frontier of the leaves before `index`: its left siblings in any tree holding it. */
+export function frontierBeforeLeaf(index: bigint, siblings: readonly bigint[]): OutputFrontier {
+  const ommers: bigint[] = [];
+  for (let h = 0; h < MERKLE_DEPTH; h++) if (bit(index, h)) ommers.push(siblings[h]!);
+  return { count: index, ommers };
+}
+
 interface OutputWitnessTreeJson {
   count: string;
   ommers: string[];

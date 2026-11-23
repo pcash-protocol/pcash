@@ -28,10 +28,14 @@ import {
   decodeRecipientPayload,
   openRegion,
   openSenderRecords,
+  ProfileCapacityError,
   regionCellsFor,
   type ArenaContext,
 } from "../src/protocol/arena.ts";
-import { assetDefinitionAssetId, type AssetDefinition } from "../src/protocol/assetDefinition.ts";
+import { assetDefinitionAssetId, findAssetDefinition, type AssetDefinition } from "../src/protocol/assetDefinition.ts";
+import { fixedSupplyMintRule } from "../src/rules/fixedSupply.ts";
+import { createAccountMintAsset } from "../src/rules/accountMint.ts";
+import { senderDenyListTransferRule } from "../src/rules/transferRules.ts";
 import { TX_KIND_PRIVATE_VALUE } from "../src/protocol/codec.ts";
 import { decodePayload, encodePayload, generateMlKemKeyPair, sealEnvelope, trialOpenEnvelope } from "../src/protocol/envelope.ts";
 import { DEFAULT_NETWORK_CONFIG } from "../src/protocol/network.ts";
@@ -42,6 +46,7 @@ import {
   outputRecords,
   paymentMaxMemoBytes,
   sealSectionDelivery,
+  sectionDeliveryFits,
   type ArenaSender,
 } from "../src/protocol/sectionDelivery.ts";
 import { ecdsaRuleConfigurationCommitment } from "../src/rules/referenceRules.ts";
@@ -57,11 +62,13 @@ const chainId = PCASH_CHAIN_ID;
 const outgoingKey = new Uint8Array(32).fill(0x0e);
 const sender: ArenaSender = { outgoingKey };
 
-const definition: AssetDefinition = {
-  initialSupply: 1_000_000n,
-  assetSecretCommitment: 0x52n,
-  metadata: { name: "Shared Token", symbol: "SHR", decimals: 6, contentDigest: new Uint8Array(32).fill(3) },
-};
+const sharedMetadata = { name: "Shared Token", symbol: "SHR", decimals: 6, contentDigest: new Uint8Array(32).fill(3) };
+/** A fixed-supply definition of the shared metadata; another secret commitment is another asset. */
+const fixedDefinition = (secretCommitment: bigint): AssetDefinition => findAssetDefinition({
+  mintRule: fixedSupplyMintRule({ supply: 1_000_000n, secretCommitment }),
+  metadata: sharedMetadata,
+}, 0n);
+const definition = fixedDefinition(0x52n);
 const assetId = assetDefinitionAssetId(definition);
 
 /**
@@ -165,13 +172,13 @@ describe("recipient records", () => {
     for (const payload of payloads) expect(decodeRecipientPayload(payload)).toEqual([assetDefinitionSchema.encode(definition)]);
     expect(new Set(received.map(({ note }) => note.anchor)).size).toBe(4);
 
-    // The 100-byte definition record (102 bytes) takes three cells in each of the
+    // The 230-byte definition (a 233-byte record) takes five cells in each of the
     // four recipient regions. The sender region (definition plus four 53-byte
-    // sent envelopes, 317 bytes) takes six. An opened region runs to the end of
-    // its cells, so its length gives its cell count.
+    // sent envelopes, 448 bytes) takes eight. An opened region runs to the end
+    // of its cells, so its length gives its cell count.
     const sent = senderPayload(build);
-    expect([sent, ...payloads].map((payload) => encodeRecords(decodeRecords(payload, true)).length)).toEqual([317, 102, 102, 102, 102]);
-    expect([sent, ...payloads].map((payload) => regionCellsFor(payload.length, S))).toEqual([6, 3, 3, 3, 3]);
+    expect([sent, ...payloads].map((payload) => encodeRecords(decodeRecords(payload, true)).length)).toEqual([448, 233, 233, 233, 233]);
+    expect([sent, ...payloads].map((payload) => regionCellsFor(payload.length, S))).toEqual([8, 5, 5, 5, 5]);
   });
 
   it("names every token recipient and the asset in the sender region", () => {
@@ -208,7 +215,7 @@ describe("recipient records", () => {
   });
 
   it("refuses a sender-region definition for another asset", () => {
-    expect(() => tokenPayment({ sender, assetDefinition: { ...definition, assetSecretCommitment: 0x53n } }))
+    expect(() => tokenPayment({ sender, assetDefinition: fixedDefinition(0x53n) }))
       .toThrow("assetDefinition must derive the action's nonzero assetId");
   });
 
@@ -284,7 +291,7 @@ data: memoData(params, memo, false) });
   });
 
   describe("asset definitions", () => {
-    const otherDefinition: AssetDefinition = { ...definition, assetSecretCommitment: 0x53n };
+    const otherDefinition = fixedDefinition(0x53n);
     const receiver = generateMlKemKeyPair();
     const context: ArenaContext = { chainId, transactionType: TX_KIND_PRIVATE_VALUE, nullifiers: [1n, 2n, 3n, 4n] };
 
@@ -381,6 +388,42 @@ data: { recipients: [
     const memo = (index: number) => new Uint8Array(600).fill(index + 1);
     expect(() => buildNativeTransfer({ ...params,
 data: { recipients: recipients.flatMap((recipient, index) => memoData({ ...params, recipientAddress: recipient.address, recipientReceiveKey: recipient.mlKemPublicKey! }, memo(index)).recipients!) } })).toThrow(/arena regions need \d+ cells; the L arena has 256/);
+  });
+});
+
+describe("delivery fit", () => {
+  // The bulk planner sizes chunks by `sectionDeliveryFits`, so it
+  // must agree with what `sealSectionDelivery` writes: here the stablecoin
+  // shape of definition, beside out-of-band openings and direct-send inputs.
+  const definition = createAccountMintAsset({
+    metadata: { name: "USD Coin", symbol: "USDC", decimals: 6, contentDigest: new Uint8Array(32) }, accountAddress: 0x1234n,
+    transferRule: senderDenyListTransferRule({ contractAddress: 0x5678n, listId: new Uint8Array(32).fill(3), maxDelta: 86_400n }),
+  }).definition;
+  const records = [assetDefinitionSchema.encode(definition)];
+  const keys = generateMlKemKeyPair(new Uint8Array(64).fill(7));
+  it.each([
+    [S, 4, 0, 0, true], [S, 4, 0, 2, false], [S, 5, 0, 0, false], [S, 3, 1, 2, true],
+    [L, 31, 0, 0, true], [L, 32, 0, 0, false], [L, 30, 1, 4, true], [L, 30, 2, 8, false],
+  ] as const)("shape %s, %s envelopes, %s out-of-band openings and %s direct sends: fits %s", (shape, enveloped, opened, directSends, fits) => {
+    const directSendOpenings = Array.from({ length: directSends }, (_, slot) =>
+      ({ chainId, contentHash: `0x${"ab".repeat(32)}`, slot, owner: 7n, amount: 5n, noteSecret: BigInt(slot + 1) }));
+    expect(sectionDeliveryFits({
+      shape, envelopes: Array.from({ length: enveloped }, () => records), sentOpenings: opened, sender: records, directSendOpenings,
+    })).toBe(fits);
+    const seal = () => sealSectionDelivery({
+      shape,
+      context: { chainId, transactionType: TX_KIND_PRIVATE_VALUE, nullifiers: Array.from({ length: shape === S ? 4 : 32 }, (_, index) => BigInt(index + 1)) },
+      envelopes: Array.from({ length: enveloped }, (_, slot) => ({ slot, receiveKey: keys.publicKey, recipientAddress: 7n, sentTo: 7n,
+        note: { chainId, assetId: 5n, amount: 1n, owner: 7n, noteSecret: BigInt(slot + 1) }, records })),
+      sentOpenings: Array.from({ length: opened }, (_, index) =>
+        ({ slot: enveloped + index, recipientAddress: 7n, assetId: 5n, amount: 1n, noteSecret: BigInt(index + 100) })),
+      sender: { outgoingKey, directSendOpenings }, assetDefinition: definition,
+    });
+    if (fits) expect(seal).not.toThrow();
+    else {
+      expect(seal).toThrow(/arena regions need \d+ cells/);
+      expect(seal).toThrow(ProfileCapacityError);
+    }
   });
 });
 

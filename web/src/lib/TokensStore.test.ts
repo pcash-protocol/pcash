@@ -14,19 +14,26 @@ describe("IndexedDB token records", () => {
   });
 
   it("stores, updates from the latest value, and removes records across openings", async () => {
-    const store = await openTokensStore();
+    const store = await openTokensStore("chain-a");
     expect(await store.update(record.key, () => record)).toEqual(record);
     expect(await store.update(record.key, (current) => ({ ...current!, fundingJobId: "job" } as LinkSetRecord))).toMatchObject({ fundingJobId: "job" });
     store.close();
-    const reopened = await openTokensStore();
+    const reopened = await openTokensStore("chain-a");
     expect(await reopened.get(record.key)).toMatchObject({ fundingJobId: "job", amounts: ["10", "20"] });
     expect(await reopened.list()).toHaveLength(1);
     expect(await reopened.update(record.key, () => null)).toBeNull();
     expect(await reopened.get(record.key)).toBeNull();
   });
 
+  it("keeps each chain's records apart", async () => {
+    const store = await openTokensStore("chain-a");
+    await store.update(record.key, () => record);
+    const other = await openTokensStore("chain-b");
+    expect(await other.list()).toEqual([]);
+  });
+
   it("refuses an update that changes the key and keeps the stored record", async () => {
-    const store = await openTokensStore();
+    const store = await openTokensStore("chain-a");
     await store.update(record.key, () => record);
     await expect(store.update(record.key, (current) => ({ ...current!, key: "other" }))).rejects.toThrow(/cannot change its key/);
     expect(await store.get(record.key)).toEqual(record);

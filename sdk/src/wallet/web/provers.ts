@@ -87,30 +87,43 @@ export function createBrowserWalletProvers(
       session = undefined;
     },
     assetCreation: {
-      async proveAndEncode(build, authorizationWitnessMap) {
+      shapes: [PRIVATE_VALUE_PROFILES.S.shapeId],
+      async proveAndEncode(build, authorizationWitnessMap, mintRule) {
         if (build.shape !== PRIVATE_VALUE_PROFILES.S.shapeId) throw new Error("L transactions require native proving.");
+        const mintRuleUrl = (CIRCUIT_URLS as Readonly<Record<string, string>>)[mintRule.packageName];
+        if (mintRuleUrl === undefined) throw new Error("This mint rule requires native proving.");
         return run(async (browserProver, onStatus, signal) => {
           const proof = await browserProver.proveAssetAction({
-            operation: "assetCreation",
-            authorization: { circuitUrl: CIRCUIT_URLS.account_rule_asset_creation_ecdsa, witnessMap: authorizationWitnessMap, label: "asset creation authorization" },
-            buildKernelWitnessMap: build.buildAssetCreationKernelWitnessMap, expectedPublicInputs: build.publicInputs,
+            operation: "mint",
+            authorization: { circuitUrl: CIRCUIT_URLS.account_rule_mint_ecdsa, witnessMap: authorizationWitnessMap, label: "mint authorization" },
+            mintRule: { circuitUrl: mintRuleUrl, witnessMap: mintRule.witnessMap, label: "mint rule" },
+            buildKernelWitnessMap: build.buildMintKernelWitnessMap, expectedPublicInputs: build.publicInputs,
           }, onStatus, signal);
           return build.encodeTransaction(proof.proof);
-        }, CIRCUIT_URLS.account_rule_asset_creation_ecdsa);
+        }, CIRCUIT_URLS.account_rule_mint_ecdsa);
       },
     },
     assetAction: {
       shapes: [PRIVATE_VALUE_PROFILES.S.shapeId],
-      async proveAndEncode(build, authorization) {
+      async proveAndEncode(build, authorization, policy) {
         if (build.shape !== PRIVATE_VALUE_PROFILES.S.shapeId) throw new Error("L transactions require native proving.");
         if (authorization.packageName === "account_rule_large_batch_transfer_ecdsa") throw new Error("L transactions require native proving.");
-        const circuitUrl = (CIRCUIT_URLS as Readonly<Record<string, string>>)[authorization.packageName];
+        const urls = CIRCUIT_URLS as Readonly<Record<string, string>>;
+        const circuitUrl = urls[authorization.packageName];
         if (circuitUrl === undefined) throw new Error("This authorization requires native proving.");
+        const policyUrl = policy === undefined ? undefined : urls[policy.packageName];
+        if (policy !== undefined && policyUrl === undefined) throw new Error("This transfer rule requires native proving.");
         return run(async (browserProver, onStatus, signal) => {
-          const proof = await browserProver.proveAssetAction({
+          const authorizationStep = { circuitUrl, witnessMap: authorization.witnessMap, label: "asset authorization" };
+          const proof = await browserProver.proveAssetAction(policy === undefined ? {
             operation: "transfer",
-            authorization: { circuitUrl, witnessMap: authorization.witnessMap, label: "asset authorization" },
+            authorization: authorizationStep,
             buildKernelWitnessMap: build.buildKernelWitnessMap, expectedPublicInputs: build.publicInputs,
+          } : {
+            operation: "restricted-transfer",
+            authorization: authorizationStep,
+            policy: { circuitUrl: policyUrl!, witnessMap: policy.witnessMap, label: "transfer rule" },
+            buildKernelWitnessMap: build.buildRestrictedKernelWitnessMap, expectedPublicInputs: build.publicInputs,
           }, onStatus, signal);
           return build.encodeTransaction(proof.proof);
         });

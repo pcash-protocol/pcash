@@ -4,12 +4,11 @@ import { Metadata } from "../Metadata.tsx";
 import { routeById, type RouteDefinition } from "../routeManifest.ts";
 import { Diagram } from "./diagrams/Diagram.tsx";
 import { diagrams } from "./diagrams/index.ts";
-import { CopyForLlm, markdownPath } from "./DocumentTools.tsx";
+import { CopyMarkdown, markdownPath } from "./DocumentTools.tsx";
 import { renderDocument, type DocumentBlock } from "./longDocument.ts";
 import styles from "./DocumentPage.module.css";
 
-const learnRoute = routeById("learn");
-const developersRoute = routeById("developers");
+const docsRoute = routeById("docs");
 
 function Block({ block }: { block: DocumentBlock }) {
   if (block.kind === "html") return <div className={styles.body} dangerouslySetInnerHTML={{ __html: block.html }} />;
@@ -34,7 +33,7 @@ function useHideCode(): [boolean, () => void] {
   return [hidden, toggle];
 }
 
-/** A published repository document on its own page. Guides and reference pages sit under Developers; the rest sit under Learn. */
+/** A published repository document on its own page, under Docs. */
 export function DocumentPage({ route, source, contentsDepth, resolveHref }: {
   route: RouteDefinition;
   source: string;
@@ -45,7 +44,6 @@ export function DocumentPage({ route, source, contentsDepth, resolveHref }: {
   const rendered = useMemo(() => renderDocument(source, resolveHref), [source, resolveHref]);
   const [hideCode, toggleHideCode] = useHideCode();
   const contents = rendered.headings.filter((heading) => heading.depth >= 2 && heading.depth <= contentsDepth);
-  const parent = route.path.split("/").length > 3 ? developersRoute : learnRoute;
   const links = contents.map((heading) => <a key={heading.id} href={`#${heading.id}`} className={heading.depth > 2 ? styles.nested : undefined}>{heading.text}</a>);
   return <div className={styles.page}>
     <Metadata {...route.metadata} />
@@ -53,11 +51,11 @@ export function DocumentPage({ route, source, contentsDepth, resolveHref }: {
       <aside className={styles.contents}><span>Contents</span><nav aria-label="Contents">{links}</nav></aside>
       <div className={styles.main}>
         <header className={styles.header}>
-          <nav className={styles.breadcrumbs} aria-label="Breadcrumb"><Link to={parent.path}>{parent.primaryLabel}</Link><span aria-hidden="true">/</span><span aria-current="page">{route.metadata.title}</span></nav>
+          <nav className={styles.breadcrumbs} aria-label="Breadcrumb"><Link to={docsRoute.path}>{docsRoute.metadata.title}</Link><span aria-hidden="true">/</span><span aria-current="page">{route.metadata.title}</span></nav>
           <h1>{rendered.title}</h1>
           <p className={styles.meta}>{rendered.minutes} min read</p>
           <div className={styles.tools}>
-            <CopyForLlm source={source} className={styles.tool} />
+            <CopyMarkdown source={source} className={styles.tool} />
             <a className={styles.tool} href={markdownPath(route.path)}>View as Markdown</a>
             {rendered.hasEvidence && <button type="button" className={styles.tool} aria-pressed={hideCode} onClick={toggleHideCode}>Hide code</button>}
           </div>

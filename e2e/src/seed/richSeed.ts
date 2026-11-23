@@ -1356,7 +1356,7 @@ export async function runRichSeed(params: RichSeedParams): Promise<RichSeedResul
 
     actors.S.submitter.plan(1, "earn-s");
     await withSeedRuntimeProgress("Wave 1: earn S native notes through authorized asset creation", () => actors.S.wallet.createAsset({
-      metadata:{name:"Seed participation",symbol:"PART",decimals:0,contentDigest:new Uint8Array(32)},initialSupply:1n,
+      metadata:{name:"Seed participation",symbol:"PART",decimals:0,contentDigest:new Uint8Array(32)},supply:1n,
     }));
     // S's earning actions are built for relay on the open route and framed in
     // S's own batches, so S's poster commitment collects their issuance.
@@ -1427,7 +1427,7 @@ export async function runRichSeed(params: RichSeedParams): Promise<RichSeedResul
           submission: actors.M.submitter,
         })),
       () => withSeedRuntimeProgress("Wave 2: earn S more issuance without consuming its payment notes", () =>
-        sellerEarningWallet!.createAsset({metadata:{name:"Second participation",symbol:"PART",decimals:0,contentDigest:new Uint8Array(32)},initialSupply:1n,submission:sellerEarningSubmitter})),
+        sellerEarningWallet!.createAsset({metadata:{name:"Second participation",symbol:"PART",decimals:0,contentDigest:new Uint8Array(32)},supply:1n,submission:sellerEarningSubmitter})),
     ] as const);
     const sellerNoteEntry = await gate.waitForLabel(2, "transfer-s-r");
     const sellerEarningEntry = await gate.waitForLabel(2, "earn-s-again");

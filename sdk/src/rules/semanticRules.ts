@@ -5,7 +5,7 @@ import type { FieldNumberish } from "../crypto/field.ts";
 import { pcashBurnTypedData, type PcashTypedData, type PcashTypedValue } from "../eip712/eip712.ts";
 import type { NativeBurn } from "../protocol/fee.ts";
 import { type NetworkConfigLike, networkForChain } from "../protocol/network.ts";
-import { assetCreationEip712TypeFor, batchTransferEip712TypeFor, withBurnEip712Type } from "./semanticRuleTypes.ts";
+import { batchTransferEip712TypeFor, mintEip712TypeFor, withBurnEip712Type } from "./semanticRuleTypes.ts";
 
 export const ASSET_PAYMENT_EIP712_TYPE =
   "PcashAssetPayment(uint256 pcashChainId,uint256 assetId,address recipient,uint256 amount,uint256 openFeeAmount,address issuanceRecipient,uint256 issuanceOwnerCommitment,uint256 relayFeeAmount,uint256 relayFeeOwnerCommitment,uint256 accountCreationCommitment,uint256 transactionContext,uint64 notBefore,uint64 validUntil)";
@@ -179,21 +179,19 @@ export function contractFeeSponsorshipTypedData(
   );
 }
 
-export function assetCreationEip712Type(shape: PrivateValueShape = PRIVATE_VALUE_PROFILES.S.shapeId): string {
-  return assetCreationEip712TypeFor(privateValueProfile(shape).outputs);
+export function mintEip712Type(shape: PrivateValueShape = PRIVATE_VALUE_PROFILES.S.shapeId): string {
+  return mintEip712TypeFor(privateValueProfile(shape).outputs);
 }
-export const ASSET_CREATION_EIP712_TYPE = assetCreationEip712Type();
-export function assetCreationWithBurnEip712Type(shape: PrivateValueShape = PRIVATE_VALUE_PROFILES.S.shapeId): string {
-  return withBurnEip712Type(assetCreationEip712Type(shape));
+export const MINT_EIP712_TYPE = mintEip712Type();
+export function mintWithBurnEip712Type(shape: PrivateValueShape = PRIVATE_VALUE_PROFILES.S.shapeId): string {
+  return withBurnEip712Type(mintEip712Type(shape));
 }
-export const ASSET_CREATION_WITH_BURN_EIP712_TYPE = assetCreationWithBurnEip712Type();
+export const MINT_WITH_BURN_EIP712_TYPE = mintWithBurnEip712Type();
 
-export interface AssetCreationMessage {
+export interface MintMessage {
   pcashChainId: FieldNumberish;
   assetId: FieldNumberish;
-  metadataCommitment: FieldNumberish;
-  initialSupply: FieldNumberish;
-  assetSecretCommitment: FieldNumberish;
+  /** Every asset output is declared here; only native outputs may be owner change. */
   outputs: readonly OutputDeclaration[];
   openFeeAmount: FieldNumberish;
   issuanceRecipient: FieldNumberish;
@@ -206,22 +204,21 @@ export interface AssetCreationMessage {
   validUntil: FieldNumberish;
 }
 
-export function assetCreationTypedData(
+export function mintTypedData(
   network: NetworkConfigLike | undefined,
-  message: AssetCreationMessage,
+  message: MintMessage,
   shape: PrivateValueShape = PRIVATE_VALUE_PROFILES.S.shapeId,
   burn?: NativeBurn,
-): PcashTypedData<"PcashAssetCreation" | "PcashAssetCreationWithBurn"> {
+): PcashTypedData<"PcashMint" | "PcashMintWithBurn"> {
   const { outputs, ...fields } = message;
   return pcashBurnTypedData(
     networkForChain(message.pcashChainId, network),
-    assetCreationEip712Type(shape),
-    assetCreationWithBurnEip712Type(shape),
+    mintEip712Type(shape),
+    mintWithBurnEip712Type(shape),
     {
       ...fields,
-      ...outputDeclarationValues(outputs, shape, "asset creation declarations must match the selected profile"),
+      ...outputDeclarationValues(outputs, shape, "mint declarations must match the selected profile"),
     },
     burn,
   );
 }
-

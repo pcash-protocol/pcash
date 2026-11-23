@@ -5,6 +5,11 @@
   "type": "module",
   "exports": {
     "./protocol-fixtures": "./src/protocolFixtures.ts",
+    "./restricted-fixtures": "./src/restrictedFixtures.ts",
+    "./shared-asset-claim-fixtures": "./src/sharedAssetClaimFixtures.ts",
+    "./test-wallet": "./src/testWallet.ts",
+    "./voucher-mint-fixtures": "./src/voucherMintFixtures.ts",
+    "./deposit-mint-fixtures": "./src/depositMintFixtures.ts",
     "./chain-sim": "./src/chainSim.ts"
   },
   "scripts": {

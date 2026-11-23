@@ -5,6 +5,7 @@ import { storedReceiveKeyPair } from "../../src/wallet/receiveKeyring.ts";
 import { describe, expect, it, vi } from "vitest";
 import type { AssetActionBuild } from "@pcash/sdk/builders";
 import type { PcashNodeClient } from "@pcash/sdk/clients";
+import type { PrivateValueShape } from "@pcash/sdk/constants";
 import { buildExtendedCode, storeTransactionData } from "@pcash/sdk/delivery";
 import { privateKeyPcashActionSigner } from "@pcash/sdk/eip712";
 import { defaultUserAccountRuleSet } from "@pcash/sdk/rules";
@@ -33,26 +34,30 @@ import { emptyWalletState } from "../../src/wallet/store.ts";
 import { anchoredChain, ChainSim } from "./chainFixture.ts";
 import { testStatus } from "./statusFixture.ts";
 import { deliveredOutput, senderRegionOf } from "./deliveryHelpers.ts";
+import { fixedSupplyAssetDefinition } from "./builderTestHelpers.ts";
 
 const network = { pcashChainId: 8182n, l1ChainId: 11155111n, inboxAddress: `0x${"66".repeat(20)}` };
 const key = new Uint8Array(32).fill(19);
 const wallet = derivePcashProfileFromPrivateKey(key, network);
 const signer = privateKeyPcashActionSigner(key);
 const code = buildExtendedCode({ address: wallet.address, chainId: network.pcashChainId, mlKemPublicKey: wallet.mlKemPublicKey });
-const definition: AssetDefinition = {
-  initialSupply: 1_000n,
-  assetSecretCommitment: 0x72n,
+const definition: AssetDefinition = fixedSupplyAssetDefinition({
+  supply: 1_000n,
+  secretCommitment: 0x72n,
   metadata: { name: "Transfer Token", symbol: "XFR", decimals: 2, contentDigest: new Uint8Array(32).fill(9) },
-};
+});
 const assetId = assetDefinitionAssetId(definition);
 const payee = { address: 0x5050n, keys: generateMlKemKeyPair(new Uint8Array(64).fill(41)) };
 const payeeCode = buildExtendedCode({ address: payee.address, chainId: network.pcashChainId, mlKemPublicKey: payee.keys.publicKey });
+const other = { address: 0x6060n, keys: generateMlKemKeyPair(new Uint8Array(64).fill(42)) };
+const otherCode = buildExtendedCode({ address: other.address, chainId: network.pcashChainId, mlKemPublicKey: other.keys.publicKey });
 
 function fixture(notes: { assetId: bigint; amount: bigint }[], options: {
   receiveKey?: MlKemKeyPair | null;
   ownsReceiveKey?: boolean;
   beforeSign?: () => Promise<void>;
   beforeProve?: () => Promise<void>;
+  shapes?: readonly PrivateValueShape[];
 } = {}) {
   const registered = options.receiveKey === undefined
     ? { publicKey: wallet.mlKemPublicKey, secretKey: wallet.mlKemSecretKey } : options.receiveKey;
@@ -76,7 +81,7 @@ function fixture(notes: { assetId: bigint; amount: bigint }[], options: {
     estimateFee: async () => ({ tiers: { low: 2n, standard: 3n, fast: 4n } }),
   } as unknown as PcashNodeClient;
   const proofs: { build: AssetActionBuild; packageName: string }[] = [];
-  const prover = { shapes: [0] as const, proveAndEncode: async (build: AssetActionBuild, authorization: { packageName: string }) => {
+  const prover = { shapes: options.shapes ?? ([0] as const), proveAndEncode: async (build: AssetActionBuild, authorization: { packageName: string }) => {
     proofs.push({ build, packageName: authorization.packageName });
     await options.beforeProve?.();
     return build.encodeTransaction(new Uint8Array(WIRE_PROOF_BYTES));
@@ -87,14 +92,16 @@ function fixture(notes: { assetId: bigint; amount: bigint }[], options: {
       entries.push(entry);
       return { accepted: false, queued: true, output: null };
     } };
+  let signatures = 0;
   const run = (intent: Pick<AssetTransferIntent, "outputs" | "burnAmount" | "retryContentHash" | "data" | "accountCreation"> & { submission?: DurableSubmissionAdapter<null, null> }) => runAssetTransferClient({
     assetId, openFeeAmount: 3n, node, store, wallet,
     signer: { address: signer.address, signTypedData: async request => {
+      signatures++;
       await options.beforeSign?.();
       return signer.signTypedData(request);
     } }, chainId: network.pcashChainId, prover, submission, ...intent,
   });
-  return { store, run, proofs, entries };
+  return { store, run, proofs, entries, signatures: () => signatures };
 }
 
 /** The note at `slot` the wallet's own key opens, with any delivered asset definition. */
@@ -318,6 +325,35 @@ describe("asset transfer client", () => {
       .rejects.toThrow(/another publication mode/);
     await expect(f.run({ outputs, retryContentHash: `0x${"ee".repeat(32)}` })).rejects.toThrow(/does not name a journaled asset payment or burn/);
     expect(f.proofs).toHaveLength(1);
+  });
+
+  it("keeps five recipients of a short definition in S when the prover also proves L", async () => {
+    const f = fixture([{ assetId, amount: 100n }, { assetId: 0n, amount: 3n }], { shapes: [0, 1] });
+    await f.run({ outputs: Array.from({ length: 5 }, () => ({ to: payeeCode, amount: 20n })) });
+    const { build, packageName } = f.proofs[0]!;
+    expect(build.shape).toBe(0);
+    expect(packageName).toBe("account_rule_batch_transfer_ecdsa");
+    expect(build.outputAmounts).toEqual([20n, 20n, 20n, 20n, 20n]);
+    expect(deliveredOutput(build, network.pcashChainId, payee.keys.secretKey, 4)?.records).toEqual([assetDefinitionSchema.encode(definition)]);
+  });
+
+  it("builds in L when S has no slot for a record's envelope, and refuses before signing when the prover proves only S", async () => {
+    // Five payments fill S's five slots; a record for someone the action does not pay needs a sixth.
+    const notes = [{ assetId, amount: 100n }, { assetId: 0n, amount: 3n }];
+    const intent = { outputs: Array.from({ length: 5 }, () => ({ to: payeeCode, amount: 20n })),
+      data: { recipients: [{ to: otherCode, records: [{ schema: applicationSchemaId("com.example.note"), data: Uint8Array.of(1) }] }] } };
+    const large = fixture(notes, { shapes: [0, 1] });
+    await large.run(intent);
+    const { build } = large.proofs[0]!;
+    expect(build.shape).toBe(1);
+    expect(senderRegionOf(build, network.pcashChainId, wallet.outgoingKey)?.sentEnvelopes
+      .filter((entry) => entry.recordsOnly === true).map((entry) => [entry.slot, entry.recipientAddress])).toEqual([[5, other.address]]);
+
+    const small = fixture(notes);
+    await expect(small.run(intent)).rejects.toThrow("transaction data needs more envelope slots than this profile provides");
+    expect(small.signatures()).toBe(0);
+    expect(small.proofs).toHaveLength(0);
+    expect(small.store.snapshot()?.pendingAssetActions ?? []).toEqual([]);
   });
 
   it("refuses more recipients than one action carries", async () => {

@@ -161,7 +161,7 @@ export class WalletHttpClient {
         });
       case "asset": {
         if (cli.subcommand === "create") return this.request("POST", "/assets", { ...submission,
-          name: cli.assetName, symbol: cli.assetSymbol, decimals: cli.assetDecimals, initialSupply: cli.assetSupply!.toString(),
+          name: cli.assetName, symbol: cli.assetSymbol, decimals: cli.assetDecimals, supply: cli.assetSupply!.toString(),
           contentDigest: cli.assetContentDigest,
           ...(cli.fee === undefined ? {} : { openFeeAmount: cli.fee.toString() }),
           ...(cli.retryContentHash === undefined ? {} : { retryContentHash: cli.retryContentHash }),

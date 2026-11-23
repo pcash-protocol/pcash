@@ -32,7 +32,6 @@ import { publicationContractAddress,
 } from "@pcash/marketplace/app";
 import type { Address } from "viem";
 import { useNetwork } from "../../components/NetworkContext.tsx";
-import { networkInstanceKey } from "../../lib/networks.ts";
 import { PCASH_UNIT } from "../../components/pcashAmount.ts";
 import { formatTokenAmount, parseUnitAmount, type AmountUnit } from "../../components/tokenAmount.ts";
 import { encodeAssetDefinition } from "@pcash/sdk/protocol";
@@ -96,9 +95,9 @@ export function useMarketplace() {
   return useContext(MarketplaceContext)!;
 }
 
-export function useMarketplaceController() {
+/** `scope` names the chain the node reports; the store opens once it is known. */
+export function useMarketplaceController(scope: string | undefined) {
   const { network } = useNetwork();
-  const scope = networkInstanceKey(network);
   const router = useMemo(() => resolveMarketplaceRouterConfiguration({
     VITE_PAYMENT_ROUTER_ADDRESS: network.paymentRouterAddress,
   }), [network]);
@@ -228,6 +227,7 @@ export function useMarketplaceController() {
   const ready = phase === "ready";
 
   useEffect(() => {
+    if (scope === undefined) return;
     let opened: IndexedDbMarketplaceStore | undefined;
     let cancelled = false;
     void openMarketplaceStore(marketplaceStoreName(scope))
@@ -251,7 +251,7 @@ export function useMarketplaceController() {
         void actionCompletion.current.finally(() => opened?.close());
       else opened?.close();
     };
-  }, []);
+  }, [scope]);
 
   const controller = useMemo(
     () =>

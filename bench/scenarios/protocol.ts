@@ -7,7 +7,10 @@ import {
   buildNativeTransfer,
   defaultUserAccountRuleSet,
   deriveWalletIdentity,
-  assetSecretCommitment,
+  FIXED_SUPPLY_RULE_CIRCUIT,
+  fixedSupplyMintRule,
+  fixedSupplyMintWitness,
+  fixedSupplySecretCommitment,
   fullOutputCommitment,
   generateMlKemKeyPair,
   nullifierKeyCommitment,
@@ -17,7 +20,7 @@ import {
   accountStateCommitment,
   receiveKeyHash,
   sizeClassFiller,
-  standardFungibleAssetId,
+  findAssetDescriptor,
 } from "@pcash/sdk/browser";
 import { buildAssetCovenantRuleWitness } from "@pcash/sdk/fixtures";
 import {
@@ -108,15 +111,11 @@ async function sharedState(context: ScenarioContext) {
 
   const assetSecret = 0x123456n;
   const totalSupply = 1_200n;
-  const assetDescriptorFields = {
+  const mintConfiguration = { supply: totalSupply, secretCommitment: fixedSupplySecretCommitment(assetSecret) };
+  const assetDescriptor = findAssetDescriptor({
     metadataCommitment: 0x909090n,
-    initialSupply: totalSupply,
-    assetSecretCommitment: assetSecretCommitment(assetSecret),
-  };
-  const assetDescriptor = {
-    assetId: standardFungibleAssetId(assetDescriptorFields),
-    ...assetDescriptorFields,
-  };
+    mintRule: fixedSupplyMintRule(mintConfiguration),
+  }, 0n);
   const assetId = assetDescriptor.assetId;
 
   const outputTree = new SparseMerkleTree(MERKLE_DEPTH);
@@ -211,6 +210,7 @@ async function sharedState(context: ScenarioContext) {
     assetDescriptor,
     assetId,
     assetSecret,
+    mintConfiguration,
     totalSupply,
     outputTree,
     snapshot,
@@ -262,20 +262,19 @@ export function protocolScenarios(): PerformanceScenario[] {
       },
     },
     {
-      id: "asset-creation",
-      label: "Registered asset creation",
-      description: "A registered USER authorizes fixed-supply asset creation with zero native input and zero PCASH fee.",
-      circuits: ["account_rule_asset_creation_ecdsa", NO_OP_EVENT_APPLICATION, "private_value_asset_creation_kernel", "private_value_hiding_kernel"],
+      id: "fixed-supply-mint",
+      label: "Fixed-supply mint",
+      description: "A registered USER mints a fixed-supply asset's entire supply with zero native input and zero PCASH fee.",
+      circuits: ["account_rule_mint_ecdsa", FIXED_SUPPLY_RULE_CIRCUIT, NO_OP_EVENT_APPLICATION, "private_value_mint_kernel", "private_value_hiding_kernel"],
       async prepare(context) {
         const s = await state(context);
         const build = buildAssetAction({
           pcashChainId,
           snapshot: s.snapshot,
-          owner: s.nativeAccount(s.nativeRules.assetCreationRule),
-          assetDescriptor: s.assetDescriptor,
-          assetSecret: s.assetSecret,
+          owner: s.nativeAccount(s.nativeRules.mintRule),
+          mint: { descriptor: s.assetDescriptor },
           inputs: [
-            { kind: "creation-marker" },
+            { kind: "mint-marker", replayId: s.assetSecret },
             { kind: "dummy" },
             { kind: "dummy" },
             { kind: "dummy" },
@@ -306,13 +305,18 @@ export function protocolScenarios(): PerformanceScenario[] {
         });
         const witness = prepared.authorize(authorizePcashRequestWithPrivateKey(s.nativePrivateKey, prepared.request));
         const request: AssetActionProofRequest = {
-          operation: "assetCreation",
+          operation: "mint",
           authorization: {
-            circuitUrl: CIRCUIT_URLS.account_rule_asset_creation_ecdsa,
+            circuitUrl: CIRCUIT_URLS.account_rule_mint_ecdsa,
             witnessMap: witness.witnessMap,
-            label: "installed asset-creation authorization",
+            label: "installed mint authorization",
           },
-          buildKernelWitnessMap: build.buildAssetCreationKernelWitnessMap,
+          mintRule: {
+            circuitUrl: CIRCUIT_URLS.mint_rule_fixed_supply,
+            witnessMap: fixedSupplyMintWitness({ mint: build, configuration: s.mintConfiguration, secret: s.assetSecret }),
+            label: "fixed-supply mint rule",
+          },
+          buildKernelWitnessMap: build.buildMintKernelWitnessMap,
           expectedPublicInputs: build.publicInputs,
         };
         return {

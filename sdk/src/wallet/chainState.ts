@@ -62,8 +62,6 @@ export interface NullifierConsumption {
   timestamp: bigint;
   transactionId: string;
   contentHash: string;
-  /** Every nullifier the transaction inserted, in input-slot order. */
-  nullifiers: string[];
 }
 
 export interface ChainBlock {
@@ -188,7 +186,6 @@ function storedConsumption(consumption: NullifierConsumption): Record<string, un
     timestamp: consumption.timestamp.toString(),
     transactionId: consumption.transactionId,
     contentHash: consumption.contentHash,
-    nullifiers: consumption.nullifiers,
   };
 }
 
@@ -200,7 +197,6 @@ function loadedConsumption(value: unknown): NullifierConsumption {
     timestamp: BigInt(consumption.timestamp as string),
     transactionId: consumption.transactionId as string,
     contentHash: consumption.contentHash as string,
-    nullifiers: consumption.nullifiers as string[],
   };
 }
 
@@ -426,6 +422,8 @@ export class WalletChainState {
     anchor: CurrentBoundaryEnvelope;
     finalizedBlock: bigint;
     watched: ReadonlySet<string>;
+    /** Keep finalized consumption nobody watches, for a history scan that has notes still to find. */
+    keepEverySpend?: boolean;
   }): ChainCommit {
     const block = { pcashNumber: params.anchor.header.number, pcashHash: lowerHex(fieldToHex(params.anchor.blockHash)) };
     const checkpoint: Checkpoint = { ...block, frontier: this.outputs.frontier(), accountUndo: this.#stepUndo };
@@ -453,13 +451,18 @@ export class WalletChainState {
       this.#writes.set(checkpointKey(oldest.pcashNumber), storedCheckpoint(oldest));
     }
     for (const [nullifier, consumption] of this.consumed) {
-      if (!params.watched.has(nullifier) && consumption.pcashNumber <= params.finalizedBlock) {
+      if (params.keepEverySpend !== true && !params.watched.has(nullifier) && consumption.pcashNumber <= params.finalizedBlock) {
         this.consumed.delete(nullifier);
         this.#writes.set(nullifierKey(nullifier), null);
       }
     }
     this.anchor = params.anchor;
     this.synced = block;
+    return this.commitChanges();
+  }
+
+  /** Commit changes to tracked witnesses and consumptions at the current block. */
+  commitChanges(): ChainCommit {
     this.revision += 1;
     this.#writes.set(META, this.#meta());
     const commit = { replace: this.#replace, writes: this.#writes };

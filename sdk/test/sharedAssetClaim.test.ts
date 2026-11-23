@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sharedAssetClaimFixture } from "./sharedAssetClaimFixtures.ts";
+import { sharedAssetClaimFixture } from "@pcash/test-support/shared-asset-claim-fixtures";
 import { SlotClass } from "../src/protocol/transaction.ts";
 import { decodeContractBody, verifyContract } from "../src/protocol/contract.ts";
 import { PRIVATE_VALUE_MAX_INPUTS, PRIVATE_VALUE_MAX_OUTPUTS } from "../src/constants/privateValueProfiles.ts";

@@ -7,6 +7,7 @@ import { MERKLE_DEPTH } from "../src/constants/params.ts";
 import { emptyRoot } from "../src/crypto/merkle.ts";
 import {
   emptyOutputFrontier,
+  extendOutputWitness,
   outputFrontierRoot,
   OutputWitnessTree,
   type OutputFrontier,
@@ -151,6 +152,20 @@ describe("OutputWitnessTree", () => {
     expect(copy.tree.root()).toBe(pair.tree.root());
     expect(copy.tree.toJSON()).toEqual(pair.tree.toJSON());
     for (const index of pair.marked) expect(copy.tree.witness(index)).toEqual(pair.tree.witness(index));
+  });
+
+  it("extends every prefix witness to the live tree using only its last leaf's opening", () => {
+    const live = new SparseMerkleTree(MERKLE_DEPTH);
+    const prefix = new OutputWitnessTree();
+    const leaf = (index: bigint) => index + 123n;
+    for (let index = 0n; index < 37n; index++) live.setLeaf(index, leaf(index));
+    for (let last = 0n; last < 37n; last++) {
+      prefix.append(leaf(last), true);
+      const edge = { index: last, commitment: leaf(last), siblings: live.proof(last).siblings };
+      for (let index = 0n; index <= last; index++) {
+        expect(extendOutputWitness(index, prefix.witness(index), edge)).toEqual(live.proof(index).siblings);
+      }
+    }
   });
 
   it("continues from a frontier taken mid-stream", () => {

@@ -3,7 +3,14 @@ import { buildAssetAction } from "../src/builders/assetAction.ts";
 import { openedAssetActionOutput, type AssetActionInput, type AssetActionOutput } from "../src/builders/assetOutputs.ts";
 import { PRIVATE_VALUE_PROFILES, privateValueProfile, type PrivateValueShape } from "../src/constants/privateValueProfiles.ts";
 import { accountRuleEntryCommitment, accountStateCommitment, buildAccountRuleSet } from "../src/protocol/account.ts";
-import { assetSecretCommitment, standardFungibleAssetId } from "../src/protocol/asset.ts";
+import { findAssetDescriptor } from "../src/protocol/asset.ts";
+import { FIXED_SUPPLY_RULE_VK_HASH } from "../src/constants/rulePins.ts";
+import {
+  FIXED_SUPPLY_RULE_CIRCUIT,
+  fixedSupplyConfigurationCommitment,
+  fixedSupplyMintWitness,
+  fixedSupplySecretCommitment,
+} from "../src/rules/fixedSupply.ts";
 import { fullOutputCommitment, nullifierKeyCommitment } from "../src/protocol/notes.ts";
 import { DEFAULT_NETWORK_CONFIG } from "../src/protocol/network.ts";
 import { SparseMerkleTree } from "../src/crypto/tree.ts";
@@ -14,9 +21,13 @@ import { deriveTestWallet } from "./testWallet.ts";
 import { authorizePcashRequestWithPrivateKey } from "../src/eip712/authorization.ts";
 import { nativeBurnAmount, type NativeBurn } from "../src/protocol/fee.ts";
 
-/** Asset creation with native funding and delivery in the last slot of either profile. */
+/**
+ * Fixed-supply asset creation with native funding and delivery in the last slot
+ * of either profile. `mintRuleVkHash` is the fixed-supply rule's VK hash, the
+ * release pin unless given.
+ */
 export function assetProfileFixture(params: {
-  shape: PrivateValueShape; authorizationVkHash?: bigint; validUntilTimestamp?: bigint; preparedEvent?: PreparedEvent;
+  shape: PrivateValueShape; authorizationVkHash?: bigint; mintRuleVkHash?: bigint; validUntilTimestamp?: bigint; preparedEvent?: PreparedEvent;
   /** Burned from the native input; the open fee takes the rest unless given. */
   burn?: NativeBurn; openFeeAmount?: bigint;
 }) {
@@ -25,7 +36,7 @@ export function assetProfileFixture(params: {
   const recipient = deriveTestWallet({ privKey: new Uint8Array(32).fill(7), nkRoot: 456n, mlKem: "deterministic" });
   const chainId = BigInt(DEFAULT_NETWORK_CONFIG.pcashChainId);
   const defaults = defaultUserAccountRuleSet({ wallet, secrets: TEST_DEFAULT_RULE_SECRETS });
-  const defaultRule = params.shape === PRIVATE_VALUE_PROFILES.L.shapeId ? defaults.largeAssetCreationRule : defaults.assetCreationRule;
+  const defaultRule = params.shape === PRIVATE_VALUE_PROFILES.L.shapeId ? defaults.largeMintRule : defaults.mintRule;
   const configurationCommitment = ecdsaRuleConfigurationCommitment(DEFAULT_NETWORK_CONFIG, nullifierKeyCommitment(wallet.nkRoot));
   const commitmentBlinder = defaultRule.commitmentBlinder;
   const entryIndex = defaultRule.entryIndex;
@@ -45,22 +56,25 @@ export function assetProfileFixture(params: {
     outputRootStateSiblings: recent.outputRootStateSiblings, accountStateRoot: accounts.root,
     accountStateRootStateSiblings: recent.accountStateRootStateSiblings,
   };
-  const assetSecret = 987n;
-  const assetFields = { metadataCommitment: 765n, initialSupply: 1_000n,
-    assetSecretCommitment: assetSecretCommitment(assetSecret) };
-  const assetDescriptor = { ...assetFields, assetId: standardFungibleAssetId(assetFields) };
+  const secret = 987n;
+  const supply = 1_000n;
+  const configuration = { supply, secretCommitment: fixedSupplySecretCommitment(secret) };
+  const mintRuleVkHash = params.mintRuleVkHash ?? FIXED_SUPPLY_RULE_VK_HASH;
+  const assetDescriptor = findAssetDescriptor({ metadataCommitment: 765n, mintRule: {
+    sVkHash: mintRuleVkHash, lVkHash: mintRuleVkHash, configurationCommitment: fixedSupplyConfigurationCommitment(configuration),
+  } }, 0n);
   const inputSlots: AssetActionInput[] = Array.from({ length: profile.inputs }, () => ({ kind: "dummy" }));
-  inputSlots[0] = { kind: "creation-marker" };
+  inputSlots[0] = { kind: "mint-marker", replayId: secret };
   if (profile.inputs > 1) inputSlots[profile.inputs - 1] = { kind: "native", noteSecret, amount: 10n, leafIndex: 0, siblings: outputs.proof(0).siblings };
   const outputSlots: AssetActionOutput[] = Array.from({ length: profile.outputs }, (_, i) => ({
     kind: "dummy", dummySecret: BigInt(i + 123), amount: 0n, outputData: sizeClassFiller(),
   }));
   outputSlots[profile.outputs - 1] = openedAssetActionOutput({ kind: "asset", pcashChainId: chainId,
-    assetId: assetDescriptor.assetId, outputIndex: profile.outputs - 1, noteSecret: 777n, amount: assetFields.initialSupply,
+    assetId: assetDescriptor.assetId, outputIndex: profile.outputs - 1, noteSecret: 777n, amount: supply,
     recipientAddress: recipient.address, recipientMlKemPublicKey: recipient.mlKemPublicKey!, authenticatedRecipient: true });
   const build = buildAssetAction({
     ...(params.preparedEvent === undefined ? {} : { preparedEvent: params.preparedEvent }),
-    shape: params.shape, pcashChainId: chainId, snapshot, assetDescriptor, assetSecret,
+    shape: params.shape, pcashChainId: chainId, snapshot, mint: { descriptor: assetDescriptor },
     owner: { address: wallet.address, nkRoot: wallet.nkRoot, accountIndex: 0, accountSiblings: accounts.proof(0).siblings,
       accountRuleSetCommitment: set.accountRuleSetCommitment, accountKind: 0n, accountRevision: 1n,
       receiveKeyHash: 0n,
@@ -72,5 +86,6 @@ export function assetProfileFixture(params: {
   });
   const prepared = build.prepareOwnerAuthorization({ wallet });
   const signed = prepared.authorize(authorizePcashRequestWithPrivateKey(wallet.privKey, prepared.request));
-  return { build, wallet, recipient, assetDescriptor, assetSecret, snapshot, prepared, signed };
+  const mintRule = { packageName: FIXED_SUPPLY_RULE_CIRCUIT, witnessMap: fixedSupplyMintWitness({ mint: build, configuration, secret }) };
+  return { build, wallet, recipient, assetDescriptor, secret, configuration, snapshot, prepared, signed, mintRule };
 }

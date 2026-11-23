@@ -74,8 +74,8 @@ mod tests {
         note_body_commitment, nullifier_key_commitment, owner_commitment,
     };
     use pcash_protocol::ledger::private_value::{
-        private_value_commitment, SLOT_CLASS_APPLICATION, SLOT_CLASS_ASSET,
-        SLOT_CLASS_ASSET_CREATION, SLOT_CLASS_DUMMY, SLOT_CLASS_NATIVE, SmallPrivateValue,
+        private_value_commitment, SLOT_CLASS_APPLICATION, SLOT_CLASS_ASSET, SLOT_CLASS_DUMMY,
+        SLOT_CLASS_MINT, SLOT_CLASS_NATIVE, SmallPrivateValue,
     };
     use reference_rule_common::value_rule::owner_change_note_secret;
     use tokens_common::{drop_configuration_commitment, DropConfiguration};
@@ -249,10 +249,10 @@ mod tests {
         let _ = reclaim(tx, false, 0);
     }
 
-    #[test(should_fail_with = "input slot must not be a creation marker")]
-    fn test_rejects_a_creation_marker() {
+    #[test(should_fail_with = "input slot must not be a mint marker")]
+    fn test_rejects_a_mint_marker() {
         let mut tx = private_value(false);
-        tx.input_slot_classes[3] = SLOT_CLASS_ASSET_CREATION;
+        tx.input_slot_classes[3] = SLOT_CLASS_MINT;
         tx.input_commitments[3] = 0;
         let _ = reclaim(tx, false, 0);
     }

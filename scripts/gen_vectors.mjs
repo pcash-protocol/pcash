@@ -295,19 +295,41 @@ const privateValueCommitmentValue = poseidon(
   ...outputSlotClasses.flatMap((slotClass, index) => [slotClass, outputBodyCommitments[index]]),
 );
 const standardAssetMetadataCommitment = 0xa0a0n;
-const standardAssetInitialSupply = 1_000_000n;
-const standardAssetSecret = 0xb0b0n;
-const standardAssetSecretCommitment = poseidon(
-  tag("ASSET_SECRET_COMMITMENT_DOMAIN"), standardAssetSecret,
+const ASSET_CLASS_BOUND = 1n << 252n;
+// The first instance salt that puts the definition's asset ID in its class:
+// below 2^252 and nonzero without a transfer rule, in [2^252, 2^253) with one.
+const assetInClass = (metadataCommitment, mintRuleCommitment, transferRuleCommitment) => {
+  for (let instanceSalt = 0n; ; instanceSalt += 1n) {
+    const coreCommitment = poseidon(tag("ASSET_CORE_DOMAIN"), instanceSalt, metadataCommitment, mintRuleCommitment);
+    const assetId = poseidon(tag("ASSET_ID_DOMAIN"), coreCommitment, transferRuleCommitment);
+    const inClass = transferRuleCommitment === 0n
+      ? assetId !== 0n && assetId < ASSET_CLASS_BOUND
+      : assetId >= ASSET_CLASS_BOUND && assetId < 2n * ASSET_CLASS_BOUND;
+    if (inClass) return { instanceSalt, coreCommitment, assetId };
+  }
+};
+const mintRule = { sVkHash: 0x3131n, lVkHash: 0x3232n, configurationCommitment: 0xc0f8n };
+const mintRuleCommitmentValue = poseidon(
+  tag("ASSET_MINT_RULE_DOMAIN"), mintRule.sVkHash, mintRule.lVkHash, mintRule.configurationCommitment,
 );
-const assetIdValue = poseidon(
-  tag("ASSET_ID_DOMAIN"),
-  standardAssetMetadataCommitment,
-  standardAssetInitialSupply,
-  standardAssetSecretCommitment,
+const unrestrictedAsset = assetInClass(standardAssetMetadataCommitment, mintRuleCommitmentValue, 0n);
+const assetIdValue = unrestrictedAsset.assetId;
+const mintReplayId = 0xb0b0n;
+const mintMarkerValue = poseidon(tag("MINT_MARKER_DOMAIN"), assetIdValue, mintReplayId);
+const mintAccount = 0x87c018ef0000000000000000000000000000a1a9n;
+const mintValidUntil = 1_700_000_000n;
+const mintContextValue = poseidon(
+  tag("ASSET_MINT_POLICY_DOMAIN"), assetIdValue, mintRule.configurationCommitment, mintAccount, mintValidUntil,
 );
-const assetCreationMarker = poseidon(
-  tag("ASSET_CREATION_MARKER_DOMAIN"), assetIdValue, standardAssetSecret,
+const transferRule = { sVkHash: 0x5151n, lVkHash: 0x1a1an, configurationCommitment: 0xc0f9n };
+const transferRuleCommitmentValue = poseidon(
+  tag("ASSET_TRANSFER_RULE_DOMAIN"), transferRule.sVkHash, transferRule.lVkHash, transferRule.configurationCommitment,
+);
+const restrictedAsset = assetInClass(standardAssetMetadataCommitment, mintRuleCommitmentValue, transferRuleCommitmentValue);
+const policyOwner = 0x0000000000000000000000000000000000000c0an;
+const policyValidUntil = 1_800_000_000n;
+const policyContextValue = poseidon(
+  tag("ASSET_POLICY_DOMAIN"), restrictedAsset.assetId, transferRule.configurationCommitment, policyOwner, policyValidUntil,
 );
 const assetInputNoteCommitment = 0xc0c0n;
 const assetInputAmount = 41n;
@@ -855,18 +877,45 @@ const protocolVectors = {
     pcashChainId: toFieldHex32(PCASH_CHAIN_ID),
     privateValueCommitment: toFieldHex32(privateValueCommitmentValue),
     transfer: actionCommitmentVector("TRANSFER_ACTION_DOMAIN", 0n),
-    assetCreation: actionCommitmentVector("ASSET_CREATION_ACTION_DOMAIN", assetIdValue),
+    mint: actionCommitmentVector("MINT_ACTION_DOMAIN", assetIdValue),
     sponsoredTransfer: actionCommitmentVector("SPONSORED_TRANSFER_ACTION_DOMAIN", 0n),
     contractFeeSponsorship: actionCommitmentVector("CONTRACT_FEE_SPONSORSHIP_ACTION_DOMAIN", contractAddress),
     accountUpdate: actionCommitmentVector("ACCOUNT_UPDATE_ACTION_DOMAIN", accountUpdateCommitmentValue),
   },
   assetComposition: {
     metadataCommitment: toFieldHex32(standardAssetMetadataCommitment),
-    initialSupply: toFieldHex32(standardAssetInitialSupply),
-    assetSecret: toFieldHex32(standardAssetSecret),
-    assetSecretCommitment: toFieldHex32(standardAssetSecretCommitment),
+    mintRule: {
+      sVkHash: toFieldHex32(mintRule.sVkHash),
+      lVkHash: toFieldHex32(mintRule.lVkHash),
+      configurationCommitment: toFieldHex32(mintRule.configurationCommitment),
+      commitment: toFieldHex32(mintRuleCommitmentValue),
+    },
+    instanceSalt: toFieldHex32(unrestrictedAsset.instanceSalt),
+    coreCommitment: toFieldHex32(unrestrictedAsset.coreCommitment),
     assetId: toFieldHex32(assetIdValue),
-    marker: toFieldHex32(assetCreationMarker),
+    replayId: toFieldHex32(mintReplayId),
+    marker: toFieldHex32(mintMarkerValue),
+    mintContext: {
+      accountAddress: toFieldHex32(mintAccount),
+      validUntilTimestamp: toFieldHex32(mintValidUntil),
+      value: toFieldHex32(mintContextValue),
+    },
+    restricted: {
+      transferRule: {
+        sVkHash: toFieldHex32(transferRule.sVkHash),
+        lVkHash: toFieldHex32(transferRule.lVkHash),
+        configurationCommitment: toFieldHex32(transferRule.configurationCommitment),
+        commitment: toFieldHex32(transferRuleCommitmentValue),
+      },
+      instanceSalt: toFieldHex32(restrictedAsset.instanceSalt),
+      coreCommitment: toFieldHex32(restrictedAsset.coreCommitment),
+      assetId: toFieldHex32(restrictedAsset.assetId),
+      policyContext: {
+        ownerAddress: toFieldHex32(policyOwner),
+        validUntilTimestamp: toFieldHex32(policyValidUntil),
+        value: toFieldHex32(policyContextValue),
+      },
+    },
     input: {
       slot: 0,
       inputCommitment: toFieldHex32(assetInputNoteCommitment),
@@ -1206,10 +1255,18 @@ const protocolNoirVectors = () => {
   const contract = protocolVectors.contractAddress;
   const tests = [];
   const test = (name, ...statements) => tests.push(noir.noirTest(name, statements));
-  test("test_standard_asset_composition_matches_published_vector",
-    assertCall("asset_secret_commitment", [asset.assetSecret], asset.assetSecretCommitment),
-    assertCall("standard_fungible_asset_id", [asset.metadataCommitment, asset.initialSupply, asset.assetSecretCommitment], asset.assetId),
-    assertCall("asset_creation_marker", [asset.assetId, asset.assetSecret], asset.marker));
+  const mintRule = asset.mintRule;
+  const restricted = asset.restricted;
+  test("test_asset_composition_matches_published_vector",
+    assertCall("mint_rule_commitment", [mintRule.sVkHash, mintRule.lVkHash, mintRule.configurationCommitment], mintRule.commitment),
+    assertCall("asset_core_commitment", [asset.instanceSalt, asset.metadataCommitment, mintRule.commitment], asset.coreCommitment),
+    assertCall("asset_id", [asset.coreCommitment, 0], asset.assetId),
+    assertCall("mint_marker", [asset.assetId, asset.replayId], asset.marker),
+    assertCall("mint_context", [asset.assetId, mintRule.configurationCommitment, asset.mintContext.accountAddress, asset.mintContext.validUntilTimestamp], asset.mintContext.value),
+    assertCall("transfer_rule_commitment", [restricted.transferRule.sVkHash, restricted.transferRule.lVkHash, restricted.transferRule.configurationCommitment], restricted.transferRule.commitment),
+    assertCall("asset_core_commitment", [restricted.instanceSalt, asset.metadataCommitment, mintRule.commitment], restricted.coreCommitment),
+    assertCall("asset_id", [restricted.coreCommitment, restricted.transferRule.commitment], restricted.assetId),
+    assertCall("policy_context", [restricted.assetId, restricted.transferRule.configurationCommitment, restricted.policyContext.ownerAddress, restricted.policyContext.validUntilTimestamp], restricted.policyContext.value));
   const userAccountState = (receiveKeyHash) => [accountState.address, accountState.nullifierKeyCommitment, accountState.accountRuleSetCommitment, "ACCOUNT_KIND_USER", accountState.accountRevision, receiveKeyHash];
   test("test_account_state_commitments_match_published_vectors",
     assertCall("account_state_commitment", userAccountState(accountState.receiveKeyHash), accountState.userPresent),
@@ -1231,7 +1288,7 @@ const protocolNoirVectors = () => {
     letValue("pcash_chain_id", actions.pcashChainId),
     letValue("commitment", actions.privateValueCommitment),
     assertCall("transfer_action_commitment", ["pcash_chain_id", "commitment"], actions.transfer.value),
-    assertCall("asset_creation_action_commitment", ["pcash_chain_id", "commitment", actions.assetCreation.extraData], actions.assetCreation.value),
+    assertCall("mint_action_commitment", ["pcash_chain_id", "commitment", actions.mint.extraData], actions.mint.value),
     assertCall("sponsored_transfer_action_commitment", ["pcash_chain_id", "commitment"], actions.sponsoredTransfer.value),
     assertCall("contract_fee_sponsorship_action_commitment", ["pcash_chain_id", "commitment", actions.contractFeeSponsorship.extraData], actions.contractFeeSponsorship.value),
     assertCall("account_update_action_commitment", ["pcash_chain_id", "commitment", actions.accountUpdate.extraData], actions.accountUpdate.value));
@@ -1294,10 +1351,10 @@ const protocolNoirVectors = () => {
       ["crate::state::carrier_context", ["carrier_context_hash", "CARRIER_KIND_EVENT", "CARRIER_KIND_INBOX"]],
       ["crate::state::l1_logs", ["l1_origin_leaf", "normalized_log_leaf"]],
       ["crate::state::merkle", ["binary_root_from_index"]],
-      ["crate::ledger::asset", ["asset_creation_marker", "asset_secret_commitment", "standard_fungible_asset_id"]],
+      ["crate::ledger::asset", ["asset_core_commitment", "asset_id", "mint_context", "mint_marker", "mint_rule_commitment", "policy_context", "transfer_rule_commitment"]],
       ["crate::ledger::note", ["dummy_nullifier", "note_nk", "nullifier", "output_commitment"]],
       ["crate::authorization::account", ["account_rule_entry_commitment", "account_state_commitment", "account_update_commitment", "ACCOUNT_KIND_CONTRACT", "ACCOUNT_KIND_USER"]],
-      ["crate::authorization::statement", ["account_update_action_commitment", "asset_creation_action_commitment", "authorization_commitment", "contract_fee_sponsorship_action_commitment", "sponsored_transfer_action_commitment", "transfer_action_commitment"]],
+      ["crate::authorization::statement", ["account_update_action_commitment", "authorization_commitment", "contract_fee_sponsorship_action_commitment", "mint_action_commitment", "sponsored_transfer_action_commitment", "transfer_action_commitment"]],
       ["crate::ledger::private_value", ["delivery_commitment", "private_value_commitment", "PrivateValue"]],
     ])
     + `\n${tests.join("\n")}`;

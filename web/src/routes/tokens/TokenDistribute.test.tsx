@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WalletBulkJob } from "@pcash/sdk/wallet";
-import { WebsiteSettingsContext, WebsiteSettingsStore } from "../../lib/WebsiteSettings.tsx";
+import { WebsiteSettingsContext, WebsiteSettingsStore, defaultPreferences } from "../../lib/WebsiteSettings.tsx";
 
 const ASSET_ID = 0xabcn;
 const A = `0x${"11".repeat(20)}`;
@@ -21,6 +21,9 @@ vi.mock("@pcash/sdk/clients", async (original) => ({
   pollReceipt: async (_node: unknown, contentHash: string) => receipts.accepted.has(contentHash) ? { outcome: "succeeded" } : null,
 }));
 import { distributionProgress, recipientsPerProof, TokenDistribute, unpaidRecipients } from "./TokenDistribute.tsx";
+
+/** Mainnet's defaults: these tests start at More private. */
+const MORE_PRIVATE_FIRST = defaultPreferences(1);
 
 const UNIT = { decimals: 2, symbol: "HBR" };
 
@@ -83,7 +86,7 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); element.remove(); vi.unstubAllGlobals(); });
 
-const render = () => act(async () => root.render(<WebsiteSettingsContext.Provider value={new WebsiteSettingsStore(() => localStorage)}>
+const render = () => act(async () => root.render(<WebsiteSettingsContext.Provider value={new WebsiteSettingsStore(() => localStorage, MORE_PRIVATE_FIRST)}>
   <MemoryRouter><TokenDistribute assetId={ASSET_ID} unit={UNIT} spendable={1_000n} /></MemoryRouter></WebsiteSettingsContext.Provider>));
 const text = () => element.textContent ?? "";
 const button = (label: string) => [...element.querySelectorAll("button")].find((node) => node.textContent === label)!;

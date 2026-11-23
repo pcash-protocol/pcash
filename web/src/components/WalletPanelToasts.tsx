@@ -34,6 +34,7 @@ export function useWalletToasts() {
 /** How a completed action of this session other than a payment or a mine is announced, by its wallet action name. */
 const ACTION_TITLES: Readonly<Record<string, string>> = {
   "asset-creation": "Token created",
+  mint: "Tokens minted",
   "asset-send": "Token payment confirmed",
   "asset-burn": "Token burn confirmed",
   bulk: "Token payments confirmed",

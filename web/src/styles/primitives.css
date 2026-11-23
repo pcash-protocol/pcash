@@ -7,6 +7,7 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .panel { border: 1px solid var(--color-border); background: var(--color-surface); border-radius: var(--radius-lg); padding: 24px; }
 .route-heading { display: flex; justify-content: space-between; gap: 30px; align-items: end; margin-bottom: 34px; }
 .route-heading h1 { font-size: clamp(42px, 5vw, 66px); }
+.route-heading h2 { margin: 0; font-size: clamp(30px, 3.4vw, 42px); }
 .route-heading p:last-child { max-width: 760px; }
 .rows { display: flex; flex-direction: column; }
 .row { display: grid; grid-template-columns: minmax(90px, .5fr) minmax(0, 1.5fr) auto; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--color-border); align-items: center; }

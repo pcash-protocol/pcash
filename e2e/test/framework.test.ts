@@ -20,6 +20,7 @@ describe("framework primitives", () => {
       "@pcash/marketplace",
       "@pcash/tokens",
       "@pcash/lineage",
+      "@pcash/stablecoin",
       "@pcash/board",
     ]);
     for (const workspace of E2E_WORKSPACE_BUILDS) {

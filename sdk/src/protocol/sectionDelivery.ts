@@ -21,6 +21,7 @@ import {
   assetDefinitionSchema,
   openRecipientRecords,
   planArena,
+  ProfileCapacityError,
   publicCapacity,
   regionCapacity,
   type ArenaContext,
@@ -114,7 +115,7 @@ export function sealSectionDelivery(input: SectionDeliveryInput): SectionDeliver
     } else {
       if (recipient.receiveKey === undefined) throw new Error("records for an address with no receive key travel only with a direct send to it");
       const slot = freeSlots.shift();
-      if (slot === undefined) throw new Error("transaction data needs more envelope slots than this profile provides");
+      if (slot === undefined) throw new ProfileCapacityError("transaction data needs more envelope slots than this profile provides");
       envelopes.push({ slot, receiveKey: recipient.receiveKey, records, recordsTo: recipient.recipientAddress });
     }
   }
@@ -242,6 +243,40 @@ export function paymentMaxMemoBytes(params: { shape: PrivateValueShape; includeS
       ? sentOpeningsSchema.encode([{ slot: 0, directSend: true, recipientAddress: 1n, assetId: 0n, amount: 1n, noteSecret: 1n }])
       : sentEnvelopesSchema.encode([{ slot: 0, sharedSecret: new Uint8Array(32), recipientAddress: 1n }])],
   });
+}
+
+/**
+ * Whether a wallet's section delivery fits the profile's arena, as
+ * `sealSectionDelivery` writes it: each recorded envelope has a region holding
+ * its records and a sent-envelope entry, and the sender region holds `sender`,
+ * those entries, a sent opening for each out-of-band output, and the openings
+ * of the direct sends the section spends. Change and a relay fee without
+ * records are not recorded and are left out.
+ */
+export function sectionDeliveryFits(plan: {
+  shape: PrivateValueShape;
+  /** The region records of each recorded envelope; empty for one without a region. */
+  envelopes: readonly (readonly DataRecord[])[];
+  /** Out-of-band outputs the sender region records. */
+  sentOpenings: number;
+  sender: readonly DataRecord[];
+  directSendOpenings?: readonly DirectSendOpening[];
+  public?: readonly DataRecord[];
+}): boolean {
+  const sender = [
+    ...plan.sender,
+    ...(plan.envelopes.length === 0 ? [] : [sentEnvelopesSchema.encode(plan.envelopes.map((_, slot) =>
+      ({ slot, sharedSecret: new Uint8Array(32), recipientAddress: 0n })))]),
+    ...(plan.sentOpenings === 0 ? [] : [sentOpeningsSchema.encode(Array.from({ length: plan.sentOpenings }, (_, slot) =>
+      ({ slot, recipientAddress: 0n, assetId: 0n, amount: 0n, noteSecret: 0n })))]),
+    ...((plan.directSendOpenings?.length ?? 0) === 0 ? [] : [directSendOpeningsSchema.encode(plan.directSendOpenings!)]),
+  ];
+  return planArena({
+    shape: plan.shape,
+    sender: encodeRecords(sender).length,
+    ...(plan.public === undefined ? {} : { public: encodeRecords(plan.public).length }),
+    regions: plan.envelopes.filter(records => records.length > 0).map(records => encodeRecords(records).length),
+  }).fits;
 }
 
 // ===========================================================================

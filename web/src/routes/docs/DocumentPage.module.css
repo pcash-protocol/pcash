@@ -16,7 +16,7 @@
 .tool { padding: 10px 16px; border: 1.5px solid var(--color-text); border-radius: 3px; background: transparent; color: var(--color-text); font: 600 15px/1 var(--font-serif); cursor: pointer; }
 .tool:hover { background: rgb(29 43 34 / 8%); }
 .tool[aria-pressed="true"] { background: var(--color-text); color: var(--color-canvas); }
-/* Below the sticky header, which is two rows tall under 1480px. */
+/* Below the sticky header, which is two rows tall under 1040px. */
 .contents { position: sticky; top: 140px; align-self: start; max-height: calc(100vh - 160px); overflow-y: auto; font-size: 14px; }
 .contents > span, .mobileContents summary { display: block; margin-bottom: 10px; color: var(--color-text-muted); font: 600 12px/1 var(--font-ui); letter-spacing: .12em; text-transform: uppercase; }
 .contents nav, .mobileContents nav { display: grid; gap: 2px; }
@@ -40,11 +40,20 @@
 .body :global(:not(pre) > code) { overflow-wrap: anywhere; }
 .body :global(pre) { overflow-x: auto; margin: 0 0 18px; padding: 16px 18px; border: 1px solid var(--color-border); background: var(--color-surface); font-size: 14px; line-height: 1.5; }
 .body :global(pre code) { font-size: inherit; }
+/* Code in a highlighted language is a dark block on the paper page, as in the explorer's source view. */
+.body :global(pre.highlighted) { border-color: var(--color-code-surface); border-radius: 8px; background: var(--color-code-surface); color: var(--color-code-surface-text); color-scheme: dark; }
+.body :global(pre.highlighted .hljs-keyword) { color: var(--color-syntax-keyword); }
+.body :global(pre.highlighted :is(.hljs-type, .hljs-built_in, .hljs-title.class_)) { color: var(--color-syntax-type); }
+.body :global(pre.highlighted :is(.hljs-title.function_, .hljs-attr)) { color: var(--color-syntax-function); }
+.body :global(pre.highlighted :is(.hljs-string, .hljs-regexp)) { color: var(--color-syntax-string); }
+.body :global(pre.highlighted :is(.hljs-number, .hljs-literal)) { color: var(--color-syntax-number); }
+.body :global(pre.highlighted :is(.hljs-comment, .hljs-meta)) { color: var(--color-syntax-comment); }
+.body :global(pre.highlighted .hljs-subst) { color: var(--color-code-surface-text); }
 /* Code quoted as evidence, captioned with its file. The page can hide it. */
 .body :global(figure.evidence) { margin: 0 0 18px; }
 .body :global(figure.evidence figcaption) { padding: 6px 12px; border: 1px solid var(--color-border); border-bottom: 0; background: var(--color-surface); color: var(--color-text-muted); font: 12px/1.4 var(--font-mono); overflow-wrap: anywhere; }
 .body :global(figure.evidence figcaption a) { color: inherit; }
-.body :global(figure.evidence pre) { margin: 0; }
+.body :global(figure.evidence pre) { margin: 0; border-radius: 0; }
 .hideEvidence :global(figure[data-evidence]) { display: none; }
 .body :global(table) { display: block; overflow-x: auto; margin: 20px 0; border-collapse: collapse; font-size: 15px; }
 .body :global(th), .body :global(td) { padding: 8px 12px; border: 1px solid var(--color-border); text-align: left; vertical-align: top; }

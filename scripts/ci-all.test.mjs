@@ -150,12 +150,13 @@ test('CLI reports failures, success and interruption with saved results and logs
   mkdirSync(join(fixture, 'scripts'), { recursive: true });
   writeFileSync(join(fixture, 'scripts/ci-all.mjs'), readFileSync(join(sourceRoot, 'scripts/ci-all.mjs')));
   for (const file of ['package.json', 'justfile']) writeFileSync(join(fixture, file), readFileSync(join(sourceRoot, file)));
-  for (const p of ['sdk', 'wallet', 'relayer', 'marketplace', 'web/tokens', 'web/board', 'lineage', 'e2e', 'test-support', 'bench', 'web']) {
+  for (const p of ['sdk', 'wallet', 'relayer', 'marketplace', 'web/tokens', 'web/board', 'lineage', 'stablecoin', 'e2e', 'test-support', 'bench', 'web']) {
     mkdirSync(join(fixture, p), { recursive: true });
     writeFileSync(join(fixture, p, 'package.json'), readFileSync(join(sourceRoot, p, 'package.json')));
   }
   mkdirSync(join(fixture, 'marketplace/l1-contracts'), { recursive: true });
   mkdirSync(join(fixture, 'lineage/l1-contracts'), { recursive: true });
+  mkdirSync(join(fixture, 'stablecoin/l1-contracts'), { recursive: true });
   mkdirSync(join(fixture, 'node_modules/.bin'), { recursive: true });
   const stub = `#!${process.execPath}
 const { basename } = require('node:path');

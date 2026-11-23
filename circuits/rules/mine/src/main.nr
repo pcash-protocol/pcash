@@ -37,7 +37,7 @@ mod tests {
     use pcash_protocol::generated::private_value_profiles::{S_INPUTS, S_OUTPUTS, S_SHAPE_ID};
     use pcash_protocol::ledger::private_value::{
         private_value_commitment, PrivateValue, SLOT_CLASS_APPLICATION, SLOT_CLASS_ASSET,
-        SLOT_CLASS_ASSET_CREATION, SLOT_CLASS_DUMMY, SLOT_CLASS_NATIVE,
+        SLOT_CLASS_DUMMY, SLOT_CLASS_MINT, SLOT_CLASS_NATIVE,
     };
 
     fn dummy_transaction() -> PrivateValue<S_INPUTS, S_OUTPUTS, S_SHAPE_ID> {
@@ -92,9 +92,9 @@ mod tests {
     }
 
     #[test(should_fail_with = "mine input must be dummy")]
-    fn test_rejects_creation_marker() {
+    fn test_rejects_mint_marker() {
         let mut tx = dummy_transaction();
-        tx.input_slot_classes[0] = SLOT_CLASS_ASSET_CREATION;
+        tx.input_slot_classes[0] = SLOT_CLASS_MINT;
         let _ = main(6, 4, 3, tx, 0);
     }
 }

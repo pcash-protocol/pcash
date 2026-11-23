@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { WebsiteSettingsContext, WebsiteSettingsStore } from "../../lib/WebsiteSettings.tsx";
+import { WebsiteSettingsContext, WebsiteSettingsStore, defaultPreferences } from "../../lib/WebsiteSettings.tsx";
 
 const PCASH = 10n ** 18n;
 const RECIPIENT = `0x${"12".repeat(20)}`;
@@ -18,13 +18,16 @@ vi.mock("@pcash/sdk/clients", async (original) => ({ ...await original<typeof im
 import { TokenBurn, TokenSend } from "./TokenActions.tsx";
 import { readTokenActivity, tokenActivityKey } from "../../lib/tokenActivity.ts";
 
+/** Mainnet's defaults: these tests start at More private. */
+const MORE_PRIVATE_FIRST = defaultPreferences(1);
+
 const UNIT = { decimals: 2, symbol: "HBR" };
 let element: HTMLDivElement;
 let root: Root;
 let settings: WebsiteSettingsStore;
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  settings = new WebsiteSettingsStore(() => localStorage);
+  settings = new WebsiteSettingsStore(() => localStorage, MORE_PRIVATE_FIRST);
   state.receipt.mockReset().mockResolvedValue(null);
   state.issuance = undefined;
   state.namedAddress = { state: "unresolved" };

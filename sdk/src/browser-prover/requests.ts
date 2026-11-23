@@ -89,7 +89,7 @@ export interface ProofResult {
  */
 export const CIRCUIT_URLS = {
   account_rule_mine: "/prover/account_rule_mine.json",
-  account_rule_asset_creation_ecdsa: "/prover/account_rule_asset_creation_ecdsa.json",
+  account_rule_mint_ecdsa: "/prover/account_rule_mint_ecdsa.json",
   account_rule_payment_ecdsa: "/prover/account_rule_payment_ecdsa.json",
   account_rule_asset_payment_ecdsa: "/prover/account_rule_asset_payment_ecdsa.json",
   account_rule_asset_burn_ecdsa: "/prover/account_rule_asset_burn_ecdsa.json",
@@ -97,20 +97,28 @@ export const CIRCUIT_URLS = {
   account_rule_contract_fee_sponsorship_ecdsa:
     "/prover/account_rule_contract_fee_sponsorship_ecdsa.json",
   account_rule_admin_ecdsa: "/prover/account_rule_admin_ecdsa.json",
+  transfer_rule_sender_deny_list: "/prover/transfer_rule_sender_deny_list.json",
+  mint_rule_fixed_supply: "/prover/mint_rule_fixed_supply.json",
+  mint_rule_account_mint: "/prover/mint_rule_account_mint.json",
+  mint_rule_deposit_mint: "/prover/mint_rule_deposit_mint.json",
   no_op_event_application: "/prover/no_op_event_application.json",
   private_value_sponsored_transfer_kernel: "/prover/private_value_sponsored_transfer_kernel.json",
-  private_value_asset_creation_kernel: "/prover/private_value_asset_creation_kernel.json",
+  private_value_mint_kernel: "/prover/private_value_mint_kernel.json",
   private_value_transfer_kernel: "/prover/private_value_transfer_kernel.json",
+  private_value_restricted_transfer_kernel: "/prover/private_value_restricted_transfer_kernel.json",
+  private_value_restricted_sponsored_transfer_kernel: "/prover/private_value_restricted_sponsored_transfer_kernel.json",
   user_account_update_kernel: "/prover/user_account_update_kernel.json",
   private_value_hiding_kernel: "/prover/private_value_hiding_kernel.json",
   user_account_update_hiding_kernel: "/prover/user_account_update_hiding_kernel.json",
   account_rule_large_batch_transfer_ecdsa: "/prover/account_rule_large_batch_transfer_ecdsa.json",
-  account_rule_large_asset_creation_ecdsa: "/prover/account_rule_large_asset_creation_ecdsa.json",
+  account_rule_large_mint_ecdsa: "/prover/account_rule_large_mint_ecdsa.json",
   account_rule_large_contract_fee_sponsorship_ecdsa:
     "/prover/account_rule_large_contract_fee_sponsorship_ecdsa.json",
   private_value_large_transfer_kernel: "/prover/private_value_large_transfer_kernel.json",
   private_value_large_sponsored_transfer_kernel: "/prover/private_value_large_sponsored_transfer_kernel.json",
-  private_value_large_asset_creation_kernel: "/prover/private_value_large_asset_creation_kernel.json",
+  private_value_large_mint_kernel: "/prover/private_value_large_mint_kernel.json",
+  private_value_large_restricted_transfer_kernel: "/prover/private_value_large_restricted_transfer_kernel.json",
+  private_value_large_restricted_sponsored_transfer_kernel: "/prover/private_value_large_restricted_sponsored_transfer_kernel.json",
   private_value_large_hiding_kernel: "/prover/private_value_large_hiding_kernel.json",
 } as const;
 
@@ -196,17 +204,34 @@ interface AssetActionProofRequestBase {
  */
 export type AssetActionProofRequest =
   | (AssetActionProofRequestBase & {
-      operation: "transfer" | "assetCreation";
+      operation: "transfer";
       authorization: ChonkApplicationStep;
       buildKernelWitnessMap: (authorizationVk: ChonkVkArtifacts) => WitnessMap;
+    })
+  | (AssetActionProofRequestBase & {
+      /** A mint, which folds the minting account's rule and the asset's mint rule. */
+      operation: "mint";
+      authorization: ChonkApplicationStep;
+      mintRule: ChonkApplicationStep;
+      buildKernelWitnessMap: (authorizationVk: ChonkVkArtifacts, mintRuleVk: ChonkVkArtifacts) => WitnessMap;
+    })
+  | (AssetActionProofRequestBase & {
+      /** A transfer of an asset with a transfer rule, which folds the rule as `policy`. */
+      operation: "restricted-transfer";
+      authorization: ChonkApplicationStep;
+      policy: ChonkApplicationStep;
+      buildKernelWitnessMap: (authorizationVk: ChonkVkArtifacts, policyVk: ChonkVkArtifacts) => WitnessMap;
     })
   | (AssetActionProofRequestBase & {
       operation: "sponsored-transfer";
       primary: ChonkApplicationStep;
       feePayer: ChonkApplicationStep;
+      /** The asset's transfer rule, exactly for an asset with one. */
+      policy?: ChonkApplicationStep;
       buildKernelWitnessMap: (
         primaryVk: ChonkVkArtifacts,
         feePayerVk: ChonkVkArtifacts,
+        policyVk?: ChonkVkArtifacts,
       ) => WitnessMap;
     });
 

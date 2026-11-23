@@ -5,7 +5,6 @@ import type { BlockResult, TransactionSummaryResult } from "@pcash/sdk/clients";
 import { PcashAmount } from "../../../components/PcashAmount.tsx";
 import { useReadyExplorer } from "../ExplorerProvider.tsx";
 import {
-  describeEffect,
   formatCount,
   formatKind,
   outcomeLabel,
@@ -17,6 +16,7 @@ import {
   Loading,
   TableScroll,
   Tag,
+  TransactionEffects,
   TransactionLink,
   useRead,
 } from "../ui.tsx";
@@ -58,12 +58,12 @@ function BlockRows({ blocks }: { blocks: BlockResult[] }) {
 function TransactionRows({ items }: { items: TransactionSummaryResult[] }) {
   if (items.length === 0) return <Empty>No transactions have been admitted yet.</Empty>;
   return <TableScroll><table><thead><tr>
-    <th>Transaction</th><th>Age</th><th>Kind</th><th>Effect</th><th>Outcome</th>
+    <th>Transaction</th><th>Age</th><th>Kind</th><th>Effects</th><th>Outcome</th>
   </tr></thead><tbody>{items.map((item) => <tr key={item.transactionId}>
     <td><TransactionLink transactionId={item.transactionId} /></td>
     <td><RelativeTime seconds={item.timestamp} /></td>
-    <td>{formatKind(item.kind)}</td>
-    <td>{describeEffect(item)}</td>
+    <td>{formatKind(item.kind, item.accountCreation)}</td>
+    <td><TransactionEffects summary={item} /></td>
     <td><Tag tone={outcomeTone(item.outcome)}>{outcomeLabel(item.outcome)}</Tag></td>
   </tr>)}</tbody></table></TableScroll>;
 }

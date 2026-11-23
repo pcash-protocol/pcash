@@ -43,6 +43,12 @@ export const SCENARIO_CATALOG: readonly ScenarioCatalogEntry[] = [
     nodeCount: 1,
   },
   {
+    name: "stablecoin",
+    description: "a deposit-mint stablecoin under a sender deny list: vault policy, deposits minted by the recipient's wallet, a restored wallet's mint, double-mint refusal, payments, freeze, heartbeats, pause, an issuer credit, redemption, a frozen Marketplace escrow, and a reorganization that drops a deposit's mint",
+    local: true,
+    nodeCount: 1,
+  },
+  {
     name: "contract-posting",
     description: "a contract wallet posts an ordinary transfer as its own PcashBatch event; a transfer requiring another carrier context fails through it and consumes nothing",
     local: true,
@@ -66,6 +72,12 @@ export const SCENARIO_CATALOG: readonly ScenarioCatalogEntry[] = [
   {
     name: "direct-send",
     description: "a payment to an address with no account, its link rebuilt from the sender's seed, imported, set up, spent, and restored from setup's record",
+    nodeCount: 1,
+  },
+  {
+    name: "merchant",
+    description: "an invoice paid in two parts with its ID as the memo, matched by the merchant, final after a restore from keys, and receipts verified with no wallet",
+    local: true,
     nodeCount: 1,
   },
   {

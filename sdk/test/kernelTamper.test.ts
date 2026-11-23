@@ -11,9 +11,9 @@ import type { ChonkCircuitMaterial } from "../src/prover/stacks.ts";
 import type { WitnessMap } from "../src/protocol/witness.ts";
 import { privateValueProfileFixture } from "./privateValueProfileFixtures.ts";
 import { assetProfileFixture } from "./assetProfileFixtures.ts";
-import { sharedAssetClaimFixture } from "./sharedAssetClaimFixtures.ts";
+import { sharedAssetClaimFixture } from "@pcash/test-support/shared-asset-claim-fixtures";
 import { privateValueCommitment } from "../src/protocol/transaction.ts";
-import { assetCreationActionCommitment, transferActionCommitment } from "../src/protocol/statement.ts";
+import { mintActionCommitment, transferActionCommitment } from "../src/protocol/statement.ts";
 import { fieldToHex } from "../src/crypto/field.ts";
 import { accountRuleEntryCommitment } from "../src/protocol/account.ts";
 import { applicationNullifier, ownerCommitment } from "../src/protocol/notes.ts";
@@ -283,18 +283,20 @@ for (const profile of Object.values(PRIVATE_VALUE_PROFILES)) {
     }, 120_000);
   });
 
-  describe(`${profile.name} asset-creation kernel constraints`, () => {
+  describe(`${profile.name} mint kernel constraints`, () => {
     let kernel: ChonkCircuitMaterial;
     let authorization: ChonkCircuitMaterial;
     let build: ReturnType<typeof assetProfileFixture>["build"];
     let kernelMap: WitnessMap;
     let statement: bigint[];
     beforeAll(async () => {
-      const fixture = assetProfileFixture({ shape: profile.shapeId });
+      const mintRule = await resolve("mint_rule_fixed_supply", "app");
+      const fixture = assetProfileFixture({ shape: profile.shapeId, mintRuleVkHash: BigInt(mintRule.vkHash) });
       build = fixture.build;
-      kernel = await resolve(profile.name === "S" ? "private_value_asset_creation_kernel" : "private_value_large_asset_creation_kernel", "kernel");
+      kernel = await resolve(profile.name === "S" ? "private_value_mint_kernel" : "private_value_large_mint_kernel", "kernel");
       authorization = await resolve(fixture.prepared.authorizationCircuit, "app");
-      kernelMap = { ...build.buildAssetCreationKernelWitnessMap(authorization), ...await noOpEventApplicationWitness(resolve, build.buildAssetCreationKernelWitnessMap(authorization)) };
+      const map = build.buildMintKernelWitnessMap(authorization, mintRule);
+      kernelMap = { ...map, ...await noOpEventApplicationWitness(resolve, map) };
       statement = build.publicInputs;
     }, 120_000);
 
@@ -311,24 +313,26 @@ for (const profile of Object.values(PRIVATE_VALUE_PROFILES)) {
     it("rejects a substituted application VK against the authorized event entry", async () => {
       await expect(execute(kernel, substituteEventApplication(kernelMap, authorization))).rejects.toThrow(MISMATCHED_EVENT_APPLICATION_REJECTION);
     }, 120_000);
-    it("ignores the unused note witness in an creation marker slot", async () => {
+    it("ignores the unused note witness in a mint marker slot", async () => {
       await expect(execute(kernel, replace(kernelMap, "native_inputs.0.amount", "0x123"))).resolves.toBeDefined();
     }, 120_000);
     it.each([
-      ["asset_secret"], ["initial_supply"], ["metadata_commitment"], ["dummy_input_seed"],
+      ["definition.metadata_commitment"], ["definition.instance_salt"], ["definition.mint_rule_other_profile_vk_hash"],
+      ["definition.mint_rule_configuration_commitment"], ["definition.transfer_rule_commitment"], ["dummy_input_seed"],
       ["choices.asset_burn_amount", "0x1"], ["choices.input_slot_classes.0", "0x0"],
       ["choices.delivery_commitment"],
       [`output_amounts.${profile.outputs - 1}`], [`output_owner_commitments.${profile.outputs - 1}`],
       ["pcash_chain_id"], ["recent_pcash_block_hash"],
       ["rule_statement.0"], ["rule_statement.1"], ["rule_statement.2"],
-      ["authorization_vk.hash"],
+      ["mint_statement.0"], ["mint_statement.1"], ["mint_statement.2"], ["mint_statement.3"],
+      ["authorization_vk.hash"], ["mint_rule_vk.hash"],
       ["account.account_witness.siblings.39"], [`native_inputs.${profile.inputs - 1}.amount`],
       [`native_inputs.${profile.inputs - 1}.note_secret`],
-    ] as [string, unknown?][])("rejects changed asset-creation kernel %s", async (path, value) => {
+    ] as [string, unknown?][])("rejects changed mint kernel %s", async (path, value) => {
       await expect(execute(kernel, replace(kernelMap, path, value))).rejects.toThrow();
     }, 120_000);
 
-    it("authenticates an application marker of the creating account", async () => {
+    it("authenticates an application marker of the minting account", async () => {
       const slot = 1;
       expect(build.transaction.inputs[slot]!.slotClass).toBe(SlotClass.DUMMY);
       const replayId = 0x7e57n;
@@ -343,9 +347,9 @@ for (const profile of Object.values(PRIVATE_VALUE_PROFILES)) {
       };
       const changed = replace(kernelMap, `choices.input_slot_classes.${slot}`, fieldToHex(BigInt(SlotClass.APPLICATION)));
       (changed.replay_ids as string[])[slot] = fieldToHex(replayId);
-      (changed.rule_statement as string[])[1] = fieldToHex(
-        assetCreationActionCommitment(build.pcashChainId, privateValueCommitment(tx, profile.shapeId), build.assetId),
-      );
+      const action = fieldToHex(mintActionCommitment(build.pcashChainId, privateValueCommitment(tx, profile.shapeId), build.assetId));
+      (changed.rule_statement as string[])[1] = action;
+      (changed.mint_statement as string[])[1] = action;
       changed.event_statement = eventStatementFromKernel(changed).map(fieldToHex);
       const result = await execute(kernel, changed);
       expect(BigInt((result.returnValue as string[])[2 + slot]!)).toBe(marker);

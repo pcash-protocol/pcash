@@ -13,10 +13,11 @@ export function SettingsSwitch({ label, checked, disabled, onChange }: { label: 
     <span aria-hidden="true">{checked ? "On" : "Off"}</span>
   </button>;
 }
-export function WalletSettings({ onBack }: { onBack(): void }) {
+/** The browser's wallet settings: in the sidebar with a way back, and on the account page without one. */
+export function WalletSettings({ onBack }: { onBack?: () => void }) {
   const settings = useWebsiteSettings();
   return <section className={styles.settings} aria-label="Wallet settings">
-    <button type="button" className={styles.back} onClick={onBack}>← Back</button>
+    {onBack !== undefined && <button type="button" className={styles.back} onClick={onBack}>← Back</button>}
     <h2 data-wallet-heading tabIndex={-1}>Settings</h2>
     <div className={styles.row}><Tooltip tip="Shows ENS, .gwei and .wei names and avatars for addresses, and lets you pay a name. Lookups send names and addresses to naming services and are cached in this browser.">{(id) =>
       <button type="button" className={styles.nameHelp} aria-label="About ENS names" aria-describedby={id}>Show ENS names <span className={styles.info} aria-hidden="true">?</span></button>}</Tooltip>

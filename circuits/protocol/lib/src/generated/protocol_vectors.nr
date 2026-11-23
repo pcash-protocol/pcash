@@ -7,12 +7,13 @@ use crate::authorization::account::{
     account_state_commitment, account_update_commitment,
 };
 use crate::authorization::statement::{
-    account_update_action_commitment, asset_creation_action_commitment, authorization_commitment,
-    contract_fee_sponsorship_action_commitment, sponsored_transfer_action_commitment,
-    transfer_action_commitment,
+    account_update_action_commitment, authorization_commitment,
+    contract_fee_sponsorship_action_commitment, mint_action_commitment,
+    sponsored_transfer_action_commitment, transfer_action_commitment,
 };
 use crate::ledger::asset::{
-    asset_creation_marker, asset_secret_commitment, standard_fungible_asset_id,
+    asset_core_commitment, asset_id, mint_context, mint_marker, mint_rule_commitment,
+    policy_context, transfer_rule_commitment,
 };
 use crate::ledger::note::{dummy_nullifier, note_nk, nullifier, output_commitment};
 use crate::ledger::private_value::{delivery_commitment, private_value_commitment, PrivateValue};
@@ -22,27 +23,77 @@ use crate::state::l1_logs::{l1_origin_leaf, normalized_log_leaf};
 use crate::state::merkle::binary_root_from_index;
 
 #[test]
-fn test_standard_asset_composition_matches_published_vector() {
+fn test_asset_composition_matches_published_vector() {
     assert(
-        asset_secret_commitment(
-            0x000000000000000000000000000000000000000000000000000000000000b0b0,
+        mint_rule_commitment(
+            0x0000000000000000000000000000000000000000000000000000000000003131,
+            0x0000000000000000000000000000000000000000000000000000000000003232,
+            0x000000000000000000000000000000000000000000000000000000000000c0f8,
         )
-            == 0x2e12aa524ecea919fcc85731185271b04480524e9ec212524071adfceee3ce78,
+            == 0x0bc6c07afe55ef963cc0e09f2d5f958b9b7eab99d59696e7fbab4860fa2cc4d3,
     );
     assert(
-        standard_fungible_asset_id(
+        asset_core_commitment(
+            0x0000000000000000000000000000000000000000000000000000000000000002,
             0x000000000000000000000000000000000000000000000000000000000000a0a0,
-            0x00000000000000000000000000000000000000000000000000000000000f4240,
-            0x2e12aa524ecea919fcc85731185271b04480524e9ec212524071adfceee3ce78,
+            0x0bc6c07afe55ef963cc0e09f2d5f958b9b7eab99d59696e7fbab4860fa2cc4d3,
         )
-            == 0x06cd16c9f4a3513bfb4ede303a90ca777af2ad0e7e4797d7e1f16689a24b9b9e,
+            == 0x0effc762497dc6abf0bc906275fe0c08d1bf86525f13f79fa2c8c9eff38cc9e9,
     );
     assert(
-        asset_creation_marker(
-            0x06cd16c9f4a3513bfb4ede303a90ca777af2ad0e7e4797d7e1f16689a24b9b9e,
+        asset_id(
+            0x0effc762497dc6abf0bc906275fe0c08d1bf86525f13f79fa2c8c9eff38cc9e9,
+            0,
+        )
+            == 0x04fa5cd512c794673849540c60dd8db9da86b5b6b0df2c718dd9dc48f6886890,
+    );
+    assert(
+        mint_marker(
+            0x04fa5cd512c794673849540c60dd8db9da86b5b6b0df2c718dd9dc48f6886890,
             0x000000000000000000000000000000000000000000000000000000000000b0b0,
         )
-            == 0x25e67ad9dd382fe7ca56b1194123364ed3abfecd8dc87cc0137167d5527d5938,
+            == 0x2259a205f7284e03bac4af52526db51ade3b1ab71e15395f310dee045fa3e7b6,
+    );
+    assert(
+        mint_context(
+            0x04fa5cd512c794673849540c60dd8db9da86b5b6b0df2c718dd9dc48f6886890,
+            0x000000000000000000000000000000000000000000000000000000000000c0f8,
+            0x00000000000000000000000087c018ef0000000000000000000000000000a1a9,
+            0x000000000000000000000000000000000000000000000000000000006553f100,
+        )
+            == 0x1064b772f378d1d2762c44a077190c3ccb35a93c17bfe40faff485403697df6d,
+    );
+    assert(
+        transfer_rule_commitment(
+            0x0000000000000000000000000000000000000000000000000000000000005151,
+            0x0000000000000000000000000000000000000000000000000000000000001a1a,
+            0x000000000000000000000000000000000000000000000000000000000000c0f9,
+        )
+            == 0x14263c18137d8b60c15898bd701f4b89266c6762d0ae8a989982912cbd04ee0d,
+    );
+    assert(
+        asset_core_commitment(
+            0x0000000000000000000000000000000000000000000000000000000000000004,
+            0x000000000000000000000000000000000000000000000000000000000000a0a0,
+            0x0bc6c07afe55ef963cc0e09f2d5f958b9b7eab99d59696e7fbab4860fa2cc4d3,
+        )
+            == 0x02e316554b6b595f4999e46b187ff0f6c8f570f197df849804c7fdbafc785c6f,
+    );
+    assert(
+        asset_id(
+            0x02e316554b6b595f4999e46b187ff0f6c8f570f197df849804c7fdbafc785c6f,
+            0x14263c18137d8b60c15898bd701f4b89266c6762d0ae8a989982912cbd04ee0d,
+        )
+            == 0x17ddf9be4bb4d5301096deb105ed5d283fea1ee6e7d502a2a2e786a1e292c08a,
+    );
+    assert(
+        policy_context(
+            0x17ddf9be4bb4d5301096deb105ed5d283fea1ee6e7d502a2a2e786a1e292c08a,
+            0x000000000000000000000000000000000000000000000000000000000000c0f9,
+            0x0000000000000000000000000000000000000000000000000000000000000c0a,
+            0x000000000000000000000000000000000000000000000000000000006b49d200,
+        )
+            == 0x061a935dfd5eb51d028210c01a365229fec46de804ff49b0ca7b9cf5a41c958b,
     );
 }
 
@@ -151,12 +202,12 @@ fn test_action_commitments_match_published_vectors() {
             == 0x1a2a82ab1c501fcffc28c24dbe439e496ce08c98272153455f45819704ef9f0f,
     );
     assert(
-        asset_creation_action_commitment(
+        mint_action_commitment(
             pcash_chain_id,
             commitment,
-            0x06cd16c9f4a3513bfb4ede303a90ca777af2ad0e7e4797d7e1f16689a24b9b9e,
+            0x04fa5cd512c794673849540c60dd8db9da86b5b6b0df2c718dd9dc48f6886890,
         )
-            == 0x01d8a55a365b7ad4cc9a05b407751a9b6af28966d7f2f7dd33b1815e0bb80a6d,
+            == 0x09e1077a47346c0ed515e565dc36e2d628251bcb11734676502b3fc63ab7b3ed,
     );
     assert(
         sponsored_transfer_action_commitment(pcash_chain_id, commitment)

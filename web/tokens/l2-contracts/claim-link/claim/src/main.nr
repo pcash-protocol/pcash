@@ -92,8 +92,8 @@ mod tests {
     use pcash_protocol::generated::private_value_profiles::{S_INPUTS, S_OUTPUTS};
     use pcash_protocol::ledger::note::{note_body_commitment, output_commitment};
     use pcash_protocol::ledger::private_value::{
-        private_value_commitment, SLOT_CLASS_APPLICATION, SLOT_CLASS_ASSET,
-        SLOT_CLASS_ASSET_CREATION, SLOT_CLASS_DUMMY, SLOT_CLASS_NATIVE, SmallPrivateValue,
+        private_value_commitment, SLOT_CLASS_APPLICATION, SLOT_CLASS_ASSET, SLOT_CLASS_DUMMY,
+        SLOT_CLASS_MINT, SLOT_CLASS_NATIVE, SmallPrivateValue,
     };
 
     global ASSET_ID: Field = 0x5151;
@@ -244,10 +244,10 @@ mod tests {
         let _ = claim(tx, false, 0);
     }
 
-    #[test(should_fail_with = "input slot must not be a creation marker")]
-    fn test_rejects_a_creation_marker() {
+    #[test(should_fail_with = "input slot must not be a mint marker")]
+    fn test_rejects_a_mint_marker() {
         let mut tx = private_value();
-        tx.input_slot_classes[S_INPUTS - 1] = SLOT_CLASS_ASSET_CREATION;
+        tx.input_slot_classes[S_INPUTS - 1] = SLOT_CLASS_MINT;
         let _ = claim(tx, false, 0);
     }
 

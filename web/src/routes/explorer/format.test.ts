@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  describeEffect,
   etherscanTransactionUrl,
   failureOperands,
   formatBytes,
@@ -31,38 +30,6 @@ describe("parseSearchTarget", () => {
   it("rejects a bare handle", () => {
     expect(() => parseSearchTarget("bob")).toThrow(/block number/);
     expect(() => parseSearchTarget("0x1234")).toThrow(/block number/);
-  });
-});
-
-describe("describeEffect", () => {
-  it("reports the note-set change for a payment", () => {
-    expect(describeEffect({
-      kind: "privateValue",
-      outcome: "succeeded",
-      nullifiers: [HASH, HASH],
-      outputsAdded: 2n,
-      account: null,
-    })).toBe("2 in → 2 out");
-  });
-
-  it("reports the account address for an account write", () => {
-    expect(describeEffect({
-      kind: "userAccountCreation",
-      outcome: "succeeded",
-      nullifiers: null,
-      outputsAdded: 0n,
-      account: { address: "0xabc" },
-    })).toBe("0xabc");
-  });
-
-  it("says nothing happened when the transaction failed", () => {
-    expect(describeEffect({
-      kind: "privateValue",
-      outcome: "nullifierAlreadySpent",
-      nullifiers: [HASH],
-      outputsAdded: 0n,
-      account: null,
-    })).toContain("failed");
   });
 });
 
@@ -126,6 +93,8 @@ describe("failureOperands", () => {
 describe("formatting", () => {
   it("names kinds and outcomes in reader vocabulary", () => {
     expect(formatKind("privateValue")).toBe("Private payment");
+    expect(formatKind("privateValue", 1)).toBe("Private payment + account creation");
+    expect(formatKind("privateValue", 2)).toBe("Private payment");
     expect(outcomeLabel("succeeded")).toBe("Succeeded");
     expect(outcomeLabel("nullifierAlreadySpent")).toBe("Failed");
     expect(describeFailure("recentPcashBlockNotInWindow"))

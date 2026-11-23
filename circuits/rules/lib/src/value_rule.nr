@@ -12,8 +12,7 @@ use pcash_protocol::ledger::note::{
     note_body_commitment, note_nk, output_commitment, owner_commitment,
 };
 use pcash_protocol::ledger::private_value::{
-    PrivateValue, SLOT_CLASS_APPLICATION, SLOT_CLASS_ASSET, SLOT_CLASS_ASSET_CREATION,
-    SLOT_CLASS_NATIVE,
+    PrivateValue, SLOT_CLASS_APPLICATION, SLOT_CLASS_ASSET, SLOT_CLASS_MINT, SLOT_CLASS_NATIVE,
 };
 use pcash_protocol::primitives::range::{assert_address, assert_amount};
 
@@ -28,7 +27,7 @@ pub struct AssetNamespaceOpening {
 /// Reject both marker classes.
 ///
 /// An application marker is durable state this rule cannot display, and a
-/// creation marker mints units the message has no field for. Neither may be
+/// mint marker mints units the message has no field for. Neither may be
 /// authorized by falling through a permissive branch.
 pub fn assert_ordinary_value_inputs<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
     private_value: PrivateValue<N_IN, N_OUT, SHAPE>,
@@ -36,7 +35,7 @@ pub fn assert_ordinary_value_inputs<let N_IN: u32, let N_OUT: u32, let SHAPE: u3
     for i in 0..N_IN {
         let class = private_value.input_slot_classes[i];
         assert(class != SLOT_CLASS_APPLICATION, "input slot must not be an application marker");
-        assert(class != SLOT_CLASS_ASSET_CREATION, "input slot must not be a creation marker");
+        assert(class != SLOT_CLASS_MINT, "input slot must not be a mint marker");
     }
 }
 
@@ -186,9 +185,9 @@ pub global MAX_NOTE_AMOUNT: Field = 0xffffffffffffffffffffffffffffffff;
 ///
 /// Owner change has one split per namespace: every change note but the last,
 /// in slot order, holds the largest note amount. The amounts then follow from
-/// the total, which is the spent notes, plus the signed initial supply for
-/// asset creation, less the signed outflows, so the software that builds the
-/// transaction cannot choose amounts the owner cannot recompute.
+/// the total, which is the spent notes less the signed outflows, so the
+/// software that builds the transaction cannot choose amounts the owner cannot
+/// recompute. A mint, which spends no asset notes, declares every asset output.
 pub fn assert_output_declarations<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
     private_value: PrivateValue<N_IN, N_OUT, SHAPE>,
     owner: Field,

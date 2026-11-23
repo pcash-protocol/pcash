@@ -13,7 +13,7 @@ import { useEthereumNetwork } from "../../lib/EthereumProvider.tsx";
 import { usePaymentIssuance } from "../../lib/usePaymentIssuance.ts";
 import { S_ACTION_UNITS, useNetworkFee } from "../../lib/useNetworkFee.ts";
 import { errorMessage, useWallet, WalletPaymentCanceledError, type WalletSendIntent, type WalletSendPreflight } from "../../lib/WalletProvider.tsx";
-import { useWebsiteSettings, type SubmissionMode } from "../../lib/WebsiteSettings.tsx";
+import type { SubmissionMode } from "../../lib/WebsiteSettings.tsx";
 import { etherscanTransactionUrl } from "../explorer/format.ts";
 import { transactionPath } from "../explorer/paths.ts";
 import { TokenWalletPrompt } from "../tokens/TokenCommon.tsx";
@@ -38,8 +38,8 @@ export function Composer({ network, parent, ref, onSent }: {
 }) {
   const wallet = useWallet();
   const ready = wallet.phase === "ready";
-  const { getDefaultSubmissionMode } = useWebsiteSettings();
-  const [mode, setMode] = useState<SubmissionMode>(getDefaultSubmissionMode);
+  // Posts start More private whatever the site's default speed: Faster names the posting Ethereum account.
+  const [mode, setMode] = useState<SubmissionMode>("slow");
   const issuance = usePaymentIssuance(ready && mode === "slow");
   const networkFee = useNetworkFee(S_ACTION_UNITS, ready) ?? 0n;
   const countId = useId();

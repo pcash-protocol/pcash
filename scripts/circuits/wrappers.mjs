@@ -3,8 +3,8 @@
 // profile. Each role has its own template, so its databus and public-input
 // boundary stays visible:
 //   application  returns the rule statement as return_data;
-//   kernel       reads each folded rule statement from call_data(n), verifies the
-//                event application after the rules, and returns the
+//   kernel       reads each folded rule or policy statement from call_data(n),
+//                verifies the event application last, and returns the
 //                transaction statement;
 //   hiding       reads the kernel statement from call_data(0), accepts only
 //                the pinned kernel keys, and binds the statement to the public
@@ -17,8 +17,8 @@ import { array, call, noirStatement, noirUses } from "../noir_layout.mjs";
 import { PROFILE_SOURCE } from "./profile_config.mjs";
 import { privateValuePublicInputNames } from "../../sdk/src/protocol/witness.ts";
 import {
-  assetCreationEip712TypeFor,
   batchTransferEip712TypeFor,
+  mintEip712TypeFor,
   withBurnEip712Type,
 } from "../../sdk/src/rules/semanticRuleTypes.ts";
 
@@ -27,6 +27,7 @@ const GENERATOR = "scripts/circuits/gen_constants.mjs";
 // The module of every type a generated parameter names.
 const TYPE_MODULES = {
   AppVerificationKey: "pcash_protocol::recursion",
+  AssetDefinition: "pcash_protocol::kernels::mint",
   AssetNamespaceOpening: "reference_rule_common::value_rule",
   AuthorizedAccount: "pcash_protocol::authorization::authentication",
   Configuration: "reference_rule_common::configuration",
@@ -40,6 +41,7 @@ const TYPE_MODULES = {
   Signature: "signature_common::secp256k1",
   PrivateValue: "pcash_protocol::ledger::private_value",
   PrivateValueChoices: "pcash_protocol::ledger::private_value",
+  RestrictedAssetOpening: "pcash_protocol::ledger::asset",
 };
 // The module of every protocol global a generated parameter type names.
 const GLOBAL_MODULES = {
@@ -99,13 +101,11 @@ const APPLICATIONS = {
       param("asset_namespace_opening", "AssetNamespaceOpening"),
     ],
   },
-  asset_creation: {
-    typeHash: (profile) => assetCreationEip712TypeFor(profile.outputs),
+  mint: {
+    typeHash: (profile) => mintEip712TypeFor(profile.outputs),
     params: [
       ...ruleOpeningParams,
-      param("metadata_commitment", "Field", { comment: ["Signed message fields; the rule derives the signed asset ID."] }),
-      param("initial_supply", "Field"),
-      param("asset_secret_commitment", "Field"),
+      param("asset_id", "Field", { comment: ["Signed message fields."] }),
       param("outputs", "[OutputDeclaration; N_OUT]"),
       param("issuance_recipient", "Field"),
       param("relay_fee_amount", "Field"),
@@ -187,23 +187,67 @@ const KERNELS = {
     param("event_application_vk", "AppVerificationKey"),
     param("event_salt", "Field"),
   ],
-  asset_creation: [
+  restricted_transfer: [
     param("pcash_chain_id", "Field"),
     param("recent_pcash_block_hash", "Field"),
     ...choiceParams,
     param("output_amounts", "[Field; N_OUT]"),
-    param("metadata_commitment", "Field"),
-    param("initial_supply", "Field"),
-    param("asset_secret", "Field"),
+    param("asset", "RestrictedAssetOpening"),
     param("dummy_input_seed", "Field"),
     param("replay_ids", "[Field; N_IN]", { comment: ["Rule-defined replay identity per APPLICATION slot; ignored otherwise."] }),
     ...stateOpeningParams,
     param("account", "AuthorizedAccount"),
-    param("account_kind", "Field", { comment: ["A user or a contract account may create an asset."] }),
+    param("account_kind", "Field"),
+    param("owner_inputs", "[InputNoteWitness; N_IN]"),
+    param("rule_statement", ruleStatement(1)),
+    param("authorization_vk", "AppVerificationKey"),
+    param("policy_statement", ruleStatement(2)),
+    param("policy_vk", "AppVerificationKey"),
+    param("event_statement", "call_data(3) [Field; EVENT_STATEMENT_LENGTH]"),
+    param("event_application_vk", "AppVerificationKey"),
+    param("event_salt", "Field"),
+  ],
+  restricted_sponsored_transfer: [
+    param("pcash_chain_id", "Field"),
+    param("recent_pcash_block_hash", "Field"),
+    ...choiceParams,
+    param("asset_output_amounts", "[Field; N_OUT]"),
+    param("native_change", "NativeChange"),
+    param("native_relay_output", "NativeRelayOutput"),
+    param("asset", "RestrictedAssetOpening"),
+    param("dummy_input_seed", "Field"),
+    param("replay_ids", "[Field; N_IN]"),
+    ...stateOpeningParams,
+    param("primary", "AuthorizedAccount"),
+    param("fee_payer", "AuthorizedAccount"),
+    param("owner_inputs", "[InputNoteWitness; N_IN]"),
+    param("primary_statement", ruleStatement(1)),
+    param("primary_vk", "AppVerificationKey"),
+    param("fee_statement", ruleStatement(2)),
+    param("fee_vk", "AppVerificationKey"),
+    param("policy_statement", ruleStatement(3)),
+    param("policy_vk", "AppVerificationKey"),
+    param("event_statement", "call_data(4) [Field; EVENT_STATEMENT_LENGTH]"),
+    param("event_application_vk", "AppVerificationKey"),
+    param("event_salt", "Field"),
+  ],
+  mint: [
+    param("pcash_chain_id", "Field"),
+    param("recent_pcash_block_hash", "Field"),
+    ...choiceParams,
+    param("output_amounts", "[Field; N_OUT]"),
+    param("definition", "AssetDefinition"),
+    param("dummy_input_seed", "Field"),
+    param("replay_ids", "[Field; N_IN]", { comment: ["Replay identity per mint marker and per APPLICATION slot; ignored otherwise."] }),
+    ...stateOpeningParams,
+    param("account", "AuthorizedAccount"),
+    param("account_kind", "Field", { comment: ["A user or a contract account may mint."] }),
     param("native_inputs", "[InputNoteWitness; N_IN]"),
     param("rule_statement", ruleStatement(1)),
     param("authorization_vk", "AppVerificationKey"),
-    param("event_statement", "call_data(2) [Field; EVENT_STATEMENT_LENGTH]"),
+    param("mint_statement", ruleStatement(2)),
+    param("mint_rule_vk", "AppVerificationKey"),
+    param("event_statement", "call_data(3) [Field; EVENT_STATEMENT_LENGTH]"),
     param("event_application_vk", "AppVerificationKey"),
     param("event_salt", "Field"),
   ],

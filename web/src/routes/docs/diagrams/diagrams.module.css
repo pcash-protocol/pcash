@@ -90,9 +90,16 @@
   gap: 9px;
 }
 
-.diagramCanvas :global(ol.learnDiagramFlow) { grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); counter-reset: diagram-step; }
-.diagramCanvas :global(ol.learnDiagramFlow > li) { position: relative; display: flex; min-width: 0; min-height: 132px; flex-direction: column; gap: 8px; justify-content: center; padding: 17px 15px; border: 1px solid var(--diagram-line); border-radius: 8px; background: var(--diagram-neutral); counter-increment: diagram-step; }
-.diagramCanvas :global(ol.learnDiagramFlow > li)::before { content: counter(diagram-step, decimal-leading-zero); color: #678076; font: 750 9px/1 var(--font-ui); font-variant-numeric: tabular-nums; }
+.diagramCanvas :global(ol.learnDiagramFlow) { grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+.diagramCanvas :global(ol.learnDiagramFlow > li) { position: relative; display: flex; min-width: 0; min-height: 132px; flex-direction: column; gap: 8px; justify-content: center; padding: 17px 15px; border: 1px solid var(--diagram-line); border-radius: 8px; background: var(--diagram-neutral); }
+/* Each step leads with its engraved numeral from the brand set, printed onto the box. */
+.diagramCanvas :global(ol.learnDiagramFlow > li)::before { content: ""; display: block; flex: none; height: 30px; background: var(--step-numeral) left center / contain no-repeat; mix-blend-mode: multiply; }
+.diagramCanvas :global(ol.learnDiagramFlow > li:nth-child(1)) { --step-numeral: url(/brand/numeral-1.webp); }
+.diagramCanvas :global(ol.learnDiagramFlow > li:nth-child(2)) { --step-numeral: url(/brand/numeral-2.webp); }
+.diagramCanvas :global(ol.learnDiagramFlow > li:nth-child(3)) { --step-numeral: url(/brand/numeral-3.webp); }
+.diagramCanvas :global(ol.learnDiagramFlow > li:nth-child(4)) { --step-numeral: url(/brand/numeral-4.webp); }
+.diagramCanvas :global(ol.learnDiagramFlow > li:nth-child(5)) { --step-numeral: url(/brand/numeral-5.webp); }
+.diagramCanvas :global(ol.learnDiagramFlow > li:nth-child(6)) { --step-numeral: url(/brand/numeral-6.webp); }
 .diagramCanvas :global(ol.learnDiagramFlow > li:not(:last-child))::after { content: "→"; position: absolute; z-index: 2; top: 50%; right: -14px; width: 18px; color: var(--diagram-private-line); font-weight: 900; text-align: center; transform: translateY(-50%); }
 .diagramCanvas :global(ol.learnDiagramFlow > li:first-child), .diagramCanvas :global(ol.learnDiagramFlow > li:nth-child(3)), .diagramCanvas :global(ol.learnDiagramFlow > li:nth-child(4)) { border-color: #d5aa4f; background: var(--diagram-public); }
 .diagramCanvas :global(ol.learnDiagramFlow > li:nth-child(2)) { border-color: #9da6e2; background: var(--diagram-proof); }

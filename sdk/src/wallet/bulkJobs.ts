@@ -1,15 +1,25 @@
 import { PRIVATE_VALUE_PROFILES, privateValueProfile, type PrivateValueProfile, type PrivateValueShape } from "@pcash/sdk/constants";
-import type { AccountCreationAttachment } from "@pcash/sdk/protocol";
+import {
+  assetDefinitionSchema,
+  sectionDeliveryFits,
+  type AccountCreationAttachment,
+  type AssetDefinition,
+} from "@pcash/sdk/protocol";
 import { storeAccountCreation, type StoredAccountCreationAttachment } from "./actions/accountCreation.ts";
 import { fieldToHex, toField } from "@pcash/sdk/crypto";
 import { beBytes, bytes32Hex, concatBytes, fromHex, keccak256, randomFieldEntropy, toHex, U128_LIMIT, utf8 } from "@pcash/sdk/utils";
 import { defineRecordSchema, packed } from "../protocol/packed.ts";
 import { readRecord, type DataRecord } from "../protocol/records.ts";
 import { selectNotes } from "./coinSelect.ts";
-import { spendableNotes, type PendingAssetAction, type StoredSentOutput, type WalletFileData, type WalletNote } from "./noteStore.ts";
+import { directSendsToRecord } from "./directSends.ts";
+import { knownAssetDefinition, spendableNotes, type PendingAssetAction, type StoredSentOutput, type WalletFileData, type WalletNote } from "./noteStore.ts";
 
 export const BULK_RECOVERY_OBSERVATION_SECONDS = 1_800n;
-/** The longest app tag. The fullest S or L chunk still fits its arena with a tag this long. */
+/**
+ * The longest app tag. A chunk of one recipient fits its arena with a tag this
+ * long and the longest asset definition; a chunk takes as many recipients as
+ * its arena fits.
+ */
 export const BULK_RECOVERY_MAX_APP_TAG_BYTES = 255;
 const BULK_RECOVERY_MAX_RECIPIENTS = 10_000;
 
@@ -375,6 +385,35 @@ function splitAmount(assetId: bigint, amount: bigint): BulkChunkPlan["change"] {
 }
 
 /**
+ * Whether a payment chunk's delivery fits its profile's arena, as the bulk
+ * client writes it: each envelope recipient's region carries the asset
+ * definition, and the sender region carries the definition and the chunk's
+ * recovery record beside its sent envelopes and openings.
+ */
+function paymentChunkFits(params: {
+  shape: PrivateValueShape;
+  job: BulkJob;
+  firstRecipient: number;
+  recipientCount: number;
+  definition: AssetDefinition | undefined;
+  directSendOpenings: ReturnType<typeof directSendsToRecord>;
+}): boolean {
+  const recipients = params.job.recipients.slice(params.firstRecipient, params.firstRecipient + params.recipientCount);
+  const opened = recipients.filter(recipient => recipient.noteSecret !== undefined).length;
+  const definition = params.definition === undefined ? [] : [assetDefinitionSchema.encode(params.definition)];
+  return sectionDeliveryFits({
+    shape: params.shape,
+    envelopes: Array.from({ length: recipients.length - opened }, () => definition),
+    sentOpenings: opened,
+    sender: [
+      ...definition,
+      ...(params.job.recovery === undefined ? [] : [bulkRecoveryRecord(params.job.recovery, params.firstRecipient, params.recipientCount)]),
+    ],
+    directSendOpenings: params.directSendOpenings,
+  });
+}
+
+/**
  * Allocate only currently spendable notes. Pending change and system payouts never
  * fund a chunk. `issuanceNote` reserves inventory for the issuance note a
  * self-published chunk pays this wallet; a relayed chunk pays its publisher.
@@ -459,6 +498,9 @@ export function planNextBulkChunk(data: WalletFileData, job: BulkJob, options: {
   }
   const remaining = job.recipients.slice(firstRecipient);
   const maximumOutputs = Math.max(...profiles.map(profile => profile.outputs - reservedOutputs));
+  const definition = assetId === 0n ? undefined : knownAssetDefinition(data, assetId);
+  const owner = BigInt(data.address);
+  // The largest count that is funded and whose delivery fits the arena.
   for (let count = Math.min(remaining.length, maximumOutputs); count > 0; count--) {
     const amount = remaining.slice(0, count).reduce((total, recipient) => total + BigInt(recipient.amount), 0n);
     for (const profile of profiles) {
@@ -472,8 +514,11 @@ export function planNextBulkChunk(data: WalletFileData, job: BulkJob, options: {
       if (funding === null) continue;
       const change = [...splitAmount(assetId, sum(selected) - amount - (assetId === 0n ? fee : 0n)),
         ...splitAmount(0n, sum(funding) - (assetId === 0n ? 0n : fee))];
-      if (count + change.length <= profile.outputs - reservedOutputs) {
-        return { shape: profile.shapeId, firstRecipient, recipientCount: count, inputs: [...selected, ...funding], change };
+      if (count + change.length > profile.outputs - reservedOutputs) continue;
+      const inputs = [...selected, ...funding];
+      if (paymentChunkFits({ shape: profile.shapeId, job, firstRecipient, recipientCount: count, definition,
+        directSendOpenings: directSendsToRecord(data, owner, inputs) })) {
+        return { shape: profile.shapeId, firstRecipient, recipientCount: count, inputs, change };
       }
     }
   }

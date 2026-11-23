@@ -1,11 +1,12 @@
 // Open an account and its selected rule under the exact Mega VK being folded.
 // The account row commits the rule set the selected entry's path opens, so an
 // opening describes installed authority only after its root is authenticated.
-// The sponsored-transfer and asset-creation kernels use
-// authenticate. The transfer kernel calls open_account and checks the root
-// itself, because an action whose every input is DUMMY skips membership. The
-// account-update kernel opens only the account row, whose current value the
-// node checks through the update's account update commitment.
+// The sponsored-transfer kernels and the mint kernel use authenticate. The
+// transfer and restricted-transfer kernels call open_account and check the
+// root themselves, because the transfer kernel skips membership for an action
+// whose every input is DUMMY. The account-update kernel opens only the account
+// row, whose current value the node checks through the update's account update
+// commitment.
 
 use crate::authorization::account::{account_rule_entry_commitment, account_state_commitment};
 use crate::authorization::statement::authorization_commitment;

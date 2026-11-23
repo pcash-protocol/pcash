@@ -34,14 +34,17 @@ import {
 } from "@pcash/sdk/rules";
 import { SparseMerkleTree } from "@pcash/sdk/crypto";
 
+/** A mint rule for assets whose fixtures only transfer them: nothing folds it. */
+export const TEST_MINT_RULE = { sVkHash: 0x3131n, lVkHash: 0x3232n, configurationCommitment: 0xc0f8n } as const;
+
 export const TEST_DEFAULT_RULE_SECRETS: DefaultUserRuleSecrets = {
-  assetCreationCommitmentBlinder: 0x121n,
+  mintCommitmentBlinder: 0x121n,
   paymentCommitmentBlinder: 0x102n,
   assetPaymentCommitmentBlinder: 0x104n,
   assetBurnCommitmentBlinder: 0x106n,
   batchTransferCommitmentBlinder: 0x108n,
   largeBatchTransferCommitmentBlinder: 0x131n,
-  largeAssetCreationCommitmentBlinder: 0x133n,
+  largeMintCommitmentBlinder: 0x133n,
   largeContractFeeCommitmentBlinder: 0x135n,
   accountAdminCommitmentBlinder: 0x10an,
   contractFeeCommitmentBlinder: 0x10cn,

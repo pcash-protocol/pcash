@@ -4,6 +4,8 @@ export type TokensErrorCode =
   | "wallet-not-ready"
   /** The wallet holds no verified definition for the token. */
   | "unknown-asset"
+  /** The token has a transfer rule, which claim links and drops do not prove. */
+  | "transfer-rule"
   /** The wallet cannot spend enough of the token. */
   | "insufficient-funds"
   /** The node's publication catalog is unavailable or refuses drops. */

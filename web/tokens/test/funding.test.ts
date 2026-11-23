@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { PcashNodeClient } from "@pcash/sdk/clients";
+import { createAccountMintAsset } from "@pcash/sdk/rules";
+import { createDrop } from "../src/client/drops.ts";
+import { isTokensError } from "../src/client/errors.ts";
 import { advanceLinkSet, createLinkSet, linkSets } from "../src/client/links.ts";
 import { fundContractNotes, type TokensRuntime } from "../src/client/runtime.ts";
 import { MemoryTokensStore, type DropRecord } from "../src/client/store.ts";
@@ -165,4 +168,26 @@ test("createLinkSet reports the key before funding finishes, keeps an unsubmitte
   assert.equal(resumed.phase, "ready");
   assert.equal(jobs.length, 2);
   assert.equal(syncs, 2);
+});
+
+test("links and drops refuse a token with a transfer rule before storing or funding anything", async () => {
+  const metadata = { name: "Ruled", symbol: "RUL", decimals: 0, contentDigest: new Uint8Array(32) };
+  const { definition, descriptor } = createAccountMintAsset({
+    metadata, accountAddress: 0xabcn, startSalt: 0n,
+    transferRule: { sVkHash: 1n, lVkHash: 1n, configurationCommitment: 2n, configuration: Uint8Array.of(1) },
+  });
+  const store = new MemoryTokensStore();
+  let jobs = 0;
+  const wallet = {
+    address: `0x${"11".repeat(20)}`,
+    network: { chainId: 1n },
+    assets: async () => [{ assetId: descriptor.assetId, definition, spendable: 100n }],
+    startBulkJob: async () => { jobs += 1; return { jobId: "job" }; },
+  };
+  const rt = { wallet, node: {}, prover: {}, store, pollIntervalMs: 0, pollMaxAttempts: 1, now: () => 1 } as unknown as TokensRuntime;
+  await assert.rejects(() => createLinkSet(rt, { assetId: descriptor.assetId, amounts: [10n] }), (error) => isTokensError(error, "transfer-rule"));
+  await assert.rejects(() => createDrop(rt, { assetId: descriptor.assetId, claimAmount: 10n, count: 1, claimEndTimestamp: 100n }),
+    (error) => isTokensError(error, "transfer-rule"));
+  assert.deepEqual(await store.list(), []);
+  assert.equal(jobs, 0);
 });

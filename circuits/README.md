@@ -14,14 +14,14 @@ protocol/                  Consensus: everything the node's pinned keys cover
     src/authorization/     Account commitments and rule-entry authentication
     src/ledger/            Shared by every proof-carrying type: notes and nullifiers, the private value
                            and its commitment, input openings, assets, and the native fee relation
-    src/kernels/           The three type 0x00 kernel relations, and the fixed-supply relation
+    src/kernels/           The five type 0x00 kernel relations
     src/recursion.nr       Proof linking and the hiding-kernel relation
     src/events.nr          Uniform event verification, entry, and commitment
     src/generated/         Constants owned by generators
   no_op_event_application/       Reference no-op event application; its VK is not pinned by consensus
-  private_value/{s,l}/     Type 0x00: three protocol kernels and the hiding kernel per profile
+  private_value/{s,l}/     Type 0x00: five protocol kernels and the hiding kernel per profile
   user_account_update/     Type 0x03: protocol kernel and hiding kernel
-rules/                     The reference wallet's account rules: not consensus, replaceable per account
+rules/                     The reference wallet's account rules and the standard mint and transfer rules: not consensus
   lib/                     reference_rule_common: relations shared by the rules
 signature/                 signature_common: secp256k1 and EIP-712 for applications
 fixtures/                  Test and demonstration applications
@@ -39,9 +39,10 @@ application  ->  application  ->  protocol kernel  ->  hiding kernel
   private          private            private         public inputs
 ```
 
-Single-rule stacks contain four circuits, the fewest Barretenberg's CHONK accepts: one rule, an event application, the protocol kernel, and the hiding kernel. Sponsored transfers fold two rules followed by an event application, then the two kernels, for five circuits.
+Single-rule stacks contain four circuits, the fewest Barretenberg's CHONK accepts: one rule, an event application, the protocol kernel, and the hiding kernel. Sponsored transfers, restricted transfers and mints fold two rules followed by an event application, then the two kernels, for five circuits, and a restricted sponsored transfer folds three rules, for six.
 
-- An **application** is an account's installed authorization rule. It decides whether this account approves this action, by whatever means the rule's author chose, and returns the rule statement `[authorizationCommitment, actionCommitment, recentPcashBlockHash, eventEntry]`: which account acts under which configuration, what it approves on this chain, the block whose state the proof reads, and the actual event entry ([§8.2](../docs/protocol-spec.md#82-the-rule-statement)). A rule computes each field it can open and takes the rest as witnesses.
+- An **account rule** is the application an account installs to authorize its actions. It decides whether this account approves this action, by whatever means the rule's author chose, and returns the rule statement `[authorizationCommitment, actionCommitment, recentPcashBlockHash, eventEntry]`: which account acts under which configuration, what it approves on this chain, the block whose state the proof reads, and the actual event entry ([§8.2](../docs/protocol-spec.md#82-the-rule-statement)). A rule computes each field it can open and takes the rest as witnesses.
+- An **asset rule**, a mint rule or a transfer rule, is named by an asset's definition rather than installed by an account. It returns the same statement shape with a mint context or transfer context in place of the authorization commitment, and the kernel binds it to the asset by deriving the asset ID from its VK hash ([§11.6](../docs/protocol-spec.md#116-assets), [§11.8](../docs/protocol-spec.md#118-restricted-transfer-kernels)).
 - An **event application** returns `[actionCommitment, recentPcashBlockHash, event]`. The kernel checks its action and anchor and binds its actual VK and claim into the event entry. The reference no-op (`protocol/no_op_event_application/`) returns the supplied action and anchor with claim `0`; it follows the same relation as every other event application.
 - A **protocol kernel** enforces the ledger rules for one kind of action: account and rule membership, note ownership, nullifiers, and value conservation. It recomputes the statement it expects from each rule and links the applications' proofs.
 - A **hiding kernel** accepts only the protocol kernels pinned for its family and exposes the kernel's statement as public inputs. It is the only circuit with public inputs; everything before it hands its statement along privately through the CHONK databus.
@@ -62,8 +63,9 @@ Transaction type `0x00` ([spec §11](../docs/protocol-spec.md#11-private-value-t
 
 - `transfer_kernel` — one account spends its own notes: native payment, asset transfer or burn, or an action that spends nothing. It opens the account and its rule entry, opens each real input and derives its nullifier, checks native and asset conservation, and links one rule, then an event application. Relation: `transfer.nr`. [§11.4](../docs/protocol-spec.md#114-the-transfer-kernel)
 - `sponsored_transfer_kernel` — a contract account's asset action whose native fee is paid by a distinct user account. It authenticates both accounts, assigns asset inputs to the contract and native inputs to the sponsor, and links two rules with role-separated statements, then one event application. It is a separate kernel because it consumes two rules where the transfer kernel consumes one, and because the sponsor's authority must stay bounded to its own fee contribution. Relation: `sponsored_transfer.nr`. [§11.7](../docs/protocol-spec.md#117-sponsored-transfer)
-- `asset_creation_kernel` — the standard one-shot asset creation. It derives the asset identity from its committed definition, fixes the initial supply, requires exactly one creation marker, and enforces the creating account's application markers as the transfer kernel does; it links the creating account's own authorization application and funds the fee from that account's native notes. It is separate from the transfer kernel because it creates asset value from a marker instead of conserving it. Relations: `fixed_supply.nr` for the issuance itself, `asset_creation.nr` for the kernel. [§11.6](../docs/protocol-spec.md#116-standard-fungible-assets)
-- `hiding_kernel` — accepts any of the three protocol kernels above for its profile and exposes the transaction's public inputs ([§11.2](../docs/protocol-spec.md#112-public-inputs-and-validation)). Relation: `recursion.nr`.
+- `restricted_transfer_kernel` and `restricted_sponsored_transfer_kernel` — the two relations above for an asset with a transfer rule. Each derives the asset ID from the definition's core and transfer rule, requires the restricted class, a real asset input and account membership, and folds the rule's application for this profile after the account rules, with a statement that names the asset, the rule's configuration, the owner of the asset inputs and the deadline. The unrestricted kernels accept only asset IDs of the unrestricted class, so a restricted asset cannot move without its rule. Relations: `restricted_transfer.nr`, `restricted_sponsored_transfer.nr`, over the relations of `transfer.nr` and `sponsored_transfer.nr`.
+- `mint_kernel` — the only relation that creates asset value. One authenticated account, a user or a contract, approves the mint and pays its fee from its own native notes. The kernel derives the asset ID from the definition with the VK hash of the mint rule it folds, requires the class the transfer rule implies and at least one mint marker, and folds the account's rule, then the asset's mint rule, then an event application. The mint rule's statement names the asset, the rule's configuration, the account and the deadline; the rule bounds what is minted. Relation: `mint.nr`.
+- `hiding_kernel` — accepts any of the five protocol kernels above for its profile and exposes the transaction's public inputs ([§11.2](../docs/protocol-spec.md#112-public-inputs-and-validation)). Relation: `recursion.nr`.
 
 ### User-account update (`protocol/user_account_update/`)
 
@@ -73,24 +75,26 @@ User-account updates are compiled at S dimensions and use `fee_payment.nr` for t
 
 ## Reference rules (`rules/`)
 
-The authorization applications the reference wallet installs. The protocol does not require any of them; they are ordinary applications. Each opens the complete transaction it approves, and all but `mine` verify a secp256k1 signature over an action-specific EIP-712 message.
+Two kinds of ordinary application live here, and the protocol requires neither: the account rules the reference wallet installs, and the standard mint and transfer rules an asset's definition can name. Each passes its private `eventEntry` witness through as the fourth return word and does not constrain which event accompanies the approved action.
+
+### Account rules
+
+The authorization applications the reference wallet installs. Each opens the complete transaction it approves, and all but `mine` verify a secp256k1 signature over an action-specific EIP-712 message.
 
 - `mine` — signature-free rule that approves only a transaction with no real inputs.
 - `payment` — a native payment to one recipient, with one change output and an optional relay output.
 - `asset_payment` — a payment of one asset.
 - `asset_burn` — a burn of one asset.
 - `batch_transfer/{s,l}` — multiple recipients, native and asset, with an optional burn.
-- `asset_creation/{s,l}` — one-shot creation of an asset. It shares its name with `asset_creation_kernel` because it authorizes exactly the action that kernel proves.
+- `mint/{s,l}` — an account's approval of a mint under any mint rule. It shares its name with `mint_kernel` because it authorizes exactly the action that kernel proves. Every minted unit is a declared output.
 - `contract_fee_sponsorship/{s,l}` — a user account paying the fee for a named contract's action.
 - `admin` — a user-account update.
-
-The reference rules pass their private `eventEntry` witness through as the fourth return word; they do not constrain which event accompanies the approved action.
 
 Rules with `s` and `l` directories are generated wrappers over a relation in `rules/lib/`. The others are hand-written at S dimensions.
 
 Each ECDSA configuration commits the EIP-712 domain separator, as two 128-bit halves, under which the rule verifies signatures, and the account's nullifier-key commitment ([Appendix B.2](../docs/protocol-spec.md#b2-recoverable-ownership)). It names no signer: the rule derives the signer's address from the public key and returns it in its authorization commitment, so the kernel accepts the signature only from the account's own key. The rule opens the nullifier-key commitment with the `nkRoot` from which it derives owner change and self-designated issuance secrets, so a proof builder cannot substitute another root. Each signed message carries the PCASH chain ID that the rule hashes into its action commitment. Exact configuration fields, slots, type strings, and VKs live in `sdk/src/rules/`, `sdk/src/eip712/`, and here.
 
-**What the value rules authorize.** Payment, asset payment, burn, and batch rules authorize the displayed external effects and reject state markers they cannot describe. Ordinary outputs not declared as payments must return to the owner under the owner's deterministic change secret, except one exact private native relay output. Change in one namespace is split one way only, into full-size notes and then one remainder, so the owner can recompute every change amount. The signed transaction context fixes every nullifier the action spends. Asset creation has its own readable approval for the immutable asset identity, initial supply, output declarations, open fee, private relay payment, issuance destination, and timing.
+**What the value rules authorize.** Payment, asset payment, burn, and batch rules authorize the displayed external effects and reject state markers they cannot describe. Ordinary outputs not declared as payments must return to the owner under the owner's deterministic change secret, except one exact private native relay output. Change in one namespace is split one way only, into full-size notes and then one remainder, so the owner can recompute every change amount. The signed transaction context fixes every nullifier the action spends. A mint has its own readable approval for the asset ID, the declaration of every minted output, the open fee, private relay payment, issuance destination, and timing; the signed transaction context fixes its mint markers.
 
 The payment rule accepts any payment amount, including zero. A positive amount is a native note to the recipient. At zero the payment slot must be a canonical dummy, so the action creates no recipient note and credits no balance, but the recipient is still a signed field of the approved message; the signed transaction context binds the action's nullifiers, including the dummy ones, so each authorization executes at most once.
 
@@ -104,17 +108,27 @@ The payment rule accepts any payment amount, including zero. A positive amount i
 
 **Contract rules and recovery.** A CONTRACT rule decides whether its actions leave issuance to the successful poster or designate a one-time issuance commitment, and how that recipient obtains the secret opening. Its authorization must separately account for any open fee or ordinary private relay output. It cannot assume that its nullifier key is private: a published-root contract exposes that material in its identity. Recovery is up to each application, not a universal convention.
 
+### Standard mint and transfer rules
+
+No account installs these: an asset's definition names them as its mint rule or its transfer rule, and none verifies a signature. Wallets recognize one by its complete pair of VK hashes and its decoded configuration, and show any other rule as custom.
+
+- `fixed_supply` — a standard mint rule: one mint, of exactly the configured supply, under a marker keyed by a secret the configuration commits to. One VK serves both profiles.
+- `account_mint` — a standard mint rule: the configured account mints whenever its own rule approves. It reads no private value. One VK serves both profiles.
+- `deposit_mint` — a standard mint rule: one mint per `Deposit` log of the configured Ethereum vault, opened under the recent block, of exactly the deposited amount to the PCASH address the log's recipient commitment opens to, with the chain and the asset being minted, under a marker keyed by the log's block, its leaf index in the block's normalized-log tree and the commitment's salt. It has an S key only: a deposit mints one note.
+- `sender_deny_list` — the standard transfer rule: the sender of a restricted asset is not on its issuer's deny list as of a recent unpaused publication from the issuer's Ethereum contract. It reads no private value. One VK serves both profiles and both restricted kernels.
+
 ## Fixtures (`fixtures/`)
 
 Demonstration and regression applications. They are compiled, tested, and bundled like the rules above but are not shipped wallet rules.
 
 - `full_transaction` — a fixed-shape owner-only rule that signs every output declaration; the signer is the authorizing account. It serves low-level testing; it is not a product USER rule.
 - `multisig` — two of three secp256k1 signers. It commits its threshold and sorted signer set, and the configured signers approve the account's address and the exact action commitment, whose private value binds the open fee, ordinary outputs, and issuance destination. A production multisig should supply readable semantics for its supported actions and a recovery convention for any issuance destination it designates; the website does not present the opaque approval as a product USER rule.
-- `asset_covenant` — a contract rule that lets asset value move only to one successor contract. It sends all real outputs to an authenticated live successor and caps the public open fee and native burn together, leaving any issuance destination to the proving application. It controls whichever standard asset the kernel authenticates; it does not redefine an asset or mint another supply.
+- `asset_covenant` — a contract rule that lets asset value move only to one successor contract. It sends all real outputs to an authenticated live successor and caps the public open fee and native burn together, leaving any issuance destination to the proving application. It controls whichever asset the kernel authenticates; it does not redefine an asset or mint another supply.
 - `sender_authentication` and `large_sender_authentication` — events proving the owner of an opened input note under S and L.
 - `event` — a claim with action and anchor witnesses for kernel-family binding tests.
 - `event_gate` — a rule whose installed configuration requires one event entry, returned directly for the kernel to match.
 - `shared_asset_claim` — one application valid under either profile, as the rule of a transfer or the primary rule of a sponsored transfer. Native proving only.
+- `voucher_minter` — a mint rule that mints a fixed amount of its asset once per voucher; any account may submit the mint. Native proving only.
 
 ## Libraries
 

@@ -15,7 +15,7 @@
 //
 // This rule covers multiple recipients, mixed native/asset outputs, and
 // transfer-plus-burn. It is ordinary private-value authority only: it rejects
-// application markers, creation markers, and any second asset namespace.
+// application markers, mint markers, and any second asset namespace.
 
 use crate::configuration::Configuration;
 use crate::message::{NativeBurn, verify_value_message};
@@ -175,7 +175,7 @@ mod tests {
     use pcash_protocol::authorization::statement::RULE_STATEMENT_LENGTH;
     use pcash_protocol::ledger::note::{note_body_commitment, output_commitment, owner_commitment};
     use pcash_protocol::ledger::private_value::{
-        SLOT_CLASS_APPLICATION, SLOT_CLASS_ASSET, SLOT_CLASS_ASSET_CREATION, SLOT_CLASS_DUMMY,
+        SLOT_CLASS_APPLICATION, SLOT_CLASS_ASSET, SLOT_CLASS_DUMMY, SLOT_CLASS_MINT,
         SLOT_CLASS_NATIVE,
     };
     use signature_common::secp256k1::Signature;
@@ -570,10 +570,10 @@ mod tests {
         let _ = run(0, outputs, tx, secrets, changes, opening, 0);
     }
 
-    #[test(should_fail_with = "input slot must not be a creation marker")]
-    fn test_rejects_a_creation_marker() {
+    #[test(should_fail_with = "input slot must not be a mint marker")]
+    fn test_rejects_a_mint_marker() {
         let (outputs, mut tx, secrets, changes, opening) = native_batch();
-        tx.input_slot_classes[1] = SLOT_CLASS_ASSET_CREATION;
+        tx.input_slot_classes[1] = SLOT_CLASS_MINT;
         let _ = run(0, outputs, tx, secrets, changes, opening, 0);
     }
 

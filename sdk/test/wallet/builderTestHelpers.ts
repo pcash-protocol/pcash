@@ -15,7 +15,13 @@ import {
   stateRoot,
 } from "@pcash/sdk/protocol";
 import { type FieldNumberish, toField } from "@pcash/sdk/crypto";
-import { fullOutputCommitment, nullifierKeyCommitment } from "@pcash/sdk/protocol";
+import {
+  findAssetDefinition,
+  fullOutputCommitment,
+  nullifierKeyCommitment,
+  type AssetDefinition,
+  type FungibleMetadata,
+} from "@pcash/sdk/protocol";
 import {
   BLOCK_HEADER_KEY_L1_ORIGIN_ROOT,
   BLOCK_HEADER_KEY_STATE_ROOT,
@@ -26,22 +32,35 @@ import {
 } from "@pcash/sdk/constants";
 import { accountStateCommitment } from "@pcash/sdk/protocol";
 import {
+  fixedSupplyMintRule,
   type DefaultUserRuleSecrets,
 } from "@pcash/sdk/rules";
 import { SparseMerkleTree } from "@pcash/sdk/crypto";
 
 export const TEST_DEFAULT_RULE_SECRETS: DefaultUserRuleSecrets = {
-  assetCreationCommitmentBlinder: 0x121n,
+  mintCommitmentBlinder: 0x121n,
   paymentCommitmentBlinder: 0x102n,
   assetPaymentCommitmentBlinder: 0x104n,
   accountAdminCommitmentBlinder: 0x108n,
   assetBurnCommitmentBlinder: 0x106n,
   batchTransferCommitmentBlinder: 0x10en,
   largeBatchTransferCommitmentBlinder: 0x131n,
-  largeAssetCreationCommitmentBlinder: 0x133n,
+  largeMintCommitmentBlinder: 0x133n,
   largeContractFeeCommitmentBlinder: 0x135n,
   contractFeeCommitmentBlinder: 0x10an,
 };
+
+/** A fixed-supply asset's definition, at the first instance salt from zero that puts its ID in class. */
+export function fixedSupplyAssetDefinition(params: {
+  metadata: FungibleMetadata;
+  supply: bigint;
+  secretCommitment: bigint;
+}): AssetDefinition {
+  return findAssetDefinition({
+    mintRule: fixedSupplyMintRule({ supply: params.supply, secretCommitment: params.secretCommitment }),
+    metadata: params.metadata,
+  }, 0n);
+}
 
 const TRANSFER_OUTPUT_DATA_0 = Uint8Array.from({ length: OUTPUT_DATA_BYTES }, (_, index) => index === 0 ? 1 : 7);
 const TRANSFER_OUTPUT_DATA_1 = Uint8Array.from({ length: OUTPUT_DATA_BYTES }, (_, index) => index === 0 ? 1 : 8);

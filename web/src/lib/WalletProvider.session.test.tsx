@@ -7,24 +7,27 @@ import { BroadcastChannel } from "node:worker_threads";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { NetworkContext } from "../components/NetworkContext.tsx";
 import { createProfileSessionStore, type ProfileSessionIdentity } from "./ProfileSessionStore.ts";
-import { networkInstanceKey } from "./networks.ts";
+import { chainInstanceKey, type NetworkProfile } from "./networks.ts";
+import { networkChangedMessage } from "../routes/explorer/config.ts";
 import { readRelayHistory, relayDeploymentKey, relayHistoryKey, saveRelayHistory } from "../shared/relayHistory.ts";
 import type { RelayJournalEntry, RelayJournalRecovery } from "@pcash/sdk/relay";
 
 const state = vi.hoisted(() => ({
   connection: { status: "connected", address: `0x${"ab".repeat(20)}`, chainId: 1, connector: {} },
   ethereumConfig: {},
-  sign: vi.fn(), close: vi.fn(), send: vi.fn(), submit: vi.fn(), quoteBatch: vi.fn(), prepareActivation: vi.fn(), destroyProver: vi.fn(),
+  sign: vi.fn(), close: vi.fn(), preflightSend: vi.fn(), send: vi.fn(), submit: vi.fn(), quoteBatch: vi.fn(), prepareActivation: vi.fn(), destroyProver: vi.fn(),
   startSync: vi.fn(), stopSync: vi.fn(), notes: vi.fn(), snapshotReads: 0,
   snapshotPause: undefined as Promise<void> | undefined,
   syncPause: undefined as Promise<void> | undefined,
   recovery: undefined as RelayJournalRecovery | undefined,
   accountReady: true,
   historyPending: false,
+  funds: { total: 10n, spendablePrivate: 10n },
   backgroundHistory: undefined as boolean | undefined,
   workerTrialDecrypt: async () => [],
   trialDecrypt: undefined as unknown,
   syncs: 0,
+  genesisHash: `0x${"00".repeat(32)}`,
   accountProfiles: new Map<string, bigint>(),
   events: new Map<string, Set<(event: unknown) => unknown>>(),
   hooks: new Map<string, (event: unknown) => unknown>(),
@@ -42,11 +45,15 @@ vi.mock("@pcash/sdk/eip712", () => ({
   verifyPcashAuthorization: (_request: unknown, signature: string) => ({ signature }),
   serializeEcdsaSignature: ({ signature }: { signature: string }) => Uint8Array.of(signature === "signature-2" ? 2 : 1),
 }));
-vi.mock("@pcash/sdk/protocol", () => ({ networkConfigFromStatus: () => ({}), USER_ACCOUNT_CREATION_MAX_TX_BYTES: 12 }));
+vi.mock("@pcash/sdk/protocol", async (original) => ({
+  ...await original<typeof import("@pcash/sdk/protocol")>(),
+  networkConfigFromStatus: () => ({}), USER_ACCOUNT_CREATION_MAX_TX_BYTES: 12,
+}));
 vi.mock("@pcash/sdk/wallet", () => ({
   WalletReviewStaleError: class extends Error {}, DurablePreBroadcastError: class extends Error {},
   derivePcashProfileFromSignature: (signature: string, _network: unknown, address: string) => ({ address: BigInt(address), nkRoot: signature === "0x02" ? 3n : 2n }),
   profileDerivationSigningRequest: () => ({}),
+  viemL1LogReader: () => ({}),
 }));
 vi.mock("@pcash/sdk/wallet/web", () => ({
   viemPcashActionSigner: (_client: unknown, address: string) => ({ address, signTypedData: state.sign }),
@@ -65,7 +72,7 @@ vi.mock("@pcash/sdk/wallet/web", () => ({
       state.accountProfiles.set(address, profile.nkRoot);
     };
     return {
-    close: state.close, send: state.send, network: { chainId: 1n }, address: `0x${profile.address.toString(16).padStart(40, "0")}`,
+    close: state.close, preflightSend: state.preflightSend, send: state.send, network: { chainId: 1n }, address: `0x${profile.address.toString(16).padStart(40, "0")}`,
     on: (name: string, listener: (event: unknown) => unknown) => {
       const listeners = state.events.get(name) ?? new Set();
       listeners.add(listener); state.events.set(name, listeners);
@@ -79,9 +86,10 @@ vi.mock("@pcash/sdk/wallet/web", () => ({
       state.snapshotReads += 1;
       await state.snapshotPause;
       return { address: `0x${profile.address.toString(16).padStart(40, "0")}`, network: { chainId: 1n, genesisHash: `0x${"00".repeat(32)}` },
+        balances: [{ assetId: 0n, private: state.funds.total, spendable: state.funds.spendablePrivate }],
         pendingContentHashes: [], pendingPayments: [], paymentHistory: [], syncedThrough: { pcashNumber: 1n, pcashHash: "head" }, historyPending: state.historyPending };
     },
-    notes: state.notes, nativeFunds: async () => ({ total: 10n, synchronized: true }),
+    notes: state.notes,
     clearAccountActivation: async () => undefined,
     defaultAccountReady: async () => {
       if (state.accountReady) matchAccount();
@@ -101,15 +109,18 @@ vi.mock("@pcash/sdk/wallet/web", () => ({
   },
 }));
 vi.mock("@pcash/sdk/clients", async (original) => ({ ...await original<typeof import("@pcash/sdk/clients")>(), PcashNodeClient: class {
-  async status() { return { pcashChainId: 1n, l1ChainId: 1n, genesisHash: `0x${"00".repeat(32)}`, inboxAddress: `0x${"11".repeat(20)}` }; }
+  async status() { return { pcashChainId: 1n, l1ChainId: 1n, genesisHash: state.genesisHash, inboxAddress: `0x${"11".repeat(20)}` }; }
 } }));
 import { FasterGasError, WalletProvider, useWallet } from "./WalletProvider.tsx";
 import { DurablePreBroadcastError } from "@pcash/sdk/wallet";
 
 const A = `0x${"ab".repeat(20)}`;
 const B = `0x${"cd".repeat(20)}`;
-const network = { name: "mainnet", pcashChainId: 1, pcashRpcUrl: "https://node.example", l1ChainId: 1, l1RpcUrls: ["https://l1.example"] };
-const store = createProfileSessionStore(networkInstanceKey(network));
+const GENESIS = `0x${"00".repeat(32)}`;
+const REANCHORED = `0x${"22".repeat(32)}`;
+// No genesis pin: every key comes from the node's status.
+const network: NetworkProfile = { name: "mainnet", pcashChainId: 1, pcashRpcUrl: "https://node.example", l1ChainId: 1, l1RpcUrls: ["https://l1.example"] };
+const store = createProfileSessionStore(chainInstanceKey({ l1ChainId: 1n, pcashChainId: 1, genesisHash: GENESIS }));
 const identity = (account: string): ProfileSessionIdentity => ({ account, pcashChainId: "1", l1ChainId: "1", genesisHash: `0x${"00".repeat(32)}`, inboxAddress: `0x${"11".repeat(20)}` });
 async function forget(account: string) {
   await store.clearProfileSessionIfRevision(identity(account), await store.profileSessionRevision(identity(account)));
@@ -119,8 +130,8 @@ const renders: ReturnType<typeof useWallet>[] = [];
 let root: Root;
 let element: HTMLDivElement;
 function Probe() { observed = useWallet(); renders.push(observed); return null; }
-function tree() {
-  return <NetworkContext.Provider value={{ network }}><MemoryRouter><WalletProvider><Probe /></WalletProvider></MemoryRouter></NetworkContext.Provider>;
+function tree(profile = network) {
+  return <NetworkContext.Provider value={{ network: profile }}><MemoryRouter><WalletProvider><Probe /></WalletProvider></MemoryRouter></NetworkContext.Provider>;
 }
 async function settle(phase: string) {
   await vi.waitFor(async () => {
@@ -138,8 +149,9 @@ beforeEach(async () => {
   vi.stubGlobal("indexedDB", new IDBFactory());
   vi.stubGlobal("BroadcastChannel", BroadcastChannel);
   state.events.clear(); state.hooks.clear(); state.recovery = undefined; state.accountReady = true; state.accountProfiles.clear();
-  state.historyPending = false; state.backgroundHistory = undefined; state.trialDecrypt = undefined; state.syncs = 0;
-  state.send.mockReset(); state.submit.mockReset(); state.prepareActivation.mockReset();
+  state.historyPending = false; state.genesisHash = GENESIS; state.backgroundHistory = undefined; state.trialDecrypt = undefined; state.syncs = 0;
+  state.funds = { total: 10n, spendablePrivate: 10n };
+  state.preflightSend.mockReset(); state.send.mockReset(); state.submit.mockReset(); state.prepareActivation.mockReset();
   // Exactly enough ETH for the Faster gas check.
   state.quoteBatch.mockReset().mockResolvedValue({ balanceWei: 1n, maximumCostWei: 1n });
   state.startSync.mockReset(); state.stopSync.mockReset(); state.notes.mockReset().mockResolvedValue([{ amount: 10n }]); state.snapshotReads = 0; state.snapshotPause = undefined; state.syncPause = undefined;
@@ -337,6 +349,41 @@ describe("browser wallet sign-ins", () => {
   });
 });
 
+
+describe("chain-scoped sign-ins", () => {
+  const sessionDatabase = (genesisHash: string) => `pcash-profile-session:${chainInstanceKey({ l1ChainId: 1n, pcashChainId: 1, genesisHash })}`;
+  const databases = async () => (await indexedDB.databases()).map((database) => database.name);
+  async function remount(profile: NetworkProfile, phase: string) {
+    await act(async () => root.unmount());
+    root = createRoot(element);
+    await act(async () => root.render(tree(profile)));
+    await settle(phase);
+  }
+
+  it("keys saved sign-ins by the node's genesis hash when no pin is configured", async () => {
+    await act(async () => { await observed.signIn(); });
+    await settle("ready");
+    expect(await databases()).toEqual([sessionDatabase(GENESIS)]);
+    // The node is re-anchored on a new genesis; nothing in the build changes.
+    state.genesisHash = REANCHORED;
+    await remount(network, "sign-in-required");
+    expect(await databases()).toEqual(expect.arrayContaining([sessionDatabase(GENESIS), sessionDatabase(REANCHORED)]));
+    expect(observed.status?.genesisHash).toBe(REANCHORED);
+  });
+
+  it("opens the stores under a matching pin and refuses a node on another genesis", async () => {
+    const pinned = { ...network, genesisHash: GENESIS };
+    await remount(pinned, "sign-in-required");
+    await act(async () => { await observed.signIn(); });
+    await settle("ready");
+    expect(await databases()).toEqual([sessionDatabase(GENESIS)]);
+    state.genesisHash = REANCHORED;
+    await remount(pinned, "error");
+    expect(observed.error).toBe(networkChangedMessage());
+    expect(observed.status).toBeUndefined();
+    expect(await databases()).toEqual([sessionDatabase(GENESIS)]);
+  });
+});
 
 describe("fast payment broadcast state", () => {
   const contentHash = `0x${"12".repeat(32)}`;
@@ -621,7 +668,7 @@ describe("following the node tip", () => {
     hidden = false;
     await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
     await vi.waitFor(() => expect(state.startSync).toHaveBeenCalledTimes(starts + 1));
-    const status = { latestBlock: 5n };
+    const status = { latestBlock: 5n, index: { status: "ready", cursor: { blockNumber: 5n, blockHash: "tip" } } };
     await act(async () => emit("sync:tip", { status }));
     expect(observed.followedStatus?.status).toBe(status);
   });
@@ -646,8 +693,33 @@ describe("history before the opening block", () => {
   }
   beforeEach(async () => {
     state.historyPending = true;
+    state.funds = { total: 0n, spendablePrivate: 0n };
     await act(async () => { await observed.signIn(); });
     await settle("ready");
+  });
+
+  it("can spend newly discovered funds while history is pending and the indexed head has advanced", async () => {
+    expect(observed.funds?.total).toBe(0n);
+    await act(async () => emit("sync:tip", { status: { index: { status: "ready", cursor: { blockNumber: 2n, blockHash: "next" } } } }));
+    state.funds = { total: 40n, spendablePrivate: 40n };
+    await act(async () => emit("snapshot", {}));
+    expect(observed.funds).toMatchObject({ ...state.funds, synchronized: false });
+    expect(observed.history.pending).toBe(true);
+    expect(observed.busy).toBe(false);
+
+    const intent = { to: B, amount: 30n };
+    state.preflightSend.mockResolvedValue({ inputCount: 1, inputTotal: 40n, retry: false, publication: "open" });
+    const spent = new Error("The selected note was already spent.");
+    state.send.mockRejectedValue(spent);
+    await act(async () => {
+      const review = await observed.preflightPrivateSend(intent);
+      await expect(observed.sendPrivate(intent, review)).rejects.toBe(spent);
+    });
+    expect(state.preflightSend).toHaveBeenCalledWith(intent);
+    expect(state.send).toHaveBeenCalledOnce();
+    expect(observed.paymentStage.state).toBe("failed");
+    expect(observed.busy).toBe(false);
+    expect(observed.history.pending).toBe(true);
   });
 
   it("shows the background scan's progress and a failed attempt until the scan finishes", async () => {

@@ -9,7 +9,7 @@ import { EstimateGasExecutionError, RpcRequestError, TransactionRejectedRpcError
 
 const mocks = vi.hoisted(() => ({
   afterAction: vi.fn(), fasterGas: vi.fn(),
-  closeStore: vi.fn(),
+  openStore: vi.fn(), closeStore: vi.fn(),
   buyMany: vi.fn(), quotePurchases: vi.fn(), quotePurchaseClaim: vi.fn(), checkPaymentBalance: vi.fn(), paymentGas: vi.fn(),
   fastEstimate: undefined as import("../../lib/useFastSendEstimate.ts").FastSendEstimate | undefined,
   publicCreated: false, publishSource: vi.fn(),
@@ -22,7 +22,7 @@ const mocks = vi.hoisted(() => ({
   feeExcess: undefined as bigint | undefined,
   openWallet: vi.fn(), connect: vi.fn(), signIn: vi.fn(), switchNetwork: vi.fn(), setupAccount: vi.fn(), checkActivation: vi.fn(),
   router: { configuration: { address: "0x1234" } as { address: string } | undefined, error: undefined as string | undefined },
-  wallet: { phase: "disconnected", accountRecord: "absent", busy: false, profile: undefined as { address: bigint } | undefined, wallet: undefined as object | undefined,
+  wallet: { status: undefined as { l1ChainId: bigint; pcashChainId: number; genesisHash: string } | undefined, phase: "disconnected", accountRecord: "absent", busy: false, profile: undefined as { address: bigint } | undefined, wallet: undefined as object | undefined,
     connectedAccount: undefined as string | undefined,
     node: { getMempoolTransaction: vi.fn(), getTransactionByNullifier: vi.fn(), areNullifiersSpent: vi.fn() }, readStatus: vi.fn(), walletClient: undefined as object | undefined, selfPublication: { mode: "l1", preflight: vi.fn(), submit: vi.fn() }, error: undefined as string | undefined,
     funds: undefined as { spendablePrivate: bigint } | undefined, snapshot: undefined as object | undefined, l1Balance: undefined as bigint | undefined },
@@ -43,7 +43,8 @@ vi.mock("./sourceOpenings.ts", () => ({
   publishMarketplaceSourceOpenings: (...args: unknown[]) => mocks.publishSource(...args),
 }));
 vi.mock("../../lib/MarketplaceStore.ts", () => ({
-  BROWSER_MARKETPLACE_OPERATION_LOCK: {}, marketplaceStoreName: String, openMarketplaceStore: async () => ({ close: mocks.closeStore, list: mocks.list }),
+  BROWSER_MARKETPLACE_OPERATION_LOCK: {}, marketplaceStoreName: String,
+  openMarketplaceStore: async (name: string) => { mocks.openStore(name); return { close: mocks.closeStore, list: mocks.list }; },
 }));
 vi.mock("../../lib/useFastSendEstimate.ts", () => ({ useFastSendEstimate: () => mocks.fastEstimate }));
 vi.mock("../../lib/useNetworkFee.ts", () => ({ S_ACTION_UNITS: 4n, S_ACTION_WITH_ACCOUNT_UNITS: 6n, useNetworkFee: () => 0n, useFeeExcess: () => mocks.feeExcess }));
@@ -71,7 +72,7 @@ vi.mock("@pcash/marketplace/app", async original => ({
   verifyPaymentRouterDeployment: (...args: unknown[]) => mocks.verifyRouter(...args),
   viemL1Signer: () => ({}),
 }));
-import { browserNetwork, type NetworkProfile } from "../../lib/networks.ts";
+import { browserNetwork, chainInstanceKey, type NetworkProfile } from "../../lib/networks.ts";
 import { NetworkProvider } from "../../lib/NetworkProvider.tsx";
 import MarketplaceRoute from "./MarketplaceRoute.tsx";
 import { assetDefinitionAssetId, encodeAssetDefinition, formatAssetDefinition } from "@pcash/sdk/protocol";
@@ -90,6 +91,7 @@ const quoteAt = (feeExcess: bigint, offer: { terms: { assetId: string; amount: s
   { feeExcess, baseFee: baseFee(feeExcess), latestBlockTimestamp: QUOTE_HEAD.timestamp },
   { assetId: BigInt(offer.terms.assetId), amount: BigInt(offer.terms.amount) }, { ethereumHead: QUOTE_HEAD });
 const publication = { reclaimAuthority: "1", terms: { id: "1", assetId: "0", amount: "1000000000000000000", ethPriceWei: "1000000000000000", deadlineT: "2000000000", seller: "1", router: "2" }, l2Contract: { bodyHex: `0x${"12".repeat(20)}` }, escrow: {} };
+const STATUS = { l1ChainId: 1n, pcashChainId: 1, genesisHash: `0x${"12".repeat(32)}` };
 const verification = { safeToPay: true, checks: ["Offer is available"], escrow: "escrowed", feeQuote: { buyerGrossWei: 1000000000000000n, websiteFeeWei: 50000000000000n, sellerNetWei: 950000000000000n } };
 // Fake timers would otherwise hold the query's batched updates.
 notifyManager.setScheduler((callback) => callback());
@@ -171,7 +173,7 @@ beforeEach(() => {
   mocks.wallet.node.getTransactionByNullifier.mockReset().mockResolvedValue(null);
   mocks.publicCreated = false;
   mocks.publishSource.mockResolvedValue({ status: "published" });
-  Object.assign(mocks.wallet, { phase: "disconnected", accountRecord: "absent", busy: false, profile: undefined, wallet: undefined, walletClient: undefined, connectedAccount: undefined, error: undefined, funds: undefined, snapshot: undefined, l1Balance: undefined });
+  Object.assign(mocks.wallet, { status: STATUS, phase: "disconnected", accountRecord: "absent", busy: false, profile: undefined, wallet: undefined, walletClient: undefined, connectedAccount: undefined, error: undefined, funds: undefined, snapshot: undefined, l1Balance: undefined });
   mocks.finalizePending.mockReset().mockResolvedValue(undefined);
   mocks.router.error = undefined;
   mocks.router.configuration = { address: "0x1234" };
@@ -2087,4 +2089,20 @@ it("waits for restored funding to reappear without offering another payment", as
   expect(container.textContent).toContain("Waiting for escrow funding");
   expect(mocks.create).not.toHaveBeenCalled();
   expect(mocks.resume).not.toHaveBeenCalled();
+});
+
+it("opens the marketplace store for the chain the node reports once its status is known", async () => {
+  mocks.wallet.status = undefined;
+  await render();
+  expect(mocks.openStore).not.toHaveBeenCalled();
+  mocks.wallet.status = STATUS;
+  await rerender();
+  expect(mocks.openStore).toHaveBeenCalledOnce();
+  expect(mocks.openStore).toHaveBeenCalledWith(chainInstanceKey(STATUS));
+  // A re-anchored node starts a new session on its own store.
+  const reanchored = { ...STATUS, genesisHash: `0x${"13".repeat(32)}` };
+  mocks.wallet.status = reanchored;
+  await rerender();
+  expect(mocks.closeStore).toHaveBeenCalled();
+  expect(mocks.openStore).toHaveBeenLastCalledWith(chainInstanceKey(reanchored));
 });

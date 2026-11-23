@@ -1,7 +1,14 @@
 .page { display: grid; gap: 32px; max-width: 1160px; margin: 0 auto; }
-.heading { max-width: 790px; }
-.heading h1 { font-size: clamp(44px, 6vw, 72px); margin-bottom: 16px; }
-.heading p:last-child { color: var(--color-text-muted); font-size: 20px; }
+/* Pay: the send form beside the receive link; before setup, a preview of what sending is. */
+.pay { display: grid; gap: 24px; }
+.payGrid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.payPreview { display: grid; gap: 10px; max-width: 760px; padding: 28px 32px; }
+.payPreview h2 { margin: 0; font-size: 30px; }
+.payPreview p { margin: 0; }
+.setupFirst { margin: 0; color: var(--color-text-muted); font-family: var(--font-ui); font-size: 14px; font-weight: 600; }
+.walletDownload { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin: 0; font-size: 14px; }
+.walletDownload a { text-decoration: underline; text-underline-offset: 3px; }
+.walletDownload a:first-child { color: var(--color-text); font-weight: 600; }
 .acquire { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); column-gap: 64px; padding: 36px; }
 .action > h2 { font-size: 30px; margin: 0 0 10px; }
 .intro { margin: 0 0 22px; font-size: 15px; color: var(--color-text-muted); }
@@ -37,12 +44,15 @@
 .howRewards > summary { cursor: pointer; font-family: var(--font-ui); font-size: 16px; font-weight: 600; }
 .howRewardsBody { display: grid; gap: 24px; margin-top: 18px; }
 .steps { display: grid; gap: 26px; align-content: start; margin: 0; padding: 0; list-style: none; }
-.steps li { display: flex; gap: 16px; align-items: flex-start; }
-.steps li > span { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border: 1px solid var(--color-border); border-radius: 50%; font-family: var(--font-serif); font-size: 17px; font-weight: 700; }
-.steps strong { display: block; margin-top: 6px; font-size: 20px; }
+.steps li { display: flex; gap: 16px; align-items: center; }
+/* The engraved numeral; steps other than the current one print faintly, and a
+   finished step carries a check. */
+.steps li > span { position: relative; flex: 0 0 48px; display: flex; justify-content: center; }
+.steps li > span img { display: block; width: auto; height: 56px; mix-blend-mode: multiply; }
+.steps li:not(.current) > span img { opacity: .3; }
+.steps .check { position: absolute; right: -6px; bottom: 0; display: grid; place-items: center; width: 22px; height: 22px; border: 1px solid var(--color-success-border); border-radius: 50%; background: var(--color-success-surface); color: var(--color-success-text); }
+.steps strong { display: block; font-size: 20px; }
 .steps p { margin: 2px 0 0; font-size: 15px; }
-.steps .current > span { background: var(--color-text); border-color: var(--color-text); color: var(--color-accent-contrast); }
-.steps .done > span { background: var(--color-success-surface); border-color: var(--color-success-border); color: var(--color-success-text); }
 .steps .done strong { color: var(--color-text-muted); }
 .first > h2 { margin: 0; font-size: clamp(30px, 3.4vw, 40px); letter-spacing: -.02em; }
 .firstAmount { min-height: 1.05em; margin: 14px 0 4px; color: var(--color-text); font-family: var(--font-serif); font-size: clamp(38px, 4.4vw, 52px); font-weight: 600; line-height: 1.05; }
@@ -51,5 +61,5 @@
 .linkCallout strong { font-size: 15px; }
 .firstFooter { margin: 18px 0 0; font-family: var(--font-ui); font-size: 13px; }
 .textButton { padding: 0; border: 0; background: none; color: inherit; font-size: inherit; text-decoration: underline; }
-@media (max-width: 760px) { .acquire { grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 22px; } .heading p:last-child { font-size: 18px; } }
+@media (max-width: 760px) { .acquire { grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 22px; } .payGrid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 400px) { .estimates { grid-template-columns: minmax(0, 1fr); gap: 8px; } .estimates dd { text-align: left; margin-bottom: 8px; } .countRow { flex-wrap: wrap; } }

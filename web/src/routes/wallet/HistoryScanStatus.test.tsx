@@ -17,7 +17,9 @@ beforeEach(() => {
 
 describe("earlier payments under the balance", () => {
   it("shows nothing once the history is scanned", () => {
-    expect(render({ pending: false })).not.toContain("earlier payments");
+    const html = render({ pending: false });
+    expect(html).toContain("<span>Your balance</span>");
+    expect(html).not.toContain("earlier payments");
   });
 
   it.each([
@@ -32,6 +34,7 @@ describe("earlier payments under the balance", () => {
 
   it("shows how much of the history has been scanned", () => {
     const html = render({ pending: true, outputs: { scanned: 12_380n, total: 23_541n } });
+    expect(html).toContain("<span>Estimated balance</span>");
     expect(html).toContain("<p>Searching for earlier payments… 52%</p>");
     expect(html).toContain('aria-valuenow="52"');
   });

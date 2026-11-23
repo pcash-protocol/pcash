@@ -55,12 +55,12 @@ export function deriveSeedWalletIdentity(
     mlKemSeed.fill(0);
     const defaultUserRuleSecrets: DefaultUserRuleSecrets = {
       paymentCommitmentBlinder: scalar("payment-commitment-blinder"),
-      assetCreationCommitmentBlinder: scalar("asset-creation-commitment-blinder"),
+      mintCommitmentBlinder: scalar("mint-commitment-blinder"),
       assetPaymentCommitmentBlinder: scalar("asset-payment-commitment-blinder"),
       assetBurnCommitmentBlinder: scalar("asset-burn-commitment-blinder"),
       batchTransferCommitmentBlinder: scalar("batch-transfer-commitment-blinder"),
       largeBatchTransferCommitmentBlinder: scalar("large-batch-transfer-commitment-blinder"),
-      largeAssetCreationCommitmentBlinder: scalar("large-asset-creation-commitment-blinder"),
+      largeMintCommitmentBlinder: scalar("large-mint-commitment-blinder"),
       largeContractFeeCommitmentBlinder: scalar("large-contract-fee-commitment-blinder"),
       accountAdminCommitmentBlinder: scalar("account-admin-commitment-blinder"),
       contractFeeCommitmentBlinder: scalar("contract-fee-commitment-blinder"),

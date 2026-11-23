@@ -28,11 +28,11 @@ export const CIRCUIT_PROVING_RUNTIMES: Readonly<Record<string, readonly string[]
   "account_rule_large_batch_transfer_ecdsa": [
     "native"
   ],
-  "account_rule_asset_creation_ecdsa": [
+  "account_rule_mint_ecdsa": [
     "native",
     "browser"
   ],
-  "account_rule_large_asset_creation_ecdsa": [
+  "account_rule_large_mint_ecdsa": [
     "native"
   ],
   "account_rule_contract_fee_sponsorship_ecdsa": [
@@ -41,6 +41,22 @@ export const CIRCUIT_PROVING_RUNTIMES: Readonly<Record<string, readonly string[]
   ],
   "account_rule_large_contract_fee_sponsorship_ecdsa": [
     "native"
+  ],
+  "transfer_rule_sender_deny_list": [
+    "native",
+    "browser"
+  ],
+  "mint_rule_fixed_supply": [
+    "native",
+    "browser"
+  ],
+  "mint_rule_account_mint": [
+    "native",
+    "browser"
+  ],
+  "mint_rule_deposit_mint": [
+    "native",
+    "browser"
   ],
   "account_rule_full_ecdsa": [
     "native",
@@ -57,6 +73,9 @@ export const CIRCUIT_PROVING_RUNTIMES: Readonly<Record<string, readonly string[]
   "account_rule_shared_asset_claim": [
     "native"
   ],
+  "mint_rule_voucher": [
+    "native"
+  ],
   "no_op_event_application": [
     "native",
     "browser"
@@ -69,7 +88,15 @@ export const CIRCUIT_PROVING_RUNTIMES: Readonly<Record<string, readonly string[]
     "native",
     "browser"
   ],
-  "private_value_asset_creation_kernel": [
+  "private_value_restricted_transfer_kernel": [
+    "native",
+    "browser"
+  ],
+  "private_value_restricted_sponsored_transfer_kernel": [
+    "native",
+    "browser"
+  ],
+  "private_value_mint_kernel": [
     "native",
     "browser"
   ],
@@ -83,7 +110,13 @@ export const CIRCUIT_PROVING_RUNTIMES: Readonly<Record<string, readonly string[]
   "private_value_large_sponsored_transfer_kernel": [
     "native"
   ],
-  "private_value_large_asset_creation_kernel": [
+  "private_value_large_restricted_transfer_kernel": [
+    "native"
+  ],
+  "private_value_large_restricted_sponsored_transfer_kernel": [
+    "native"
+  ],
+  "private_value_large_mint_kernel": [
     "native"
   ],
   "private_value_large_hiding_kernel": [
@@ -140,22 +173,31 @@ export const CIRCUIT_SRS_POINTS: Readonly<Record<string, number>> = {
   "account_rule_admin_ecdsa": 262144,
   "account_rule_batch_transfer_ecdsa": 262144,
   "account_rule_large_batch_transfer_ecdsa": 1048576,
-  "account_rule_asset_creation_ecdsa": 262144,
-  "account_rule_large_asset_creation_ecdsa": 1048576,
+  "account_rule_mint_ecdsa": 262144,
+  "account_rule_large_mint_ecdsa": 1048576,
   "account_rule_contract_fee_sponsorship_ecdsa": 262144,
   "account_rule_large_contract_fee_sponsorship_ecdsa": 262144,
+  "transfer_rule_sender_deny_list": 262144,
+  "mint_rule_fixed_supply": 262144,
+  "mint_rule_account_mint": 262144,
+  "mint_rule_deposit_mint": 262144,
   "account_rule_full_ecdsa": 262144,
   "account_rule_multisig": 262144,
   "account_rule_asset_covenant": 262144,
   "account_rule_shared_asset_claim": 262144,
+  "mint_rule_voucher": 262144,
   "no_op_event_application": 262144,
   "private_value_transfer_kernel": 262144,
   "private_value_sponsored_transfer_kernel": 262144,
-  "private_value_asset_creation_kernel": 262144,
+  "private_value_restricted_transfer_kernel": 262144,
+  "private_value_restricted_sponsored_transfer_kernel": 262144,
+  "private_value_mint_kernel": 262144,
   "private_value_hiding_kernel": 262144,
   "private_value_large_transfer_kernel": 262144,
   "private_value_large_sponsored_transfer_kernel": 262144,
-  "private_value_large_asset_creation_kernel": 262144,
+  "private_value_large_restricted_transfer_kernel": 262144,
+  "private_value_large_restricted_sponsored_transfer_kernel": 262144,
+  "private_value_large_mint_kernel": 262144,
   "private_value_large_hiding_kernel": 262144,
   "user_account_update_kernel": 262144,
   "user_account_update_hiding_kernel": 262144,

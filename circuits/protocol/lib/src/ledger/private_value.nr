@@ -10,13 +10,13 @@ use crate::primitives::range::{assert_amount, assert_asset_aggregate, assert_tim
 
 // Private slot classes. NATIVE and ASSET are ordinary notes; markers carry no value.
 //
-//   DUMMY           the kernel, from one fresh per-action seed; scoped to nothing
-//   ASSET_CREATION  the fixed-supply relation;                  scoped to the asset
-//   APPLICATION     the selected account rule;                   scoped to (account, entry)
+//   DUMMY        the kernel, from one fresh per-action seed; scoped to nothing
+//   MINT         the mint kernel, keyed by the mint rule;     scoped to the asset
+//   APPLICATION  the selected account rule;                   scoped to (account, entry)
 pub global SLOT_CLASS_DUMMY: Field = 0;
 pub global SLOT_CLASS_NATIVE: Field = 1;
 pub global SLOT_CLASS_ASSET: Field = 2;
-pub global SLOT_CLASS_ASSET_CREATION: Field = 3;
+pub global SLOT_CLASS_MINT: Field = 3;
 pub global SLOT_CLASS_APPLICATION: Field = 4;
 
 pub type SmallPrivateValue = PrivateValue<S_INPUTS, S_OUTPUTS, S_SHAPE_ID>;
@@ -58,12 +58,9 @@ pub struct PrivateValueChoices<let N_IN: u32, let N_OUT: u32> {
 
 fn assert_input_slot_class(slot_class: Field) {
     if slot_class == SLOT_CLASS_DUMMY {} else if slot_class == SLOT_CLASS_NATIVE {} else if slot_class
-        == SLOT_CLASS_ASSET {} else if slot_class == SLOT_CLASS_ASSET_CREATION {} else if slot_class
+        == SLOT_CLASS_ASSET {} else if slot_class == SLOT_CLASS_MINT {} else if slot_class
         == SLOT_CLASS_APPLICATION {} else {
-        assert(
-            false,
-            "input slot class must be dummy, native, asset, asset creation, or application",
-        );
+        assert(false, "input slot class must be dummy, native, asset, mint, or application");
     }
 }
 
@@ -190,7 +187,7 @@ mod tests {
     use super::{
         account_action_statement, assert_input_slot_class, assert_output_slot_class,
         delivery_commitment, private_value_commitment, PrivateValue, SLOT_CLASS_APPLICATION,
-        SLOT_CLASS_ASSET, SLOT_CLASS_ASSET_CREATION, SLOT_CLASS_DUMMY, SLOT_CLASS_NATIVE,
+        SLOT_CLASS_ASSET, SLOT_CLASS_DUMMY, SLOT_CLASS_MINT, SLOT_CLASS_NATIVE,
         transaction_statement,
     };
 
@@ -253,7 +250,7 @@ mod tests {
             input_slot_classes: [
                 SLOT_CLASS_ASSET,
                 SLOT_CLASS_NATIVE,
-                SLOT_CLASS_ASSET_CREATION,
+                SLOT_CLASS_MINT,
                 SLOT_CLASS_DUMMY,
             ],
             input_commitments: [20, 21, 0, 0],
@@ -289,7 +286,7 @@ mod tests {
                     SLOT_CLASS_NATIVE,
                     21,
                     31,
-                    SLOT_CLASS_ASSET_CREATION,
+                    SLOT_CLASS_MINT,
                     0,
                     32,
                     SLOT_CLASS_DUMMY,
@@ -360,13 +357,13 @@ mod tests {
         let mut application = all_dummy_private_value::<4, 5, 0>();
         application.input_slot_classes[2] = SLOT_CLASS_APPLICATION;
         let mut creation = all_dummy_private_value::<4, 5, 0>();
-        creation.input_slot_classes[2] = SLOT_CLASS_ASSET_CREATION;
+        creation.input_slot_classes[2] = SLOT_CLASS_MINT;
         let commitment = private_value_commitment(application);
         assert(commitment != private_value_commitment(creation));
         assert(commitment != private_value_commitment(all_dummy_private_value::<4, 5, 0>()));
     }
 
-    #[test(should_fail_with = "input slot class must be dummy, native, asset, asset creation, or application")]
+    #[test(should_fail_with = "input slot class must be dummy, native, asset, mint, or application")]
     fn test_input_slot_class_rejects_unassigned_value() {
         assert_input_slot_class(7);
     }

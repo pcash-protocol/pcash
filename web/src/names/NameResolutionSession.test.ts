@@ -8,7 +8,7 @@ const address = "0x1234567890123456789012345678901234567890";
 const identity: EthereumName = { address, name: "alice.eth", system: "ens" };
 beforeEach(() => localStorage.clear());
 function fixture() {
-  const rpc = { reverseAddress: vi.fn(), resolveName: vi.fn(), getAvatar: vi.fn() };
+  const rpc = { reverseAddress: vi.fn(), resolveName: vi.fn(), getAvatar: vi.fn(), readAddress: vi.fn() };
   const factory = vi.fn((_signal: AbortSignal) => rpc);
   const session = new NameResolutionSession(factory, () => localStorage);
   return { session, factory, rpc };
@@ -56,8 +56,10 @@ describe("name resolution privacy", () => {
     await expect(resolver.resolveName("bob.eth")).rejects.toMatchObject({ name: "AbortError" });
     await expect(resolver.reverseAddress(address)).rejects.toMatchObject({ name: "AbortError" });
     await expect(resolver.getAvatar(identity)).rejects.toMatchObject({ name: "AbortError" });
+    await expect(resolver.readAddress(address)).rejects.toMatchObject({ name: "AbortError" });
     expect(rpc.resolveName).toHaveBeenCalledTimes(1);
     expect(rpc.reverseAddress).not.toHaveBeenCalled();
+    expect(rpc.readAddress).not.toHaveBeenCalled();
     expect(rpc.getAvatar).not.toHaveBeenCalled();
   });
 

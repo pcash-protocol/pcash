@@ -18,9 +18,12 @@ import { MiningBalance } from "../routes/wallet/MiningBalance.tsx";
 import { AccountSetupPanel } from "../routes/wallet/AccountSetupPanel.tsx";
 import { CopyableAddress } from "./EthereumAddress.tsx";
 import { TokenBalanceRows } from "../routes/tokens/TokenBalances.tsx";
-import { TOKENS_PATH } from "../routes/tokens/model.ts";
+import { routeById } from "../routes/routeManifest.ts";
 import { shortValue } from "../routes/wallet/model.ts";
 import styles from "./WalletPanel.module.css";
+
+const ACCOUNT_PATH = routeById("account").path;
+const EARN_PATH = routeById("get-earn").path;
 
 function ActivityRow({ title, detail, onView }: { title: ReactNode; detail: string; onView: () => void }) {
   return <div className={styles.inProgress} role="status">
@@ -30,7 +33,7 @@ function ActivityRow({ title, detail, onView }: { title: ReactNode; detail: stri
 }
 
 /** A payment that continues after the user leaves the send view. */
-function PaymentInProgress() {
+export function PaymentInProgress() {
   const { paymentStage } = useWallet();
   const panel = useWalletPanel();
   const amount = panel.review?.intent.amount;
@@ -50,7 +53,7 @@ function PaymentInProgress() {
 }
 
 /** A profile's Send that waits for connect, sign-in or setup. */
-function WaitingPayment() {
+export function WaitingPayment() {
   const { phase } = useWallet();
   const { pendingRecipient } = useWalletPanel();
   if (pendingRecipient === undefined || phase === "ready") return null;
@@ -139,12 +142,13 @@ export function WalletPanel() {
           {wallet.phase === "disconnected" ? <ConnectWallet onNavigate={panel.closePanel} />
             : wallet.phase === "ready" && <button type="button" className="button primary" disabled={wallet.busy} onClick={panel.openSend}>Send</button>}
           {wallet.accountRecord === "present" && <>
-            <Link className="button" to="/get" onClick={panel.closePanel}>Get PCASH</Link>
+            <Link className="button" to={EARN_PATH} onClick={panel.closePanel}>Get PCASH</Link>
             {wallet.phase !== "disconnected" && wallet.phase !== "wrong-network" && <button type="button" className="button" onClick={() => panel.openReceive()}>Receive</button>}
           </>}
         </div>
+        {wallet.accountRecord === "present" && <Link className={styles.accountPage} to={ACCOUNT_PATH} onClick={panel.closePanel}>Full account page →</Link>}
         {wallet.phase === "ready" && <AccountStatusNotices />}
-        {(wallet.snapshot?.assets.length ?? 0) > 0 && <><div className={styles.tokensHeading}><h3 className={styles.sectionHeading}>Tokens</h3><Link to={TOKENS_PATH} onClick={panel.closePanel}>All tokens →</Link></div>
+        {(wallet.snapshot?.assets.length ?? 0) > 0 && <><div className={styles.tokensHeading}><h3 className={styles.sectionHeading}>Tokens</h3><Link to={`${ACCOUNT_PATH}#tokens`} onClick={panel.closePanel}>All tokens →</Link></div>
           <div className={styles.tokens}><TokenBalanceRows assets={wallet.snapshot!.assets} compact onNavigate={panel.closePanel} /></div></>}
         {wallet.profile !== undefined && <><h3 className={styles.sectionHeading}>Activity</h3><Activity compact onNavigate={panel.closePanel} /></>}
         {wallet.phase !== "disconnected" && <div className={styles.footer}>

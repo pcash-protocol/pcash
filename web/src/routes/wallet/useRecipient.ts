@@ -3,8 +3,8 @@ import { getPublicClient } from "wagmi/actions";
 import type { Wallet } from "@pcash/sdk/wallet";
 import { useEthereumNetwork } from "../../lib/EthereumProvider.tsx";
 import { useWallet } from "../../lib/WalletProvider.tsx";
-import { NAMES_OFF_MESSAGE } from "../../names/NameResolutionSession.ts";
-import { useEthereumNameResolver, useNameAddress } from "../../names/useEthereumName.ts";
+import { NAMES_OFF_MESSAGE, type MainnetNames } from "../../names/NameResolutionSession.ts";
+import { useCurrentNameResolver, useEthereumNameResolver, useNameAddress } from "../../names/useEthereumName.ts";
 import { normalizeIdentityName } from "../explorer/identityName.ts";
 import { classifyUnregisteredAddress, describeRecipient, type RecipientReach, type ResolvedRecipient } from "./model.ts";
 
@@ -24,12 +24,21 @@ export function useRecipientInput(to: string) {
   return { name, nameResolver, recipient, resolvingName: name !== undefined && namedAddress.state === "resolving" };
 }
 
-/** Reads an address's code and transaction count on PCASH's Ethereum network. */
-export type L1AddressReader = (address: `0x${string}`) => Promise<{ code: string | undefined; nonce: number }>;
+/** Reads an address's code and transaction count. */
+export type AddressHistoryReader = MainnetNames["readAddress"];
 
-export function useL1AddressReader(): L1AddressReader {
+/**
+ * Reads mainnet while ENS names are on, since the address people pay is
+ * usually a mainnet identity, even on a testnet. With names off the site
+ * contacts no mainnet RPC, so it reads PCASH's own Ethereum network.
+ */
+export function useAddressHistoryReader(): AddressHistoryReader {
   const { ethereumConfig, l1ChainId } = useEthereumNetwork();
+  const currentNames = useCurrentNameResolver();
   return async (address) => {
+    // Checked as the read starts, after the receive-key lookup: names turned off meanwhile read PCASH's own network.
+    const names = currentNames();
+    if (names !== undefined) return names.readAddress(address);
     const client = getPublicClient(ethereumConfig, { chainId: l1ChainId });
     if (client === undefined) throw new Error("PCASH's Ethereum network is not configured");
     const [code, nonce] = await Promise.all([client.getCode({ address }), client.getTransactionCount({ address })]);
@@ -43,12 +52,12 @@ export function useL1AddressReader(): L1AddressReader {
  * what Ethereum shows about the address. "unknown" when the directory could not
  * answer, "unchecked" when Ethereum could not.
  */
-export async function recipientReach(wallet: Pick<Wallet, "hasReceiveKey">, readL1: L1AddressReader, address: string): Promise<RecipientReach> {
+export async function recipientReach(wallet: Pick<Wallet, "hasReceiveKey">, readHistory: AddressHistoryReader, address: string): Promise<RecipientReach> {
   let present: boolean;
   try { present = await wallet.hasReceiveKey(address); } catch { return "unknown"; }
   if (present) return "present";
   try {
-    const { code, nonce } = await readL1(address as `0x${string}`);
+    const { code, nonce } = await readHistory(address as `0x${string}`);
     return classifyUnregisteredAddress(code, nonce);
   } catch {
     return "unchecked";
@@ -65,8 +74,8 @@ export function useRecipientReceiveKey(address: string | undefined): "checking" 
 
 /** How a native payment reaches an address: its receive key, or a direct send judged from Ethereum. */
 export function useRecipientReach(address: string | undefined): RecipientReach | "checking" | undefined {
-  const readL1 = useL1AddressReader();
-  return useRecipientLookup(address, (wallet, key) => recipientReach(wallet, readL1, key));
+  const readHistory = useAddressHistoryReader();
+  return useRecipientLookup(address, (wallet, key) => recipientReach(wallet, readHistory, key));
 }
 
 /** One lookup per address, rechecked on every sync. */

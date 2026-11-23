@@ -102,7 +102,6 @@ export function consumedIn(
     timestamp: block.header.timestamp,
     transactionId: toHex(randomBytes(32)),
     contentHash: contentHash.toLowerCase(),
-    nullifiers: nullifiers.map((nullifier) => nullifier.toLowerCase()),
   };
   return nullifiers.map((nullifier) => [nullifier, consumption]);
 }

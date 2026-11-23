@@ -3,35 +3,31 @@ import { Link } from "react-router-dom";
 import { formatAssetDefinition } from "@pcash/sdk/protocol";
 import { Notice } from "../../components/Notice.tsx";
 import { RouteHeader } from "../../components/RouteHeader.tsx";
-import { useWallet } from "../../lib/WalletProvider.tsx";
 import { Metadata } from "../Metadata.tsx";
 import { routeById } from "../routeManifest.ts";
 import paper from "../PaperPage.module.css";
 import { checkDefinition, NEW_TOKEN_PATH, tokenPath } from "./model.ts";
 import { AvailableDrops } from "./AvailableDrops.tsx";
-import { TokenBalanceRows } from "./TokenBalances.tsx";
-import { TokenWalletPrompt, useImportDefinition, VerifiedDefinition } from "./TokenCommon.tsx";
+import { useImportDefinition, VerifiedDefinition } from "./TokenCommon.tsx";
 import styles from "./Tokens.module.css";
 
 const route = routeById("tokens");
+const accountRoute = routeById("account");
 
+/** Try PCASH's Tokens tab: the public token tools. Tokens a wallet holds are on its account page. */
 export default function TokenListPage() {
-  const wallet = useWallet();
-  const assets = wallet.snapshot?.assets ?? [];
   return <section className={`${paper.page} ${styles.stack}`}>
     <Metadata {...route.metadata} />
     <RouteHeader eyebrow="Private tokens" title="Tokens"
       description="Make a token with a fixed supply, send it privately, and check any token’s definition before you trust it."
       aside={<Link className="button primary" to={NEW_TOKEN_PATH}>Create token</Link>} />
     <div className={styles.columns}>
+      <VerifyDefinitionBox />
       <section className="panel" aria-labelledby="your-tokens">
         <div className={styles.panelHeading}><h2 id="your-tokens">Your tokens</h2></div>
-        <TokenWalletPrompt purpose="to see your tokens" />
-        {wallet.phase === "ready" && (assets.length === 0
-          ? <div className={styles.empty}><strong>No tokens yet</strong><span className={styles.muted}>Tokens you create or receive appear here. Open a token link to add one.</span></div>
-          : <TokenBalanceRows assets={assets} />)}
+        <p className={styles.lede}>Tokens you create or receive are in your account, beside your PCASH.</p>
+        <div className={styles.actions}><Link className="button" to={`${accountRoute.path}#tokens`}>View your tokens</Link></div>
       </section>
-      <VerifyDefinitionBox />
     </div>
     <AvailableDrops />
   </section>;

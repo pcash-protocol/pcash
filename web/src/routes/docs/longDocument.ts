@@ -1,5 +1,14 @@
+import hljs from "highlight.js/lib/core";
+import bash from "highlight.js/lib/languages/bash";
+import typescript from "highlight.js/lib/languages/typescript";
+import yaml from "highlight.js/lib/languages/yaml";
 import { Marked, type Token, type Tokens } from "marked";
 import { SOURCE_REPOSITORY_URL } from "./publicDocuments.ts";
+
+// The languages the published documents' code blocks use; any other renders as plain text.
+hljs.registerLanguage("bash", bash);
+hljs.registerLanguage("typescript", typescript);
+hljs.registerLanguage("yaml", yaml);
 
 export interface DocumentHeading {
   id: string;
@@ -31,6 +40,13 @@ function escapeHtml(text: string): string {
   return text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 }
 
+/** A code block: highlighted when its language is one the documents use, otherwise escaped text. */
+function codeBlock(text: string, language: string): string {
+  const attribute = language === "" ? "" : ` class="language-${escapeHtml(language)}"`;
+  if (language === "" || hljs.getLanguage(language) === undefined) return `<pre><code${attribute}>${escapeHtml(text)}</code></pre>`;
+  return `<pre class="highlighted"><code${attribute}>${hljs.highlight(text, { language, ignoreIllegals: true }).value}</code></pre>`;
+}
+
 /** The anchor a heading gets on the white paper and specification pages. */
 export function headingId(text: string): string {
   return text.toLowerCase().replaceAll("`", "").replace(/[^a-z0-9\s-]/g, "").trim().replace(/[\s-]+/g, "-");
@@ -57,11 +73,11 @@ export function renderDocument(source: string, resolveHref: (href: string) => st
         return `<h${token.depth} id="${ids.get(token)}">${this.parser.parseInline(token.tokens)}</h${token.depth}>\n`;
       },
       code({ text, lang }) {
-        const [language, file] = (lang ?? "").trim().split(/\s+/);
-        if (file === undefined) return false;
+        const [language = "", file] = (lang ?? "").trim().split(/\s+/);
+        if (file === undefined) return `${codeBlock(text, language)}\n`;
         hasEvidence = true;
         const source = `<a href="${SOURCE_REPOSITORY_URL}/blob/main/${escapeHtml(file)}">${escapeHtml(file)}</a>`;
-        return `<figure class="evidence" data-evidence><figcaption>${source}</figcaption><pre><code class="language-${escapeHtml(language!)}">${escapeHtml(text)}</code></pre></figure>\n`;
+        return `<figure class="evidence" data-evidence><figcaption>${source}</figcaption>${codeBlock(text, language)}</figure>\n`;
       },
     },
   });

@@ -362,15 +362,17 @@ export async function coherentAssetSnapshot(params: {
   network: NetworkConfigLike & { pcashChainId: bigint };
   notes: readonly AssetInputNoteSnapshot[];
   defaultRuleSecrets: DefaultUserRuleSecrets;
-  selectedDefaultRule?: "asset-payment" | "asset-burn" | "batch-transfer" | "asset-creation";
+  selectedDefaultRule?: "asset-payment" | "asset-burn" | "batch-transfer" | "mint" | "large-mint";
 }): Promise<CoherentAssetSnapshot> {
   const defaults = defaultUserAccountRuleSet({
     wallet: params.wallet,
     network: params.network,
     secrets: params.defaultRuleSecrets,
   });
-  const selected = params.selectedDefaultRule === "asset-creation"
-    ? defaults.assetCreationRule
+  const selected = params.selectedDefaultRule === "mint"
+    ? defaults.mintRule
+    : params.selectedDefaultRule === "large-mint"
+    ? defaults.largeMintRule
     : params.selectedDefaultRule === "asset-payment"
     ? defaults.assetPaymentRule
     : params.selectedDefaultRule === "asset-burn"

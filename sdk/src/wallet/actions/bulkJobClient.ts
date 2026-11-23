@@ -29,6 +29,8 @@ import { fixPublication, ownIssuance, paddedPrivateValueByteSize, planPublicatio
 import { assertWalletStoreMatches } from "./walletSession.ts";
 import { localReceiveKeyLookup } from "./localChain.ts";
 import { assertReceiveKeyOwned, registeredSelfReceiveKey } from "./selfDelivery.ts";
+import { planRestrictedTransfer } from "./restrictedTransfer.ts";
+import type { DenyLists } from "../denyListSync.ts";
 
 /**
  * Validate the entire approved recipient list before any proof or submission.
@@ -264,6 +266,8 @@ export async function runBulkJobStep<Prepared, Output>(params: {
   privateRelayFeeAmount?: bigint;
   selectedRelayQuote?: SelectedRelayQuoteProvider;
   callbacks?: DurableSubmissionCallbacks;
+  /** The deny lists of restricted assets; absent, only assets without a transfer rule move. */
+  denyLists?: DenyLists;
 }): Promise<BulkJobStep> {
   return withWalletReservation(params.store, [`bulk-job:${params.jobId}`], async reservation => {
     const status = await params.node.status();
@@ -427,6 +431,11 @@ export async function runBulkJobStep<Prepared, Output>(params: {
       chainNow: witnesses.status.latestBlockTimestamp, defaultWindow: 1800n,
       selectedRelayQuote: params.selectedRelayQuote, action: "bulk payment",
     });
+    const restricted = assetDefinition === undefined ? undefined : await planRestrictedTransfer({
+      definition: assetDefinition, denyLists: params.denyLists, ownerAddress: params.wallet.address,
+      anchor: witnesses.anchor, genesisL1Block: witnesses.status.genesisL1Block,
+      chainNow: witnesses.status.latestBlockTimestamp, validUntilTimestamp,
+    });
     const issuance = selected
       ? await fixPublication({
         maxTransactionBytes: paddedPrivateValueByteSize(plan.shape, restoreAccountCreation(job.accountCreation)),
@@ -466,6 +475,7 @@ export async function runBulkJobStep<Prepared, Output>(params: {
         amount: privateRelayFeeAmount, ownerCommitment: relayFeeOwnerCommitment,
       } } : {}),
       ...(assetDefinition === undefined ? {} : { assetDefinition }),
+      ...(restricted === undefined ? {} : { restricted: restricted.restricted }),
       sender: {
         outgoingKey: params.wallet.outgoingKey,
         ...(recoveryRecord === undefined ? {} : { records: [recoveryRecord] }),
@@ -476,7 +486,8 @@ export async function runBulkJobStep<Prepared, Output>(params: {
       network: networkConfigFromStatus(witnesses.status) });
     const signed = authorization.authorize(await requestPcashAuthorization(params.signer, authorization.request));
     params.callbacks?.onProgress?.("proving", "proving the approved bulk chunk");
-    const entry = await params.prover.proveAndEncode(build, { packageName: authorization.authorizationCircuit, witnessMap: signed.witnessMap });
+    const entry = await params.prover.proveAndEncode(build, { packageName: authorization.authorizationCircuit, witnessMap: signed.witnessMap },
+      restricted?.policy(build, params.wallet.address, "transfer"));
     const preparedAction = prepareAssetAction({ build, transactionBytes: entry,
       ...(designatedIssuanceOpening === undefined ? {} : { designatedIssuanceOpening }),
       ...(selected ? { privateRelayRecipient: params.selectedRelayQuote!.recipient } : {}),

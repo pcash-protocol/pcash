@@ -1,10 +1,10 @@
 /* Full-bleed sections escape the centered main column and line up with the header. */
-.hero, .points { --edge: max(4vw, calc((100vw - var(--layout-max)) / 2)); margin-inline: calc(50% - 50vw); padding-inline: var(--edge); }
+.hero, .film, .claims, .points, .questions { --edge: max(4vw, calc((100vw - var(--layout-max)) / 2)); margin-inline: calc(50% - 50vw); padding-inline: var(--edge); }
 
 /* First screen: fills the viewport below the header (73px on one row, 122px on
    two) and leaves a 76px sliver of the next section visible. */
-.hero { position: relative; display: flex; align-items: center; min-height: calc(100svh - 73px - 76px); margin-top: -54px; padding-block: 56px; overflow: hidden; }
-@media (max-width: 1480px) { .hero { min-height: calc(100svh - 122px - 76px); } }
+.hero { position: relative; display: flex; align-items: center; min-height: calc(100svh - 73px - 76px); margin-top: -54px; padding-block: 40px; overflow: hidden; }
+@media (max-width: 1040px) { .hero { min-height: calc(100svh - 122px - 76px); } }
 
 /* The art prints onto the paper: the group multiplies, so the images' white
    backgrounds disappear. Nothing inside may create a stacking context, or the
@@ -30,8 +30,9 @@
 .art .seal { position: relative; width: 100%; height: auto; mix-blend-mode: multiply; }
 
 .copy { position: relative; max-width: 600px; }
-.copy h1 { margin: 0 0 22px; color: var(--color-text); font: 800 clamp(48px, 6.2vw, 96px)/0.98 var(--font-serif); letter-spacing: -0.025em; text-wrap: balance; }
-.copy p { margin: 0 0 32px; max-width: 30ch; color: var(--color-text); font-size: clamp(20px, 1.7vw, 24px); line-height: 1.4; }
+.copy h1 { margin: 0 0 10px; color: var(--color-text); font: 800 clamp(48px, 6.2vw, 96px)/0.98 var(--font-serif); letter-spacing: -0.025em; text-wrap: balance; }
+.copy p { margin: 0 0 32px; max-width: 34ch; color: var(--color-text); font-size: clamp(20px, 1.7vw, 24px); line-height: 1.4; }
+.copy .tagline { max-width: none; margin: 0 0 22px; font: 700 clamp(28px, 3vw, 44px)/1.1 var(--font-serif); letter-spacing: -0.015em; text-wrap: balance; }
 
 .actions { display: flex; flex-wrap: wrap; gap: 14px; }
 .copy .documents { max-width: none; margin: 22px 0 0; color: var(--color-text-muted); font-size: 16px; }
@@ -41,12 +42,42 @@
 .actions :global(.button.primary) { background: var(--color-text); color: var(--color-accent-contrast); }
 .actions :global(.button.primary):hover { background: var(--color-accent-hover); }
 
-.points { position: relative; margin-bottom: -80px; padding-block: 72px 88px; border-top: 3px double var(--color-text); background: var(--color-tint); }
-.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 48px; max-width: var(--layout-max); margin: 0 auto; }
-.numeral { display: block; width: auto; height: 104px; margin-bottom: 18px; mix-blend-mode: multiply; }
-.grid h2 { margin: 0 0 10px; padding-top: 16px; border-top: 1px solid var(--color-text); color: var(--color-text); font: 700 30px/1.15 var(--font-serif); letter-spacing: -0.01em; }
-.grid p { margin: 0; max-width: 34ch; color: var(--color-text); font-size: 18px; line-height: 1.55; }
-.points .actions { justify-content: center; margin-top: 64px; }
+.inner { max-width: var(--layout-max); margin: 0 auto; }
+.sectionHeading { margin: 0 0 8px; color: var(--color-text); font: 700 40px/1.1 var(--font-serif); letter-spacing: -0.015em; }
+.more { display: inline-block; margin-top: 10px; color: var(--color-text); font-weight: 600; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.more::after { content: " →"; display: inline-block; margin-left: 4px; text-decoration: none; }
+
+/* The last section: the film, then the page's closing buttons, flush with the footer. */
+.film { margin-bottom: -80px; padding-block: 56px 88px; border-top: 3px double var(--color-text); }
+.film .actions { justify-content: center; margin-top: 40px; }
+.video { display: block; width: 100%; max-width: 1040px; height: auto; margin: 0 auto; border: 1.5px solid var(--color-text); border-radius: 3px; background: var(--color-tint); }
+
+.claims { padding-block: 64px 72px; border-top: 3px double var(--color-text); }
+.claimGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px 64px; max-width: var(--layout-max); margin: 0 auto; }
+.claimGrid > div { scroll-margin-top: 140px; }
+.claimGrid h2 { margin: 0 0 12px; color: var(--color-text); font: 700 34px/1.12 var(--font-serif); letter-spacing: -0.015em; }
+.claimGrid p { max-width: 52ch; margin: 0; color: var(--color-text); font-size: 19px; line-height: 1.55; }
+
+.points { position: relative; padding-block: 64px 72px; border-top: 3px double var(--color-text); background: var(--color-tint); }
+.reasons { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 48px; margin: 16px 0 0; padding: 0; list-style: none; }
+.reasons li { padding-top: 22px; border-top: 1px solid var(--color-text); }
+.reasons h3 { margin: 0 0 8px; color: var(--color-text); font: 700 26px/1.15 var(--font-serif); letter-spacing: -0.01em; }
+.reasons p { margin: 0; color: var(--color-text); font-size: 18px; line-height: 1.55; }
+
+.questions { padding-block: 64px 72px; border-top: 3px double var(--color-text); }
+.answers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 0 48px; margin: 16px 0 0; }
+.answers > div { padding: 22px 0; border-top: 1px solid var(--color-text); scroll-margin-top: 140px; }
+.answers h3 { margin: 0 0 6px; color: var(--color-text); font: 700 21px/1.25 var(--font-serif); }
+.answers p { margin: 0; color: var(--color-text); font-size: 17px; line-height: 1.5; }
+.answers details p { margin-top: 8px; }
+/* "Read more" reads as a link and goes away once the rest of the answer is showing. */
+.answers summary { display: inline-block; margin-top: 8px; color: var(--color-text); font-weight: 600; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; list-style: none; cursor: pointer; }
+.answers summary::-webkit-details-marker { display: none; }
+.answers details[open] > summary { display: none; }
+.answers .more { margin-top: 8px; }
+/* A download shown with the answer, ahead of Read more. */
+.answers .download { display: block; width: fit-content; margin-top: 8px; color: var(--color-text); font-weight: 600; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.answers .download::after { content: " ↓"; display: inline-block; margin-left: 4px; text-decoration: none; }
 
 /* Narrow screens stack the seal above the headline, cropped larger than the screen. */
 @media (max-width: 1000px) {
@@ -59,14 +90,19 @@
   .lines { height: 150%; top: -25%; right: -30%; }
   .sealFrame { --w: min(118vw, 860px); right: calc(var(--w) * -0.32); top: calc(44% - var(--w) * 0.4925); }
   .copy { max-width: 640px; margin-top: -6vw; }
-  .grid { grid-template-columns: minmax(0, 1fr); gap: 40px; max-width: 640px; }
-}
+  .answers, .claimGrid, .reasons { grid-template-columns: minmax(0, 1fr); }
+  .reasons li { padding-bottom: 22px; }
+  .reasons li:last-child { padding-bottom: 0; }}
 
 @media (max-width: 760px) {
-  .copy h1 { font-size: clamp(40px, 11.5vw, 56px); }
+  .copy h1 { font-size: clamp(44px, 13vw, 64px); }
   .copy p { font-size: 20px; }
+  .copy .tagline { font-size: clamp(26px, 7.5vw, 34px); }
   .actions :global(.button) { flex: 1 1 100%; }
-  .points { padding-block: 56px 64px; }
-  .numeral { height: 84px; }
-  .grid h2 { font-size: 26px; }
+  .film { padding-block: 32px 88px; }
+  .claims, .points, .questions { padding-block: 48px 56px; }
+  .claimGrid h2 { font-size: 27px; }
+  .claimGrid p { font-size: 18px; }
+  .sectionHeading { font-size: 30px; }
+  .reasons h3 { font-size: 23px; }
 }

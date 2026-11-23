@@ -46,8 +46,12 @@ const DOMAIN_CONTEXTS: &[(&str, &str)] = &[
     ("DUMMY_NULLIFIER_DOMAIN", "dummy_nullifier"),
     ("APPLICATION_NULLIFIER_DOMAIN", "application_nullifier"),
     ("ASSET_ID_DOMAIN", "asset_id"),
-    ("ASSET_SECRET_COMMITMENT_DOMAIN", "asset_secret_commitment"),
-    ("ASSET_CREATION_MARKER_DOMAIN", "asset_creation_marker"),
+    ("ASSET_CORE_DOMAIN", "asset_core"),
+    ("ASSET_MINT_RULE_DOMAIN", "asset_mint_rule"),
+    ("ASSET_TRANSFER_RULE_DOMAIN", "asset_transfer_rule"),
+    ("ASSET_POLICY_DOMAIN", "asset_policy"),
+    ("ASSET_MINT_POLICY_DOMAIN", "asset_mint_policy"),
+    ("MINT_MARKER_DOMAIN", "mint_marker"),
     (
         "CONTRACT_FEE_SPONSORSHIP_ACTION_DOMAIN",
         "contract_fee_sponsorship_action",
@@ -90,7 +94,7 @@ const DOMAIN_CONTEXTS: &[(&str, &str)] = &[
         "authorization_commitment",
     ),
     ("TRANSFER_ACTION_DOMAIN", "transfer_action"),
-    ("ASSET_CREATION_ACTION_DOMAIN", "asset_creation_action"),
+    ("MINT_ACTION_DOMAIN", "mint_action"),
     (
         "SPONSORED_TRANSFER_ACTION_DOMAIN",
         "sponsored_transfer_action",

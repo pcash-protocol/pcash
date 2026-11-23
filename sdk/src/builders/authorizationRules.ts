@@ -40,7 +40,7 @@ export interface MultisigApproval {
 export interface BuildMultisigRuleParams {
   transaction: PrivateValue;
   /** The ID of the asset the private value creates; the transfer action ignores it. */
-  createdAssetId: FieldNumberish;
+  mintedAssetId: FieldNumberish;
   accountAddress: FieldNumberish;
   recentPcashBlockHash: FieldNumberish;
   eventEntry?: FieldNumberish;
@@ -65,18 +65,18 @@ export interface MultisigRuleBuild {
 
 /**
  * The action the multisig rule approves and the account it acts for: the two
- * values every approval signs. The action is the asset-creation action for
- * `createdAssetId` when the private value carries a creation marker, else the
+ * values every approval signs. The action is the mint action for
+ * `mintedAssetId` when the private value carries a mint marker, else the
  * transfer action.
  */
 export function multisigApprovalTerms(params: {
   transaction: PrivateValue;
-  createdAssetId: FieldNumberish;
+  mintedAssetId: FieldNumberish;
   accountAddress: FieldNumberish;
   pcashChainId: FieldNumberish;
 }): { actionCommitment: bigint; address: bigint } {
   return {
-    actionCommitment: ownerActionCommitment(params.pcashChainId, params.transaction, params.createdAssetId),
+    actionCommitment: ownerActionCommitment(params.pcashChainId, params.transaction, params.mintedAssetId),
     address: toAddressField(params.accountAddress, "accountAddress"),
   };
 }
@@ -157,7 +157,7 @@ export function buildMultisigRule(params: BuildMultisigRuleParams): MultisigRule
     event_entry: fm(params.eventEntry ?? DEFAULT_EVENT_ENTRY),
     configuration: { configuration_salt: fm(configurationSalt) },
     private_value: privateValueMap(params.transaction),
-    created_asset_id: fm(params.createdAssetId),
+    minted_asset_id: fm(params.mintedAssetId),
     account_address: fm(address),
     signers: sorted.map((s) => ({ x: u8ArrayMap(s.pubX), y: u8ArrayMap(s.pubY) })),
     approvals: approvals.map((a) => ({

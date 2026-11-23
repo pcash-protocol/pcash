@@ -79,11 +79,18 @@ export async function patchRecord<R extends TokensRecord>(
   return next as R;
 }
 
-/** The wallet's verified definition and spendable balance of an asset. */
+/**
+ * The wallet's verified definition of a token it funds into links or a drop,
+ * once its spendable balance covers `need`. A claim, take-back or reclaim never
+ * proves a transfer rule, so a token with one is refused.
+ */
 export async function walletToken(rt: TokensRuntime<unknown, unknown>, assetId: bigint, need: bigint) {
   const asset = (await rt.wallet.assets()).find((candidate) => candidate.assetId === assetId);
   if (asset === undefined || asset.definition === null) {
     throw new TokensError("unknown-asset", "This wallet does not hold a verified definition for the token.");
+  }
+  if (asset.definition.transferRule !== undefined) {
+    throw new TokensError("transfer-rule", "Claim links and drops are not available for tokens with a transfer rule.");
   }
   if (asset.spendable < need) {
     throw new TokensError("insufficient-funds", `This needs ${need} base units of the token; the wallet can spend ${asset.spendable}.`);

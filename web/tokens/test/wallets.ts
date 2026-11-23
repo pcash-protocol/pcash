@@ -3,7 +3,6 @@
 import { addressFromPublicKeyXY, publicKeyXY } from "@pcash/sdk/eip712";
 import {
   assetDefinitionAssetId,
-  assetSecretCommitment,
   generateMlKemKeyPair,
   noteBodyCommitment,
   ownerCommitment,
@@ -13,6 +12,7 @@ import {
 } from "@pcash/sdk/protocol";
 import {
   defaultUserAccountRuleSet,
+  deriveFixedSupplyAsset,
   generateDefaultUserRuleSecrets,
   type DefaultUserAccountRule,
   type DefaultUserAccountRuleSet,
@@ -82,12 +82,9 @@ export function userAuthorization(chain: SyntheticChain, user: TestUser, rule: D
   };
 }
 
-/** A standard asset definition and the asset ID it derives. */
+/** A fixed-supply asset definition and the asset ID it derives. */
 export function testToken(seed: bigint): { definition: AssetDefinition; assetId: bigint } {
-  const definition: AssetDefinition = {
-    initialSupply: 1_000_000n,
-    assetSecretCommitment: assetSecretCommitment(seed + 2n),
-    metadata: { name: "Foo", symbol: "FOO", decimals: 6, contentDigest: new Uint8Array(32).fill(Number(seed % 251n)) },
-  };
+  const metadata = { name: "Foo", symbol: "FOO", decimals: 6, contentDigest: new Uint8Array(32).fill(Number(seed % 251n)) };
+  const { definition } = deriveFixedSupplyAsset({ metadata, supply: 1_000_000n, secret: seed + 2n, instanceSalt: 0n });
   return { definition, assetId: assetDefinitionAssetId(definition) };
 }

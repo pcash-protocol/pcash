@@ -12,10 +12,13 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { buildNativeTransfer } from "../src/builders/index.ts";
 import { buildAssetAction, outOfBandAssetActionOutput } from "../src/builders/index.ts";
+import { findAssetDescriptor } from "../src/protocol/asset.ts";
 import {
-  assetSecretCommitment,
-  standardFungibleAssetId,
-} from "../src/protocol/asset.ts";
+  FIXED_SUPPLY_RULE_CIRCUIT,
+  fixedSupplyMintRule,
+  fixedSupplyMintWitness,
+  fixedSupplySecretCommitment,
+} from "../src/rules/fixedSupply.ts";
 import {
   WIRE_PROOF_BYTES,
   decodeTransaction,
@@ -24,7 +27,7 @@ import {
 } from "../src/protocol/codec.ts";
 import { bytesEqual } from "../src/utils/bytes.ts";
 import {
-  proveAssetCreationChonk,
+  proveMintChonk,
   proveTransferTransactionChonk,
   type NativeChonkResult,
 } from "../src/prover/index.ts";
@@ -53,7 +56,7 @@ suite("SDK-built CHONK proofs", () => {
   const chainId = 0x1ff6n;
   let transfer: ReturnType<typeof buildNativeTransfer>;
   let transferProof: NativeChonkResult;
-  let creationProof: NativeChonkResult;
+  let mintProof: NativeChonkResult;
 
   beforeAll(async () => {
     transfer = buildNativeTransfer(transferFixture({
@@ -76,17 +79,10 @@ suite("SDK-built CHONK proofs", () => {
       backend: nativeChonkBackend(),
     });
 
-    const assetSecret = 0x123456n;
-    const initialSupply = 1_000_000n;
-    const assetFields = {
-      metadataCommitment: 0xa0a0n,
-      initialSupply,
-      assetSecretCommitment: assetSecretCommitment(assetSecret),
-    };
-    const assetDescriptor = {
-      ...assetFields,
-      assetId: standardFungibleAssetId(assetFields),
-    };
+    const secret = 0x123456n;
+    const supply = 1_000_000n;
+    const configuration = { supply, secretCommitment: fixedSupplySecretCommitment(secret) };
+    const descriptor = findAssetDescriptor({ metadataCommitment: 0xa0a0n, mintRule: fixedSupplyMintRule(configuration) }, 0n);
     const rules = defaultUserAccountRuleSet({ wallet, secrets: TEST_DEFAULT_RULE_SECRETS });
     const accounts = new SparseMerkleTree(40);
     accounts.setLeaf(0, accountStateCommitment(wallet.address, nullifierKeyCommitment(wallet.nkRoot), rules.accountRuleSetCommitment, 0n, 1n, 0n));
@@ -98,7 +94,7 @@ suite("SDK-built CHONK proofs", () => {
       accountStateRoot: accounts.root,
       accountCount: 1,
     });
-    const creation = buildAssetAction({
+    const mint = buildAssetAction({
       pcashChainId: chainId,
       snapshot: {
         recentPcashBlockHash: recent.recentPcashBlockHash,
@@ -109,16 +105,15 @@ suite("SDK-built CHONK proofs", () => {
         accountStateRoot: accounts.root,
         accountStateRootStateSiblings: recent.accountStateRootStateSiblings,
       },
-      assetDescriptor,
-      assetSecret,
+      mint: { descriptor },
       owner: { address: wallet.address, nkRoot: wallet.nkRoot, accountIndex: 0, accountSiblings: accounts.proof(0).siblings, accountRuleSetCommitment: rules.accountRuleSetCommitment, accountKind: 0n, accountRevision: 1n, receiveKeyHash: 0n,
-        rule: { configurationCommitment: rules.assetCreationRule.configurationCommitment, commitmentBlinder: rules.assetCreationRule.commitmentBlinder, entryIndex: rules.assetCreationRule.entryIndex, siblings: rules.assetCreationRule.siblings } },
-      inputs: [{ kind: "creation-marker" }, { kind: "dummy" }, { kind: "dummy" }, { kind: "dummy" }],
+        rule: { configurationCommitment: rules.mintRule.configurationCommitment, commitmentBlinder: rules.mintRule.commitmentBlinder, entryIndex: rules.mintRule.entryIndex, siblings: rules.mintRule.siblings } },
+      inputs: [{ kind: "mint-marker", replayId: secret }, { kind: "dummy" }, { kind: "dummy" }, { kind: "dummy" }],
       outputs: [
         outOfBandAssetActionOutput({
           kind: "asset",
           recipientAddress: 0x1234n, noteSecret: 0x1111n,
-          amount: initialSupply,
+          amount: supply,
           outputData: sizeClassFiller(),
         }),
         { kind: "dummy", dummySecret: 0x2222n, amount: 0n, outputData: sizeClassFiller() },
@@ -131,11 +126,12 @@ suite("SDK-built CHONK proofs", () => {
       validUntilTimestamp: 999_999n,
       dummyInputSeed: 0x987654n,
     });
-    const authorization = creation.prepareOwnerAuthorization({ wallet });
+    const authorization = mint.prepareOwnerAuthorization({ wallet });
     const signed = authorization.authorize(authorizePcashRequestWithPrivateKey(wallet.privKey, authorization.request));
-    creationProof = await proveAssetCreationChonk({
-      authorization: { packageName: "account_rule_asset_creation_ecdsa", witnessMap: signed.witnessMap },
-      build: creation,
+    mintProof = await proveMintChonk({
+      authorization: { packageName: "account_rule_mint_ecdsa", witnessMap: signed.witnessMap },
+      build: mint,
+      mintRule: { packageName: FIXED_SUPPLY_RULE_CIRCUIT, witnessMap: fixedSupplyMintWitness({ mint, configuration, secret }) },
       resolve: resolver,
       backend: nativeChonkBackend(),
     });
@@ -143,7 +139,7 @@ suite("SDK-built CHONK proofs", () => {
 
   it("uses the release-pinned compressed proof sizes", () => {
     expect(transferProof.proof).toHaveLength(WIRE_PROOF_BYTES);
-    expect(creationProof.proof).toHaveLength(WIRE_PROOF_BYTES);
+    expect(mintProof.proof).toHaveLength(WIRE_PROOF_BYTES);
   });
 
   it("codec round-trips a real CHONK transfer proof", () => {

@@ -6,8 +6,7 @@
 use crate::authorization::authentication::AccountOpening;
 use crate::ledger::note::{application_nullifier, dummy_nullifier, open_owner_input};
 use crate::ledger::private_value::{
-    SLOT_CLASS_APPLICATION, SLOT_CLASS_ASSET, SLOT_CLASS_ASSET_CREATION, SLOT_CLASS_DUMMY,
-    SLOT_CLASS_NATIVE,
+    SLOT_CLASS_APPLICATION, SLOT_CLASS_ASSET, SLOT_CLASS_DUMMY, SLOT_CLASS_MINT, SLOT_CLASS_NATIVE,
 };
 use crate::primitives::params::{BLOCK_HEADER_TREE_DEPTH, STATE_TREE_DEPTH};
 use crate::primitives::types::InputNoteWitness;
@@ -121,7 +120,7 @@ pub fn open_transfer_inputs<let N_IN: u32>(
     let mut result = no_inputs();
     for i in 0..N_IN {
         let class = input_slot_classes[i];
-        assert(class != SLOT_CLASS_ASSET_CREATION, "transfer input must not be a creation marker");
+        assert(class != SLOT_CLASS_MINT, "transfer input must not be a mint marker");
         if class == SLOT_CLASS_DUMMY {
             result.nullifiers[i] = dummy_nullifier(dummy_input_seed, i as Field);
         } else if class == SLOT_CLASS_APPLICATION {
@@ -161,7 +160,7 @@ mod tests {
     use crate::ledger::note::{dummy_nullifier, full_output_commitment, nullifier};
     use crate::ledger::note::tests::single_note_opening;
     use crate::ledger::private_value::{
-        SLOT_CLASS_APPLICATION, SLOT_CLASS_ASSET, SLOT_CLASS_ASSET_CREATION, SLOT_CLASS_DUMMY,
+        SLOT_CLASS_APPLICATION, SLOT_CLASS_ASSET, SLOT_CLASS_DUMMY, SLOT_CLASS_MINT,
         SLOT_CLASS_NATIVE,
     };
     use crate::primitives::hash::pcash_hash;
@@ -249,10 +248,9 @@ mod tests {
         );
     }
 
-    #[test(should_fail_with = "transfer input must not be a creation marker")]
-    fn test_transfer_inputs_reject_a_creation_marker() {
-        let classes =
-            [SLOT_CLASS_ASSET_CREATION, SLOT_CLASS_DUMMY, SLOT_CLASS_DUMMY, SLOT_CLASS_DUMMY];
+    #[test(should_fail_with = "transfer input must not be a mint marker")]
+    fn test_transfer_inputs_reject_a_mint_marker() {
+        let classes = [SLOT_CLASS_MINT, SLOT_CLASS_DUMMY, SLOT_CLASS_DUMMY, SLOT_CLASS_DUMMY];
         let _ = open_transfer_inputs(
             classes,
             PRIMARY,
@@ -344,12 +342,8 @@ mod tests {
         let (witness, root) = single_note_opening(note);
         let mut witnesses = no_witnesses();
         witnesses[2] = witness;
-        let classes = [
-            SLOT_CLASS_DUMMY,
-            SLOT_CLASS_APPLICATION,
-            SLOT_CLASS_NATIVE,
-            SLOT_CLASS_ASSET_CREATION,
-        ];
+        let classes =
+            [SLOT_CLASS_DUMMY, SLOT_CLASS_APPLICATION, SLOT_CLASS_NATIVE, SLOT_CLASS_MINT];
         let inputs = open_native_notes(classes, PAYER, root, witnesses);
         let leaf = full_output_commitment(note, 0);
         assert(inputs.input_commitments == [0, 0, leaf, 0]);

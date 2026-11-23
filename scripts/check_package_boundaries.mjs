@@ -21,13 +21,14 @@ export const PACKAGE_GRAPH = Object.freeze({
   "web/board": { name: "@pcash/board", dependencies: ["@pcash/sdk"] },
   "web/tokens": { name: "@pcash/tokens", dependencies: ["@pcash/sdk"] },
   lineage: { name: "@pcash/lineage", dependencies: ["@pcash/sdk", "@pcash/test-support"] },
+  stablecoin: { name: "@pcash/stablecoin", dependencies: ["@pcash/sdk"] },
   web: {
     name: "@pcash/web",
     dependencies: ["@pcash/sdk", "@pcash/marketplace", "@pcash/tokens", "@pcash/board"],
   },
   e2e: {
     name: "@pcash/e2e",
-    dependencies: ["@pcash/sdk", "@pcash/wallet", "@pcash/marketplace", "@pcash/tokens", "@pcash/relayer", "@pcash/test-support", "@pcash/lineage", "@pcash/board"],
+    dependencies: ["@pcash/sdk", "@pcash/wallet", "@pcash/marketplace", "@pcash/tokens", "@pcash/relayer", "@pcash/test-support", "@pcash/lineage", "@pcash/board", "@pcash/stablecoin"],
   },
   bench: {
     name: "@pcash/bench",

@@ -1,7 +1,7 @@
 // Durable submission for an already-proved standard asset action. This module
 // owns the wallet invariants that begin once exact type-0 bytes exist.
 
-import { privateValueProfile, PRIVATE_VALUE_PROFILES, type PrivateValueShape } from "@pcash/sdk/constants";
+import { privateValueProfile, PRIVATE_VALUE_PROFILES, type PrivateValueProfile, type PrivateValueShape } from "@pcash/sdk/constants";
 import { addressHex, bytes32Hex } from "@pcash/sdk/utils";
 import { acceptedReceiptOfKind } from "./walletSession.ts";
 import {
@@ -15,6 +15,7 @@ import {
   decodeTransaction,
   networkConfigFromStatus,
   privateValuePublicInputs,
+  ProfileCapacityError,
   TX_KIND_PRIVATE_VALUE,
   type AssetDefinition,
   type DesignatedIssuanceOpening,
@@ -34,6 +35,7 @@ import {
   addPendingNote,
   addWalletAsset,
   assertPendingAssetActionBelongsToWallet,
+  InsufficientNotesError,
   removePendingAssetAction,
   removePendingNotesForTransaction,
   removeWalletAsset,
@@ -65,9 +67,14 @@ export interface PreparedAssetAction {
 
 /** Proves an asset action through the transfer kernel under the installed rule its owner authorization selected. */
 export interface AssetActionProver {
-  /** The shapes this prover can prove; a bulk job plans chunks only in these. */
+  /** The shapes this prover can prove; asset sends and bulk chunks choose their profile only among these. */
   readonly shapes: readonly PrivateValueShape[];
-  proveAndEncode(build: AssetActionBuild, authorization: { packageName: string; witnessMap: Record<string, unknown> }): Promise<Uint8Array>;
+  /** `policy` is the asset's transfer rule and its witness, exactly for an asset with one. */
+  proveAndEncode(
+    build: AssetActionBuild,
+    authorization: { packageName: string; witnessMap: Record<string, unknown> },
+    policy?: { packageName: string; witnessMap: Record<string, unknown> },
+  ): Promise<Uint8Array>;
 }
 
 export interface PrepareAssetActionParams {
@@ -102,6 +109,8 @@ export interface AssetActionWitnesses {
   inputSiblings: bigint[][];
   /** Recipients' receive keys from the account set `snapshot` opens against. */
   receiveKeyOf: (address: string) => Promise<Uint8Array | null>;
+  /** The recent block `snapshot` opens against. */
+  anchor: { blockHash: bigint; number: bigint; timestamp: bigint };
 }
 
 /** Collect the initiating account and optional note inputs at one canonical boundary. */
@@ -129,10 +138,10 @@ export async function collectAssetActionWitnesses(params: {
     assertPcashProfileMatchesAccountIdentity(params.wallet, value.accountPath.account);
   }
   const defaultSelectedRule = defaultRules === null ? null : (params.shape === PRIVATE_VALUE_PROFILES.L.shapeId
-    ? params.authorizationKind === "asset-creation" ? defaultRules!.largeAssetCreationRule : defaultRules!.largeBatchTransferRule
+    ? params.authorizationKind === "mint" ? defaultRules!.largeMintRule : defaultRules!.largeBatchTransferRule
     : (
-    params.authorizationKind === "asset-creation"
-      ? defaultRules!.assetCreationRule
+    params.authorizationKind === "mint"
+      ? defaultRules!.mintRule
       : params.authorizationKind === "asset-payment"
       ? defaultRules!.assetPaymentRule
       : params.authorizationKind === "asset-burn"
@@ -160,7 +169,34 @@ export async function collectAssetActionWitnesses(params: {
       .slice(0, params.inputOpenings.length)
       .map((path) => path.siblings),
     receiveKeyOf: snapshot.receiveKeyOf,
+    anchor: {
+      blockHash: BigInt(value.accountPath.boundary.blockHash),
+      number: BigInt(value.accountPath.boundary.header.number),
+      timestamp: BigInt(value.accountPath.boundary.header.timestamp),
+    },
   };
+}
+
+/**
+ * Build in S, and again in L when the prover proves L and S cannot hold the
+ * action: its notes need more input slots, or its outputs or records more
+ * room, than S has. Building precedes every signature, proof and journal entry.
+ */
+export async function buildInFittingProfile<T>(
+  shapes: readonly PrivateValueShape[],
+  build: (profile: PrivateValueProfile) => Promise<T>,
+): Promise<T> {
+  const profiles = [PRIVATE_VALUE_PROFILES.S, PRIVATE_VALUE_PROFILES.L].filter((profile) => shapes.includes(profile.shapeId));
+  for (const [index, profile] of profiles.entries()) {
+    try {
+      return await build(profile);
+    } catch (error) {
+      const doesNotFit = error instanceof ProfileCapacityError
+        || (error instanceof InsufficientNotesError && error.totalBalance >= error.need);
+      if (!doesNotFit || index === profiles.length - 1) throw error;
+    }
+  }
+  throw new Error("the prover proves neither asset action profile");
 }
 
 /**

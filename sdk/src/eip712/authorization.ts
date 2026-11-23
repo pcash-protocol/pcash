@@ -28,7 +28,7 @@ export type PcashAuthorizationKind =
   | "account-creation"
   | "account-update"
   | "payment"
-  | "asset-creation"
+  | "mint"
   | "asset-payment"
   | "asset-burn"
   | "batch-transfer"

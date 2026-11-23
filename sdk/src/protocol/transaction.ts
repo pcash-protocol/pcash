@@ -13,7 +13,7 @@ export const SlotClass = {
   DUMMY: 0,
   NATIVE: 1,
   ASSET: 2,
-  ASSET_CREATION: 3,
+  MINT: 3,
   APPLICATION: 4,
 } as const;
 
@@ -65,11 +65,11 @@ function inputSlotClass(value: SlotClassValue): bigint {
     value !== SlotClass.DUMMY &&
     value !== SlotClass.NATIVE &&
     value !== SlotClass.ASSET &&
-    value !== SlotClass.ASSET_CREATION &&
+    value !== SlotClass.MINT &&
     value !== SlotClass.APPLICATION
   ) {
     throw new Error(
-      "input slotClass must be DUMMY, NATIVE, ASSET, ASSET_CREATION, or APPLICATION",
+      "input slotClass must be DUMMY, NATIVE, ASSET, MINT, or APPLICATION",
     );
   }
   return slotClass(value);

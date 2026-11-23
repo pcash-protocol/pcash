@@ -35,7 +35,7 @@ interface SyncWalletParams {
   rescan?: boolean;
   /** Declare a freshly generated wallet live at the current output boundary. */
   anchorAtCurrentBoundary?: boolean;
-  /** Open a store with no local chain state at the target and leave its history to `replayHistory`. */
+  /** Open a store with no local chain state, or one far behind, at the target and leave what it skipped to `scanHistory`. */
   headFirst?: boolean;
   signal?: AbortSignal;
   trialDecrypt?: TrialDecrypt;

@@ -10,7 +10,8 @@ import {
   type ReceiptResult,
   type PcashNodeClient,
 } from "@pcash/sdk/browser";
-import { applicationSchemaId, encodeAssetDefinition } from "@pcash/sdk/protocol";
+import { applicationSchemaId, encodeAssetDefinition, findAssetDefinition } from "@pcash/sdk/protocol";
+import { mintRuleLabel } from "@pcash/sdk/rules";
 import { derivePcashProfileFromPrivateKey, type Wallet } from "@pcash/sdk/wallet";
 import {
   claimConfigurationCommitment,
@@ -75,7 +76,7 @@ test("a token listing carries its verified definition through the portable encod
   assert.equal(definition?.metadata.name, "Test Token");
   assert.equal(definition?.metadata.symbol, "TT");
   assert.equal(definition?.metadata.decimals, 6);
-  assert.equal(definition?.initialSupply, 1_000_000_000n);
+  assert.equal(definition === null ? undefined : mintRuleLabel(definition.mintRule), "fixed supply 1000000000");
 });
 
 test("a native listing carries no definition", () => {
@@ -95,7 +96,8 @@ test("untrusted listings cannot misstate the token they escrow", () => {
   reject({ ...publication, assetDefinition: `${bytesToHex(token.bytes)}00` }, /trailing bytes/);
   reject({ ...publication, assetDefinition: "0xzz" }, /canonical byte-aligned hex/);
   reject({ ...publication, terms: { ...publication.terms, assetId: fieldToHex(0n) } }, /carry no asset definition/);
-  const renamed = { ...token.definition, metadata: { ...token.definition.metadata, name: "Other Token" } };
+  const renamedMetadata = { ...token.definition.metadata, name: "Other Token" };
+  const renamed = findAssetDefinition({ mintRule: token.definition.mintRule, metadata: renamedMetadata }, token.definition.instanceSalt);
   reject({ ...publication, assetDefinition: bytesToHex(encodeAssetDefinition(renamed)) }, /does not derive the listed assetId/);
   reject({ ...publication, assetDefinition: bytesToHex(Uint8Array.from([2, ...token.bytes.slice(1)])) }, /unknown asset definition version/);
 });

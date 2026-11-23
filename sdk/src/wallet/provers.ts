@@ -7,7 +7,8 @@ import {
 import { CIRCUIT_PROVING_RUNTIMES, CIRCUIT_SRS_POINTS, PRIVATE_VALUE_PROFILES } from "@pcash/sdk/constants";
 import {
   proveTransferTransactionChonk,
-  proveAssetCreationChonk,
+  proveRestrictedTransferChonk,
+  proveMintChonk,
   proveUserAccountUpdateChonk,
   srsPointsForCircuits,
   wasmChonkBackend,
@@ -33,20 +34,24 @@ export function walletProverBackend(kind: ProverKind): ChonkBackend {
 export function createWalletProvers(kind: ProverKind): WalletRuntimeProvers {
   const backend = walletProverBackend(kind);
   const resolve = createReleaseChonkCircuitResolver({ backend });
+  const shapes = kind === "native" ? [PRIVATE_VALUE_PROFILES.S.shapeId, PRIVATE_VALUE_PROFILES.L.shapeId] : [PRIVATE_VALUE_PROFILES.S.shapeId];
   return {
     assetCreation: {
-      async proveAndEncode(build, authorizationWitnessMap) {
+      shapes,
+      async proveAndEncode(build, authorizationWitnessMap, mintRule) {
         if (build.shape === PRIVATE_VALUE_PROFILES.L.shapeId && kind !== "native") throw new Error("L transactions require native proving.");
-        const proof = await proveAssetCreationChonk({ build, authorization: { packageName: build.shape === PRIVATE_VALUE_PROFILES.L.shapeId ? "account_rule_large_asset_creation_ecdsa" : "account_rule_asset_creation_ecdsa", witnessMap: authorizationWitnessMap }, resolve, backend });
+        const proof = await proveMintChonk({ build, authorization: { packageName: build.shape === PRIVATE_VALUE_PROFILES.L.shapeId ? "account_rule_large_mint_ecdsa" : "account_rule_mint_ecdsa", witnessMap: authorizationWitnessMap }, mintRule, resolve, backend });
         return build.encodeTransaction(proof.proof);
       },
     },
     assetAction: {
-      shapes: kind === "native" ? [PRIVATE_VALUE_PROFILES.S.shapeId, PRIVATE_VALUE_PROFILES.L.shapeId] : [PRIVATE_VALUE_PROFILES.S.shapeId],
-      async proveAndEncode(build, authorization) {
+      shapes,
+      async proveAndEncode(build, authorization, policy) {
         if (build.shape === PRIVATE_VALUE_PROFILES.L.shapeId && kind !== "native") throw new Error("L transactions require native proving.");
-        const proof = await proveTransferTransactionChonk({ build, authorizationPackage: authorization.packageName,
-          authorizationWitnessMap: authorization.witnessMap, resolve, backend });
+        const proof = policy === undefined
+          ? await proveTransferTransactionChonk({ build, authorizationPackage: authorization.packageName,
+            authorizationWitnessMap: authorization.witnessMap, resolve, backend })
+          : await proveRestrictedTransferChonk({ build, authorization, policy, resolve, backend });
         return build.encodeTransaction(proof.proof);
       },
     },

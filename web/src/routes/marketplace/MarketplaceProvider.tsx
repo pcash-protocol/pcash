@@ -1,9 +1,8 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import type { StoredOffer } from "@pcash/marketplace/app";
-import { useNetwork } from "../../components/NetworkContext.tsx";
 import { marketplaceStoreName, openMarketplaceStore } from "../../lib/MarketplaceStore.ts";
-import { networkInstanceKey } from "../../lib/networks.ts";
+import { chainInstanceKey } from "../../lib/networks.ts";
 import { useWallet } from "../../lib/WalletProvider.tsx";
 import { useMarketplaceTodos } from "./todos.ts";
 import { MarketplaceContext, useMarketplaceController } from "./useMarketplace.ts";
@@ -16,8 +15,8 @@ export function useMarketplaceTodoCount(): number {
   return useContext(TodoCountContext);
 }
 
-function MarketplaceSession({ children }: { children: ReactNode }) {
-  const market = useMarketplaceController();
+function MarketplaceSession({ scope, children }: { scope: string | undefined; children: ReactNode }) {
+  const market = useMarketplaceController(scope);
   const elsewhere = !market.location.pathname.startsWith("/marketplace");
   const pending = market.tradePending || (market.pendingPublication && market.progress?.phase !== "done");
   return <MarketplaceContext.Provider value={market}>
@@ -32,13 +31,11 @@ function MarketplaceSession({ children }: { children: ReactNode }) {
 }
 
 /** Before the first marketplace visit, the count comes from the trades this browser saved, read once per owner. */
-function SavedTodoCount({ children }: { children: ReactNode }) {
+function SavedTodoCount({ scope, children }: { scope: string | undefined; children: ReactNode }) {
   const { profile } = useWallet();
-  const { network } = useNetwork();
-  const scope = networkInstanceKey(network);
   const [offers, setOffers] = useState<StoredOffer[]>([]);
   useEffect(() => {
-    if (profile === undefined) return;
+    if (profile === undefined || scope === undefined) return;
     let cancelled = false;
     void openMarketplaceStore(marketplaceStoreName(scope)).then(async (store) => {
       try {
@@ -57,12 +54,14 @@ function SavedTodoCount({ children }: { children: ReactNode }) {
 /** Mount on the first marketplace visit, then keep authorized work alive across routes. */
 export function MarketplaceProvider({ children }: { children: ReactNode }) {
   const location = useLocation();
-  const { network } = useNetwork();
+  const { status } = useWallet();
+  const scope = status === undefined ? undefined : chainInstanceKey(status);
   const visiting = location.pathname.startsWith("/marketplace");
   const [visited, setVisited] = useState(visiting);
   useEffect(() => { if (visiting) setVisited(true); }, [visiting]);
-  if (!visited && !visiting) return <SavedTodoCount>{children}</SavedTodoCount>;
-  return <MarketplaceSession key={networkInstanceKey(network)}>
+  if (!visited && !visiting) return <SavedTodoCount scope={scope}>{children}</SavedTodoCount>;
+  // Keyed by chain: the session opens its store once the node's status is known, and starts over on another chain.
+  return <MarketplaceSession key={scope} scope={scope}>
     {children}
   </MarketplaceSession>;
 }

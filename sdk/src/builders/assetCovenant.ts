@@ -74,7 +74,7 @@ export function buildAssetCovenantRuleWitness(params: {
     > params.maxNativeOpenFeeAmount) {
     throw new Error("asset successor covenant open fee and native burn exceed maxNativeOpenFeeAmount");
   }
-  if (params.build.transaction.inputs.some((input) => input.slotClass === SlotClass.ASSET_CREATION)) {
+  if (params.build.transaction.inputs.some((input) => input.slotClass === SlotClass.MINT)) {
     throw new Error("asset successor covenant input must be asset, native, or dummy");
   }
   requireLength(params.successor.accountSiblings, MERKLE_DEPTH, "successor account siblings");

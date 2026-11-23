@@ -17,7 +17,9 @@
 // indicator.
 //
 // This is a separate CHONK protocol kernel because it consumes two installed
-// authorization applications rather than the transfer kernel's one.
+// authorization applications rather than the transfer kernel's one. It moves
+// only assets without a transfer rule; the restricted sponsored-transfer kernel
+// moves the others with the same relation.
 
 use crate::authorization::account::{ACCOUNT_KIND_CONTRACT, ACCOUNT_KIND_USER};
 use crate::authorization::authentication::{authenticate, AuthorizedAccount};
@@ -26,6 +28,7 @@ use crate::authorization::statement::{
     sponsored_transfer_action_commitment,
 };
 use crate::events::{EVENT_STATEMENT_LENGTH, events_commitment, verify_event};
+use crate::ledger::asset::assert_unrestricted_asset_id;
 use crate::ledger::fee_payment::{
     assert_native_fee_conservation, native_change_outputs, NativeChange, NativeRelayOutput,
 };
@@ -38,16 +41,26 @@ use crate::primitives::params::{BLOCK_HEADER_TREE_DEPTH, STATE_TREE_DEPTH};
 use crate::primitives::types::InputNoteWitness;
 use crate::recursion::{AppVerificationKey, verify_first_app, verify_next_app};
 
-pub fn sponsored_transfer<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
+// A sponsored action: its private value, the primary contract's sponsored
+// action and the fee payer's sponsorship action, both accounts' authorization
+// commitments, and the primary contract's address.
+pub struct SponsoredAction<let N_IN: u32, let N_OUT: u32, let SHAPE: u32> {
+    pub private_value: PrivateValue<N_IN, N_OUT, SHAPE>,
+    pub action: Field,
+    pub fee_action: Field,
+    pub primary_authorization: Field,
+    pub fee_authorization: Field,
+    pub primary_address: Field,
+}
+
+// The relation both sponsored kernels share.
+pub fn sponsored_action<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
     pcash_chain_id: Field,
     recent_pcash_block_hash: Field,
     choices: PrivateValueChoices<N_IN, N_OUT>,
     output_owner_commitments: [Field; N_OUT],
     output_dummy_secrets: [Field; N_OUT],
     asset_output_amounts: [Field; N_OUT],
-    // The fee payer's change note, if any. Its secret is theirs to choose: the
-    // change returns to a real party, not to a contract that later provers must
-    // be able to reconstruct.
     native_change: NativeChange,
     native_relay_output: NativeRelayOutput,
     asset_id: Field,
@@ -61,14 +74,9 @@ pub fn sponsored_transfer<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
     primary: AuthorizedAccount,
     fee_payer: AuthorizedAccount,
     owner_inputs: [InputNoteWitness; N_IN],
-    primary_statement: [Field; RULE_STATEMENT_LENGTH],
-    primary_vk: AppVerificationKey,
-    fee_statement: [Field; RULE_STATEMENT_LENGTH],
-    fee_vk: AppVerificationKey,
-    event_statement: [Field; EVENT_STATEMENT_LENGTH],
-    event_application_vk: AppVerificationKey,
-    event_salt: Field,
-) -> [Field; N_IN + N_OUT + 11] {
+    primary_vk_hash: Field,
+    fee_vk_hash: Field,
+) -> SponsoredAction<N_IN, N_OUT, SHAPE> {
     open_value_state(
         recent_pcash_block_hash,
         block_header_state_siblings,
@@ -85,13 +93,13 @@ pub fn sponsored_transfer<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
     let primary_account = authenticate(
         primary,
         ACCOUNT_KIND_CONTRACT,
-        primary_vk.hash,
+        primary_vk_hash,
         account_state_root,
     );
     let fee_account = authenticate(
         fee_payer,
         ACCOUNT_KIND_USER,
-        fee_vk.hash,
+        fee_vk_hash,
         account_state_root,
     );
 
@@ -147,32 +155,99 @@ pub fn sponsored_transfer<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
         native_relay_output.amount,
     );
 
-    // --- the two authorizations -------------------------------------------------
-    let (private_value, commitment): (PrivateValue<N_IN, N_OUT, SHAPE>, Field) =
-        build_private_value(choices, inputs.input_commitments, inputs.nullifiers, bodies);
     // The two roles approve the same private value under different domains,
     // so neither approval reads as the other, nor as a one-account transfer.
     // The sponsor's action names the authenticated contract it pays for.
-    let action = sponsored_transfer_action_commitment(pcash_chain_id, commitment);
+    let (private_value, commitment): (PrivateValue<N_IN, N_OUT, SHAPE>, Field) =
+        build_private_value(choices, inputs.input_commitments, inputs.nullifiers, bodies);
+    SponsoredAction {
+        private_value,
+        action: sponsored_transfer_action_commitment(pcash_chain_id, commitment),
+        fee_action: contract_fee_sponsorship_action_commitment(
+            pcash_chain_id,
+            commitment,
+            primary_account.address,
+        ),
+        primary_authorization: primary_account.authorization,
+        fee_authorization: fee_account.authorization,
+        primary_address: primary_account.address,
+    }
+}
+
+pub fn sponsored_transfer<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
+    pcash_chain_id: Field,
+    recent_pcash_block_hash: Field,
+    choices: PrivateValueChoices<N_IN, N_OUT>,
+    output_owner_commitments: [Field; N_OUT],
+    output_dummy_secrets: [Field; N_OUT],
+    asset_output_amounts: [Field; N_OUT],
+    // The fee payer's change note, if any. Its secret is theirs to choose: the
+    // change returns to a real party, not to a contract that later provers must
+    // be able to reconstruct.
+    native_change: NativeChange,
+    native_relay_output: NativeRelayOutput,
+    asset_id: Field,
+    dummy_input_seed: Field,
+    replay_ids: [Field; N_IN],
+    block_header_state_siblings: [Field; BLOCK_HEADER_TREE_DEPTH],
+    output_root: Field,
+    state_output_siblings: [Field; STATE_TREE_DEPTH],
+    account_state_root: Field,
+    state_account_siblings: [Field; STATE_TREE_DEPTH],
+    primary: AuthorizedAccount,
+    fee_payer: AuthorizedAccount,
+    owner_inputs: [InputNoteWitness; N_IN],
+    primary_statement: [Field; RULE_STATEMENT_LENGTH],
+    primary_vk: AppVerificationKey,
+    fee_statement: [Field; RULE_STATEMENT_LENGTH],
+    fee_vk: AppVerificationKey,
+    event_statement: [Field; EVENT_STATEMENT_LENGTH],
+    event_application_vk: AppVerificationKey,
+    event_salt: Field,
+) -> [Field; N_IN + N_OUT + 11] {
+    assert_unrestricted_asset_id(asset_id);
+    let action: SponsoredAction<N_IN, N_OUT, SHAPE> = sponsored_action(
+        pcash_chain_id,
+        recent_pcash_block_hash,
+        choices,
+        output_owner_commitments,
+        output_dummy_secrets,
+        asset_output_amounts,
+        native_change,
+        native_relay_output,
+        asset_id,
+        dummy_input_seed,
+        replay_ids,
+        block_header_state_siblings,
+        output_root,
+        state_output_siblings,
+        account_state_root,
+        state_account_siblings,
+        primary,
+        fee_payer,
+        owner_inputs,
+        primary_vk.hash,
+        fee_vk.hash,
+    );
     verify_first_app(primary_vk);
     verify_next_app(fee_vk);
     let entry = verify_event(
         event_statement,
         event_application_vk,
-        action,
+        action.action,
         recent_pcash_block_hash,
     );
     assert_rule_statement(
         primary_statement,
-        primary_account.authorization,
-        action,
+        action.primary_authorization,
+        action.action,
         recent_pcash_block_hash,
         entry,
     );
     assert_rule_statement(
         fee_statement,
-        fee_account.authorization,
-        contract_fee_sponsorship_action_commitment(pcash_chain_id, commitment, primary.address),
+        action.fee_authorization,
+        action.fee_action,
         recent_pcash_block_hash,
         entry,
     );
@@ -180,7 +255,7 @@ pub fn sponsored_transfer<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
     transaction_statement(
         pcash_chain_id,
         recent_pcash_block_hash,
-        private_value,
+        action.private_value,
         events_commitment(entry, event_salt),
     )
 }

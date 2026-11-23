@@ -78,7 +78,7 @@ it("carries received memos and claimed senders, and what each payment sent", asy
   const result = await new NativeActivityReader().read(inventory, store, profile);
   if (result.state !== "ready") throw new Error("missing activity");
   const byTx = (tx: number) => result.entries.find((entry) => entry.transactionId === word(tx))!;
-  expect(byTx(1)).toMatchObject({ direction: "received", messages: [{ memo: utf8("rent"), sender: BigInt(`0x${"44".repeat(20)}`) }] });
+  expect(byTx(1)).toMatchObject({ direction: "received", messages: [{ amount: 30n, memo: utf8("rent"), sender: BigInt(`0x${"44".repeat(20)}`) }] });
   expect(byTx(3)).toMatchObject({
     direction: "spent", amount: 60n,
     sent: [{ recipientAddress: BigInt(`0x${"55".repeat(20)}`), amount: 60n, memo: utf8("dinner"), senderIncluded: true }],

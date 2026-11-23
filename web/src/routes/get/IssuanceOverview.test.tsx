@@ -103,7 +103,7 @@ describe("issuance overview", () => {
     expect(element.textContent).toContain("5.76M PCASH a day");
     expect(element.textContent).toContain("New PCASH per day");
     expect(element.textContent).toContain("The target rate starts at 5.48M PCASH a day");
-    expect(element.textContent).toContain("Ahead of the target by 1.23K PCASH: the target reached today's supply 8 days from now.");
+    expect(element.textContent).toContain("Ahead of the target by 1.23K PCASH: the target reached today’s supply 8 days from now.");
     expect(element.textContent).toContain("one year after the schedule starts");
     const svg = element.querySelector("svg[role=img]")!;
     await act(async () => { (svg as SVGSVGElement).dispatchEvent(new FocusEvent("focus")); });

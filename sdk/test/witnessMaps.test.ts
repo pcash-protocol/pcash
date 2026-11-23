@@ -20,7 +20,7 @@ import {
   multisigApprovalTerms,
   signMultisigApproval,
 } from "../src/builders/authorizationRules.ts";
-import { assetCreationActionCommitment, transferActionCommitment } from "../src/protocol/statement.ts";
+import { mintActionCommitment, transferActionCommitment } from "../src/protocol/statement.ts";
 import { privateValueCommitment, SlotClass, type PrivateValue } from "../src/protocol/transaction.ts";
 import { deriveTestWallet } from "./testWallet.ts";
 import { transferFixture } from "@pcash/test-support/protocol-fixtures";
@@ -55,16 +55,16 @@ const multisigSigners = [multisigSignerKey(0xa1), multisigSignerKey(0xb2), multi
 );
 
 /** Signers 0 and 2 approve `transaction` for `wallet`'s account; returns the rule's map. */
-function multisigRuleFor(transaction: PrivateValue, recentPcashBlockHash: bigint, createdAssetId = 0n) {
+function multisigRuleFor(transaction: PrivateValue, recentPcashBlockHash: bigint, mintedAssetId = 0n) {
   const terms = multisigApprovalTerms({
     transaction,
-    createdAssetId,
+    mintedAssetId,
     accountAddress: wallet.address,
     pcashChainId: chainId,
   });
   return buildMultisigRule({
     transaction,
-    createdAssetId,
+    mintedAssetId,
     accountAddress: wallet.address,
     recentPcashBlockHash,
     pcashChainId: chainId,
@@ -119,20 +119,20 @@ describe("witness-map parity via noir_js execution (toolchain-free)", () => {
     expect(statement.slice(1)).toEqual(transfer.ruleStatement.slice(1));
   });
 
-  it("multisig approves the asset-creation action of a private value with a creation marker", async () => {
+  it("multisig approves the mint action of a private value with a mint marker", async () => {
     const transfer = multisigTransfer();
     const markerSlot = transfer.transaction.inputs.findIndex((input) => input.slotClass === SlotClass.DUMMY);
     expect(markerSlot).toBeGreaterThanOrEqual(0);
-    const creation: PrivateValue = {
+    const mint: PrivateValue = {
       ...transfer.transaction,
       inputs: transfer.transaction.inputs.map((input, index) =>
-        index === markerSlot ? { slotClass: SlotClass.ASSET_CREATION, inputCommitment: 0n, nullifier: 0x15e5n } : input),
+        index === markerSlot ? { slotClass: SlotClass.MINT, inputCommitment: 0n, nullifier: 0x15e5n } : input),
     };
-    const createdAssetId = 0xa55e7n;
-    const accountRule = multisigRuleFor(creation, transfer.recentPcashBlockHash, createdAssetId);
+    const mintedAssetId = 0xa55e7n;
+    const accountRule = multisigRuleFor(mint, transfer.recentPcashBlockHash, mintedAssetId);
     const statement = await execute("account_rule_multisig", accountRule.witnessMap);
-    const commitment = privateValueCommitment(creation);
-    expect(statement[1]).toBe(assetCreationActionCommitment(chainId, commitment, createdAssetId));
+    const commitment = privateValueCommitment(mint);
+    expect(statement[1]).toBe(mintActionCommitment(chainId, commitment, mintedAssetId));
     expect(statement[1]).not.toBe(transferActionCommitment(chainId, commitment));
     expect(accountRule.actionCommitment).toBe(statement[1]);
   });

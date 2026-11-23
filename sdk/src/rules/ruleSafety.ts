@@ -3,13 +3,13 @@ import { buildAccountRuleSet, accountRuleEntryCommitment } from "../protocol/acc
 import {
   ADMIN_RULE_VK_HASH,
   ASSET_BURN_RULE_VK_HASH,
-  ASSET_CREATION_RULE_VK_HASH,
   ASSET_PAYMENT_RULE_VK_HASH,
   BATCH_TRANSFER_RULE_VK_HASH,
   CONTRACT_FEE_SPONSORSHIP_RULE_VK_HASH,
-  LARGE_ASSET_CREATION_RULE_VK_HASH,
   LARGE_BATCH_TRANSFER_RULE_VK_HASH,
   LARGE_CONTRACT_FEE_SPONSORSHIP_RULE_VK_HASH,
+  LARGE_MINT_RULE_VK_HASH,
+  MINT_RULE_VK_HASH,
   PAYMENT_RULE_VK_HASH,
 } from "../constants/rulePins.ts";
 
@@ -31,7 +31,7 @@ export type ReferenceWalletActionClass =
   | "contract-fee-sponsorship"
   /** Pays or burns one standard asset namespace. */
   | "asset-value"
-  | "asset-creation";
+  | "mint";
 
 export interface InspectedUserAccountRule {
   entryIndex: number;
@@ -89,7 +89,7 @@ export function referenceWalletActionCoverage(
   applicationVkHash: FieldNumberish,
 ): readonly ReferenceWalletActionClass[] {
   const hash = toField(applicationVkHash, "applicationVkHash");
-  if (hash === ASSET_CREATION_RULE_VK_HASH || hash === LARGE_ASSET_CREATION_RULE_VK_HASH) return ["asset-creation"];
+  if (hash === MINT_RULE_VK_HASH || hash === LARGE_MINT_RULE_VK_HASH) return ["mint"];
   if (hash === PAYMENT_RULE_VK_HASH) return ["native-payment"];
   if (hash === ASSET_PAYMENT_RULE_VK_HASH) return ["asset-value"];
   if (hash === ASSET_BURN_RULE_VK_HASH) return ["asset-value"];

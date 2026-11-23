@@ -9,10 +9,11 @@ import styles from "./Mining.module.css";
 export function MiningBalance({ testId }: { testId: string }) {
   const wallet = useWallet();
   const balance = wallet.profile === undefined ? undefined : wallet.funds?.total;
+  const label = wallet.profile !== undefined && wallet.history.pending ? "Estimated balance" : "Your balance";
   return <div className={styles.metric} aria-label="Your PCASH balance">
-    <span>Your balance</span>
+    <span>{label}</span>
     <div className={styles.balances}>
-      <output data-testid={testId} aria-label="Your balance" aria-live="polite">
+      <output data-testid={testId} aria-label={label} aria-live="polite">
         {balance === undefined ? "—" : <PcashAmount value={balance} rounding="down" />}
       </output>
       {wallet.l1Balance !== undefined && <span className={styles.ether} data-testid="wallet-eth-balance"><TokenAmount value={wallet.l1Balance} unit={ETH_UNIT} rounding="down" /></span>}

@@ -1,4 +1,4 @@
-import { documentPath, publicDocuments } from "./docs/publicDocuments.ts";
+import { DOCS_PATH, documentPath, publicDocuments } from "./docs/publicDocuments.ts";
 import { explorerPaths } from "./explorer/paths.ts";
 
 export type RouteRenderMode = "prerender" | "client";
@@ -15,7 +15,6 @@ export interface RouteDefinition {
   renderMode: RouteRenderMode;
   metadata: RouteMetadata;
   primaryLabel?: string;
-  footerLabel?: string;
   /** Marked Alpha in the header, with a notice above the page. */
   alpha?: true;
 }
@@ -25,31 +24,21 @@ export const routeManifest: readonly RouteDefinition[] = [
     id: "home",
     path: "/",
     renderMode: "prerender",
-    metadata: { title: "PCASH", description: "Private money Ethereum can program. Anyone can write the rules a PCASH account spends by, rules can act on Ethereum, and it runs on Ethereum with no sequencer, operator, or upgrade key." },
+    metadata: { title: "A better Zcash", description: "PCASH is a better Zcash: always private, and as secure as Ethereum." },
     primaryLabel: "Home",
   },
-  {
-    id: "learn",
-    path: "/docs",
-    renderMode: "prerender",
-    metadata: { title: "Learn PCASH", description: "PCASH in six ideas: private payments in any asset, rules you choose, Ethereum apps that move private money, proofs that travel with it, Ethereum ordering, and earning PCASH." },
-    primaryLabel: "Learn",
-    footerLabel: "Learn",
-  },
-  ...publicDocuments.map(({ id, file, title, description, footerLabel }): RouteDefinition => ({
+  ...publicDocuments.map(({ id, file, title, description }): RouteDefinition => ({
     id,
     path: documentPath(file),
     renderMode: "prerender",
     metadata: { title, description, type: "article" },
-    ...footerLabel === undefined ? {} : { footerLabel },
   })),
   {
-    id: "developers",
-    path: "/developers",
+    id: "docs",
+    path: DOCS_PATH,
     renderMode: "prerender",
-    metadata: { title: "Developers", description: "Build private applications with the PCASH protocol specification, guides, reference documentation, and reproducible source." },
-    primaryLabel: "Developers",
-    footerLabel: "Developers",
+    metadata: { title: "Docs", description: "The PCASH white paper, security model and protocol specification, and guides to building on PCASH and running a node." },
+    primaryLabel: "Docs",
   },
   {
     id: "explorer",
@@ -57,7 +46,6 @@ export const routeManifest: readonly RouteDefinition[] = [
     renderMode: "client",
     metadata: { title: "Explorer", description: "Inspect PCASH blocks, transactions, immutable contracts, verified source correspondence, and disclosed configuration." },
     primaryLabel: "Explorer",
-    footerLabel: "Explorer",
   },
   {
     id: "marketplace",
@@ -65,15 +53,12 @@ export const routeManifest: readonly RouteDefinition[] = [
     renderMode: "client",
     metadata: { title: "Marketplace", description: "Buy and list PCASH for ETH." },
     primaryLabel: "Marketplace",
-    footerLabel: "Marketplace",
   },
   {
     id: "tokens",
     path: "/tokens",
     renderMode: "prerender",
-    metadata: { title: "Tokens", description: "Create a private token with a fixed supply, send it, and check any token's definition against its ID." },
-    primaryLabel: "Tokens",
-    footerLabel: "Tokens",
+    metadata: { title: "Tokens", description: "Create a private token with a fixed supply, send it, and check any token’s definition against its ID." },
   },
   {
     id: "token-new",
@@ -109,37 +94,46 @@ export const routeManifest: readonly RouteDefinition[] = [
     id: "get",
     path: "/get",
     renderMode: "prerender",
-    metadata: { title: "Get PCASH", description: "Get your first PCASH with one Ethereum transaction, then earn more by posting pending transactions." },
-    primaryLabel: "Get PCASH",
-    footerLabel: "Get PCASH",
+    metadata: { title: "Try PCASH", description: "Get your first PCASH with one Ethereum transaction, send it, earn more by posting pending transactions, or make your own token." },
+    primaryLabel: "Try PCASH",
   },
   {
-    id: "messages",
-    path: "/messages",
+    id: "get-earn",
+    path: "/get/earn",
     renderMode: "client",
-    metadata: { title: "Messages", description: "An anonymous public message board on PCASH: anyone can read every post, and no one can tell which account wrote one." },
-    primaryLabel: "Messages",
-    footerLabel: "Messages",
+    metadata: { title: "Earn PCASH", description: "Earn new PCASH and fees by posting pending payments to Ethereum." },
   },
   {
-    id: "message-thread",
-    path: "/messages/:postId",
+    id: "account",
+    path: "/account",
     renderMode: "client",
-    metadata: { title: "Thread", description: "A thread on the PCASH message board, with every reply." },
+    metadata: { title: "Your account", description: "Your PCASH balances, activity, tokens, trades and wallet settings." },
+  },
+  {
+    id: "board",
+    path: "/board",
+    renderMode: "client",
+    metadata: { title: "Anonymous board", description: "A public board on PCASH: anyone can read every post, and no one can tell which account wrote one." },
+  },
+  {
+    id: "board-thread",
+    path: "/board/:postId",
+    renderMode: "client",
+    metadata: { title: "Thread", description: "A thread on the PCASH anonymous board, with every reply." },
   },
   {
     id: "terms",
     path: "/terms",
     renderMode: "prerender",
     metadata: { title: "Terms of Service", description: "The Terms of Service for this website and its related services." },
-    footerLabel: "Terms",
+    primaryLabel: "Terms",
   },
   {
     id: "privacy",
     path: "/privacy",
     renderMode: "prerender",
     metadata: { title: "Privacy Policy", description: "How information is handled when you use this website and its related services." },
-    footerLabel: "Privacy",
+    primaryLabel: "Privacy",
   },
 ];
 
@@ -147,11 +141,11 @@ export function routeById(id: string): RouteDefinition {
   return routeManifest.find((candidate) => candidate.id === id)!;
 }
 
-/** Products first, then reference material. Order here is the header order. */
-const primaryNavigationOrder = ["marketplace", "tokens", "explorer", "get", "messages", "learn", "developers"] as const;
-
-export const primaryNavigation = primaryNavigationOrder.map((id) => routeById(id));
-export const footerNavigation = routeManifest.filter((route) => route.footerLabel !== undefined);
+/** The header's two groups, in order: what a visitor does here, then what they look up. */
+export const primaryNavigation = (["get", "marketplace"] as const).map((id) => routeById(id));
+export const referenceNavigation = (["explorer", "docs"] as const).map((id) => routeById(id));
+/** The footer repeats the header, then the legal pages. */
+export const legalNavigation = (["terms", "privacy"] as const).map((id) => routeById(id));
 export const prerenderRoutes = routeManifest.filter((route) => route.renderMode === "prerender");
 
 // Explorer object pages sit at the site root with a dynamic tail (/tx/:id,
@@ -166,7 +160,7 @@ export const clientRoutePrefixes = [
   { prefix: "/marketplace", routeId: "marketplace" as const },
   { prefix: "/token", routeId: "token" as const },
   { prefix: "/drop", routeId: "drop" as const },
-  { prefix: "/messages", routeId: "message-thread" as const },
+  { prefix: "/board", routeId: "board-thread" as const },
 ];
 
 export function normalizePathname(pathname: string): string {

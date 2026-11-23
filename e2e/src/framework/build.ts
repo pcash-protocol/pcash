@@ -9,6 +9,7 @@ export const E2E_WORKSPACE_BUILDS = [
   "@pcash/marketplace",
   "@pcash/tokens",
   "@pcash/lineage",
+  "@pcash/stablecoin",
   "@pcash/board",
 ] as const;
 

@@ -4,7 +4,11 @@
 .site-header { position: sticky; top: 0; z-index: 10; display: flex; flex-flow: row wrap; align-items: center; column-gap: 28px; row-gap: 10px; min-height: 72px; padding: 12px max(4vw, calc((100vw - var(--layout-max)) / 2)); border-bottom: 3px double var(--color-text); background: var(--color-header); }
 /* Shown on every build whose L1 is not Ethereum mainnet. */
 .testnet-banner { margin: 0; padding: 8px 4vw; background: var(--color-text); color: var(--color-accent-contrast); font-size: 13px; line-height: 1.4; text-align: center; }
-.site-header > nav { display: flex; align-items: center; gap: 6px; margin-right: auto; }
+/* The links and the GitHub mark share a row; the mark stays at its right end. */
+.header-links { display: flex; flex: 1; align-items: center; gap: 12px; min-width: 0; }
+.header-links > nav { display: flex; align-items: center; gap: 6px; min-width: 0; }
+/* A dot between links, since several are two words. */
+.nav-separator { color: var(--color-text-muted); }
 .site-header nav a { padding: 9px 12px; border-radius: var(--radius-control); color: var(--color-text); font-size: 15px; font-weight: 600; white-space: nowrap; }
 .site-header nav a.active, .site-header nav a:hover { background: var(--color-surface-raised); }
 /* Marketplace trades that wait on the signed-in owner. */
@@ -18,21 +22,29 @@
 .brand img { display: block; height: auto; }
 .brand-seal { width: 46px; }
 .brand-word { width: 148px; }
-.header-wallet { display: flex; align-items: center; gap: 10px; min-width: 0; margin-left: auto; }
+.header-wallet { display: flex; align-items: center; min-width: 0; margin-left: auto; }
+.header-github { display: flex; flex: none; margin-left: auto; padding: 6px; color: var(--color-text-muted); }
+.header-github:hover { color: var(--color-text); }
 main { width: min(var(--layout-max), 92vw); margin: 0 auto; padding: 54px 0 80px; flex: 1; }
-footer { display: flex; align-items: center; justify-content: space-between; gap: 25px; border-top: 1px solid var(--color-border); padding: 24px var(--layout-gutter); color: var(--color-text-muted); font-size: 12px; }
-footer nav { display: flex; flex-wrap: wrap; gap: 18px; }
+footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 32px; border-top: 1px solid var(--color-border); padding: 24px var(--layout-gutter); color: var(--color-text-muted); font-size: 12px; }
+footer > span { flex: none; }
+/* The header's links in the same order, then the legal pages. */
+footer nav { display: flex; flex-wrap: wrap; align-items: center; row-gap: 10px; }
+.footer-group { display: flex; gap: 18px; }
+.footer-group + .footer-group { margin-left: 36px; }
 footer a:hover { color: var(--color-text); }
+.footer-github { display: inline-flex; align-items: center; gap: 6px; }
 .skip-link { position: fixed; left: 16px; top: -60px; padding: 12px; background: var(--color-accent); color: var(--color-accent-contrast); z-index: 100; }
 .skip-link:focus { top: 12px; }
 
-/* One row needs about 1,440px at the widest wallet state and the fallback font;
-   below 1480px the links take their own row. */
-@media (max-width: 1480px) {
-  .site-header > nav { order: 3; flex-basis: 100%; margin-right: 0; overflow-x: auto; scrollbar-width: none; padding-right: 32px; mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); }
-  .site-header > nav::-webkit-scrollbar { display: none; }
+/* One row needs about 990px at the widest wallet state; the margin covers a
+   wider fallback font. Below 1040px the links take their own row. */
+@media (max-width: 1040px) {
+  .header-links { order: 3; flex-basis: 100%; }
+  .header-links > nav { overflow-x: auto; scrollbar-width: none; padding-right: 32px; mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); }
+  .header-links > nav::-webkit-scrollbar { display: none; }
 }
-@media (max-width: 1000px) { .site-header > nav { gap: 0; } .site-header nav a { padding-inline: 9px; } }
+@media (max-width: 1000px) { .header-links > nav { gap: 0; } .site-header nav a { padding-inline: 9px; } }
 @media (max-width: 760px) {
   .site-header { column-gap: 12px; padding: 12px 4vw 8px; }
   .site-header nav a { padding-inline: 7px; font-size: 14px; }
@@ -42,8 +54,13 @@ footer a:hover { color: var(--color-text); }
 @media (max-width: 620px) {
   .site-header { position: static; }
   .site-header nav a { padding-block: 8px; }
+  /* Phones: the links fit on their row, so it needs no fade, and GitHub is in
+     the footer only. */
+  .header-links > nav { padding-right: 0; mask-image: none; }
+  .header-github { display: none; }
   footer { align-items: flex-start; flex-direction: column; }
+  /* Each group takes its own line here. */
+  .footer-group, .footer-group + .footer-group { flex-basis: 100%; margin-left: 0; }
 }
-/* On the smallest phones the seal stands alone; the link keeps the name. */
-@media (max-width: 480px) { .brand-word { display: none; } }
-@media (max-width: 420px) { .header-wallet { gap: 6px; } }
+/* Below 375px the wordmark narrows so a connected wallet stays beside it. */
+@media (max-width: 374px) { .brand { gap: 8px; } .brand-word { width: 92px; } }

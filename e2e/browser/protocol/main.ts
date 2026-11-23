@@ -11,7 +11,9 @@ import {
   computeCircuitVkHash,
   defaultUserAccountRuleSet,
   deriveWalletIdentity,
-  assetSecretCommitment,
+  fixedSupplyMintRule,
+  fixedSupplyMintWitness,
+  fixedSupplySecretCommitment,
   fullOutputCommitment,
   generateMlKemKeyPair,
   MERKLE_DEPTH,
@@ -21,7 +23,7 @@ import {
   accountStateCommitment,
   receiveKeyHash,
   SparseMerkleTree,
-  standardFungibleAssetId,
+  findAssetDescriptor,
   sizeClassFiller,
 } from "@pcash/sdk/browser";
 import { buildAssetCovenantRuleWitness } from "@pcash/sdk/fixtures";
@@ -92,11 +94,11 @@ const nativeRuleSecrets = {
   assetBurnCommitmentBlinder: 0x206n,
   batchTransferCommitmentBlinder: 0x208n,
   largeBatchTransferCommitmentBlinder: 0x131n,
-  largeAssetCreationCommitmentBlinder: 0x133n,
+  largeMintCommitmentBlinder: 0x133n,
   largeContractFeeCommitmentBlinder: 0x135n,
   accountAdminCommitmentBlinder: 0x20an,
   contractFeeCommitmentBlinder: 0x20cn,
-  assetCreationCommitmentBlinder: 0x20en,
+  mintCommitmentBlinder: 0x20en,
 };
 
 function authorizationAccount(params: {
@@ -343,15 +345,11 @@ async function run(): Promise<void> {
 
   const creatorSecret = 0x123456n;
   const totalSupply = 1_200n;
-  const assetDescriptorFields = {
+  const mintConfiguration = { supply: totalSupply, secretCommitment: fixedSupplySecretCommitment(creatorSecret) };
+  const assetDescriptor = findAssetDescriptor({
     metadataCommitment: 0x909090n,
-    initialSupply: totalSupply,
-    assetSecretCommitment: assetSecretCommitment(creatorSecret),
-  };
-  const assetDescriptor = {
-    assetId: standardFungibleAssetId(assetDescriptorFields),
-    ...assetDescriptorFields,
-  };
+    mintRule: fixedSupplyMintRule(mintConfiguration),
+  }, 0n);
   const assetId = assetDescriptor.assetId;
 
   const noteTree = new SparseMerkleTree(MERKLE_DEPTH);
@@ -431,11 +429,10 @@ async function run(): Promise<void> {
   const creationBuild = buildAssetAction({
     pcashChainId,
     snapshot,
-    assetDescriptor,
-    owner: authorizationAccount({address:nativeWallet.address,nkRoot:nativeWallet.nkRoot,accountIndex:2,accountSiblings:accountStateTree.proof(2).siblings,accountRuleSetCommitment:nativeRules.accountRuleSetCommitment,accountKind:0n,configurationCommitment:nativeRules.assetCreationRule.configurationCommitment,commitmentBlinder:nativeRules.assetCreationRule.commitmentBlinder,entryIndex:nativeRules.assetCreationRule.entryIndex,entrySiblings:nativeRules.assetCreationRule.siblings}),
-    assetSecret: creatorSecret,
+    mint: { descriptor: assetDescriptor },
+    owner: authorizationAccount({address:nativeWallet.address,nkRoot:nativeWallet.nkRoot,accountIndex:2,accountSiblings:accountStateTree.proof(2).siblings,accountRuleSetCommitment:nativeRules.accountRuleSetCommitment,accountKind:0n,configurationCommitment:nativeRules.mintRule.configurationCommitment,commitmentBlinder:nativeRules.mintRule.commitmentBlinder,entryIndex:nativeRules.mintRule.entryIndex,entrySiblings:nativeRules.mintRule.siblings}),
     inputs: [
-      { kind: "creation-marker" },
+      { kind: "mint-marker", replayId: creatorSecret },
       { kind: "dummy" },
       { kind: "dummy" },
       { kind: "dummy" },
@@ -464,9 +461,10 @@ async function run(): Promise<void> {
   const creationAuthorization = creationBuild.prepareOwnerAuthorization({wallet:nativeWallet});
   const signedCreation = authorizePcashRequestWithPrivateKey(nativePrivateKey,creationAuthorization.request);
   const creationResult = await proveAssetScenario("registered zero-funded creation", {
-    operation: "assetCreation",
-    authorization: {circuitUrl:CIRCUIT_URLS.account_rule_asset_creation_ecdsa,witnessMap:creationAuthorization.authorize(signedCreation).witnessMap,label:"registered asset creation"},
-    buildKernelWitnessMap: creationBuild.buildAssetCreationKernelWitnessMap,
+    operation: "mint",
+    authorization: {circuitUrl:CIRCUIT_URLS.account_rule_mint_ecdsa,witnessMap:creationAuthorization.authorize(signedCreation).witnessMap,label:"registered asset creation"},
+    mintRule: {circuitUrl:CIRCUIT_URLS.mint_rule_fixed_supply,witnessMap:fixedSupplyMintWitness({mint:creationBuild,configuration:mintConfiguration,secret:creatorSecret}),label:"fixed-supply mint rule"},
+    buildKernelWitnessMap: creationBuild.buildMintKernelWitnessMap,
     expectedPublicInputs: creationBuild.publicInputs,
   });
   assetScenarioElapsedMs.markerOnlyCreation = creationResult.elapsedMs;

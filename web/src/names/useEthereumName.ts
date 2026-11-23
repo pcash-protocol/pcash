@@ -14,6 +14,11 @@ function useNameSession() {
   return { ...snapshot, setEnabled: session.setEnabled };
 }
 export const useEthereumNameResolver = () => useNameSession().resolver;
+/** The resolver as it is when called, undefined once names are off: for a mainnet read that starts after other awaited work. */
+export function useCurrentNameResolver() {
+  const session = useContext(NameResolutionContext);
+  return () => session.getSnapshot().resolver;
+}
 
 function useNameLookup(key: string | undefined, load: (() => Promise<ReverseNameResult>) | undefined) {
   const session = useContext(NameResolutionContext);

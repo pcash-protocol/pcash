@@ -22,7 +22,7 @@ import {
   type DesignatedIssuanceOpening,
   type FunctionSelector,
 } from "@pcash/sdk/browser";
-import type { AssetDefinition } from "@pcash/sdk/protocol";
+import type { AssetDefinition, RestrictedAssetOpening } from "@pcash/sdk/protocol";
 import { randomFieldEntropy } from "@pcash/sdk/utils";
 import type { Wallet } from "@pcash/sdk/wallet";
 import type { VerifiedL2ContractMaterial } from "./verifiedContractMaterial.ts";
@@ -93,6 +93,8 @@ export function buildUnsponsoredTokenEscrowRelease(release: TokenEscrowRelease &
   carrierContextHash?: bigint;
   accountCreation?: AccountCreationAttachment;
   dummyInputSeed: bigint;
+  /** A restricted asset's definition opening. */
+  restricted?: RestrictedAssetOpening;
 }): AssetActionBuild {
   const side = tokenEscrowReleaseSide(release);
   const profile = PRIVATE_VALUE_PROFILES.S;
@@ -108,6 +110,7 @@ export function buildUnsponsoredTokenEscrowRelease(release: TokenEscrowRelease &
     snapshot: snapshotFromAccountProof(release.contractAccount),
     owner: side.authorization,
     assetId: release.escrow.assetId,
+    ...(release.restricted === undefined ? {} : { restricted: release.restricted }),
     inputs,
     outputs,
     openFeeAmount: 0n,

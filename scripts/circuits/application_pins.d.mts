@@ -1,6 +1,6 @@
 import type { CircuitCatalogEntry } from "./catalog.d.mts";
 
-type PinnedCircuit = Pick<CircuitCatalogEntry, "owner" | "role" | "packageName">;
+type PinnedCircuit = Pick<CircuitCatalogEntry, "owner" | "role" | "packageName" | "pin">;
 
 export const RULE_PINS_PATH: string;
 export function applicationPinName(circuit: PinnedCircuit): string;

@@ -28,6 +28,7 @@ import {
   CIRCUIT_URLS,
   type AssetActionProofRequest,
   type AssetProver,
+  type ChonkApplicationStep,
   type ChonkProver,
   type Prover,
   type ProveStatus,
@@ -284,22 +285,28 @@ const PRIVATE_VALUE_CIRCUITS: Record<PrivateValueShape, {
   /** The readable rule a transfer folds when the request names none. */
   transferAuthorization: CircuitName;
   transferKernel: CircuitName;
+  restrictedTransferKernel: CircuitName;
   sponsoredTransferKernel: CircuitName;
-  assetCreationKernel: CircuitName;
+  restrictedSponsoredTransferKernel: CircuitName;
+  mintKernel: CircuitName;
   hidingKernel: CircuitName;
 }> = {
   [PRIVATE_VALUE_PROFILES.S.shapeId]: {
     transferAuthorization: "account_rule_payment_ecdsa",
     transferKernel: "private_value_transfer_kernel",
+    restrictedTransferKernel: "private_value_restricted_transfer_kernel",
     sponsoredTransferKernel: "private_value_sponsored_transfer_kernel",
-    assetCreationKernel: "private_value_asset_creation_kernel",
+    restrictedSponsoredTransferKernel: "private_value_restricted_sponsored_transfer_kernel",
+    mintKernel: "private_value_mint_kernel",
     hidingKernel: "private_value_hiding_kernel",
   },
   [PRIVATE_VALUE_PROFILES.L.shapeId]: {
     transferAuthorization: "account_rule_large_batch_transfer_ecdsa",
     transferKernel: "private_value_large_transfer_kernel",
+    restrictedTransferKernel: "private_value_large_restricted_transfer_kernel",
     sponsoredTransferKernel: "private_value_large_sponsored_transfer_kernel",
-    assetCreationKernel: "private_value_large_asset_creation_kernel",
+    restrictedSponsoredTransferKernel: "private_value_large_restricted_sponsored_transfer_kernel",
+    mintKernel: "private_value_large_mint_kernel",
     hidingKernel: "private_value_large_hiding_kernel",
   },
 };
@@ -449,30 +456,57 @@ async function proveAssetAction(
     return { ...base, event_application_vk: vkWitness(eventVk), event_statement: toHexList(statement) };
   };
   if (args.operation === "sponsored-transfer") {
-    const [primaryVk, feeVk, kernelVk] = await Promise.all([
+    const policy = args.policy;
+    const kernel = sponsoredKernel(circuits, policy);
+    const [primaryVk, feeVk, policyVk, kernelVk] = await Promise.all([
       session.loadChonkVk(args.primary.circuitUrl, "app"),
       session.loadChonkVk(args.feePayer.circuitUrl, "app"),
-      session.loadChonkVk(CIRCUIT_URLS[circuits.sponsoredTransferKernel], "kernel"),
+      policy === undefined ? undefined : session.loadChonkVk(policy.circuitUrl, "app"),
+      session.loadChonkVk(CIRCUIT_URLS[kernel], "kernel"),
     ]);
     throwIfAborted(signal);
     applicationSteps.push(
       { ...args.primary, vkUrl: primaryVk.url, kind: primaryVk.kind },
       { ...args.feePayer, vkUrl: feeVk.url, kind: feeVk.kind },
+      ...(policy === undefined ? [] : [{ ...policy, vkUrl: policyVk!.url, kind: policyVk!.kind }]),
     );
-    kernelUrl = CIRCUIT_URLS[circuits.sponsoredTransferKernel];
-    kernelLabel = "sponsored-transfer kernel";
+    kernelUrl = CIRCUIT_URLS[kernel];
+    kernelLabel = policy === undefined ? "sponsored-transfer kernel" : "restricted sponsored-transfer kernel";
     kernelWitnessMap = measureAssembly(
-      circuits.sponsoredTransferKernel,
+      kernel,
       requestStartedAt,
       onStatus,
-      () => withEvent(args.buildKernelWitnessMap(primaryVk, feeVk)),
+      () => withEvent(args.buildKernelWitnessMap(primaryVk, feeVk, policyVk)),
+    );
+    applicationSteps.push({ circuitUrl: kernelUrl, vkUrl: kernelVk.url, kind: kernelVk.kind, witnessMap: kernelWitnessMap, label: kernelLabel });
+  } else if (args.operation === "restricted-transfer" || args.operation === "mint") {
+    // The account's rule, then the asset's transfer or mint rule.
+    const second = args.operation === "mint" ? args.mintRule : args.policy;
+    const kernel = args.operation === "mint" ? circuits.mintKernel : circuits.restrictedTransferKernel;
+    kernelUrl = CIRCUIT_URLS[kernel];
+    kernelLabel = args.operation === "mint" ? "mint kernel" : "restricted-transfer kernel";
+    const [authorizationVk, secondVk, kernelVk] = await Promise.all([
+      session.loadChonkVk(args.authorization.circuitUrl, "app"),
+      session.loadChonkVk(second.circuitUrl, "app"),
+      session.loadChonkVk(kernelUrl, "kernel"),
+    ]);
+    throwIfAborted(signal);
+    applicationSteps.push(
+      { ...args.authorization, vkUrl: authorizationVk.url, kind: authorizationVk.kind },
+      { ...second, vkUrl: secondVk.url, kind: secondVk.kind },
+    );
+    kernelWitnessMap = measureAssembly(
+      kernel,
+      requestStartedAt,
+      onStatus,
+      () => withEvent(args.buildKernelWitnessMap(authorizationVk, secondVk)),
     );
     applicationSteps.push({ circuitUrl: kernelUrl, vkUrl: kernelVk.url, kind: kernelVk.kind, witnessMap: kernelWitnessMap, label: kernelLabel });
   } else {
-    // Transfer and asset creation each fold one installed application, then the no-op event application.
-    const kernel = args.operation === "transfer" ? circuits.transferKernel : circuits.assetCreationKernel;
+    // A transfer folds one installed application, then the event application.
+    const kernel = circuits.transferKernel;
     kernelUrl = CIRCUIT_URLS[kernel];
-    kernelLabel = args.operation === "transfer" ? "transfer kernel" : "asset-creation kernel";
+    kernelLabel = "transfer kernel";
     const [authorizationVk, kernelVk] = await Promise.all([
       session.loadChonkVk(args.authorization.circuitUrl, "app"),
       session.loadChonkVk(kernelUrl, "kernel"),
@@ -499,15 +533,32 @@ async function proveAssetAction(
   return { proof: result.proof };
 }
 
+/** The kernel of a sponsored transfer. */
+function sponsoredKernel(
+  circuits: (typeof PRIVATE_VALUE_CIRCUITS)[PrivateValueShape],
+  policy: ChonkApplicationStep | undefined,
+): CircuitName {
+  return policy === undefined ? circuits.sponsoredTransferKernel : circuits.restrictedSponsoredTransferKernel;
+}
+
 /** The circuits an asset action folds, in proving order. */
 function assetActionCircuitUrls(args: AssetActionProofRequest): string[] {
   const circuits = PRIVATE_VALUE_CIRCUITS[args.shape ?? PRIVATE_VALUE_PROFILES.S.shapeId];
   const hiding = CIRCUIT_URLS[circuits.hidingKernel];
+  const event = args.eventApplication?.circuitUrl ?? CIRCUIT_URLS[NO_OP_EVENT_APPLICATION.circuit];
   if (args.operation === "sponsored-transfer") {
-    return [args.primary.circuitUrl, args.feePayer.circuitUrl, args.eventApplication?.circuitUrl ?? CIRCUIT_URLS[NO_OP_EVENT_APPLICATION.circuit], CIRCUIT_URLS[circuits.sponsoredTransferKernel], hiding];
+    const kernel = CIRCUIT_URLS[sponsoredKernel(circuits, args.policy)];
+    return args.policy === undefined
+      ? [args.primary.circuitUrl, args.feePayer.circuitUrl, event, kernel, hiding]
+      : [args.primary.circuitUrl, args.feePayer.circuitUrl, args.policy.circuitUrl, event, kernel, hiding];
   }
-  const kernel = args.operation === "transfer" ? circuits.transferKernel : circuits.assetCreationKernel;
-  return [args.authorization.circuitUrl, args.eventApplication?.circuitUrl ?? CIRCUIT_URLS[NO_OP_EVENT_APPLICATION.circuit], CIRCUIT_URLS[kernel], hiding];
+  if (args.operation === "restricted-transfer") {
+    return [args.authorization.circuitUrl, args.policy.circuitUrl, event, CIRCUIT_URLS[circuits.restrictedTransferKernel], hiding];
+  }
+  if (args.operation === "mint") {
+    return [args.authorization.circuitUrl, args.mintRule.circuitUrl, event, CIRCUIT_URLS[circuits.mintKernel], hiding];
+  }
+  return [args.authorization.circuitUrl, event, CIRCUIT_URLS[circuits.transferKernel], hiding];
 }
 
 function proverForSession(session: WorkerSession): Prover & AssetProver & ChonkProver {

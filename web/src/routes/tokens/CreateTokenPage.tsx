@@ -35,20 +35,20 @@ function utf8Length(text: string): number {
 }
 
 /** The typed fields as the definition will commit to them, or the first reason they cannot. */
-export function tokenTerms(fields: { name: string; symbol: string; decimals: string; supply: string }, contentDigest: Uint8Array): { metadata: FungibleMetadata; initialSupply: bigint } {
+export function tokenTerms(fields: { name: string; symbol: string; decimals: string; supply: string }, contentDigest: Uint8Array): { metadata: FungibleMetadata; supply: bigint } {
   const name = fields.name.trim().normalize("NFC");
   if (name === "" || utf8Length(name) > 64) throw new Error("Name must be 1 to 64 bytes of text.");
   const symbol = fields.symbol.trim();
   if (!/^[\x20-\x7e]{1,12}$/.test(symbol)) throw new Error("Symbol must be 1 to 12 plain ASCII characters.");
   const decimals = Number(fields.decimals);
   if (!/^\d{1,2}$/.test(fields.decimals) || decimals > 18) throw new Error("Decimals must be a whole number from 0 to 18.");
-  const initialSupply = parseTokenAmount(fields.supply, decimals, { label: "Total supply" });
-  if (initialSupply > MAX_NOTE_AMOUNT) {
+  const supply = parseTokenAmount(fields.supply, decimals, { label: "Total supply" });
+  if (supply > MAX_NOTE_AMOUNT) {
     throw new Error(`Total supply can be at most ${formatTokenExact(MAX_NOTE_AMOUNT, { decimals, symbol })}.`);
   }
   const metadata = { name, symbol, decimals, contentDigest };
   fungibleMetadataCommitment(metadata);
-  return { metadata, initialSupply };
+  return { metadata, supply };
 }
 
 function useContentReference(source: ContentSource, text: string, digestText: string, file: File | undefined) {
@@ -103,12 +103,12 @@ export default function CreateTokenPage() {
   // The lock covers the read of existing tokens before the proof starts.
   const working = submission.locked || tx.stage.state === "working" || tx.stage.state === "submitting";
 
-  const create = async (terms: { metadata: FungibleMetadata; initialSupply: bigint }, choice: TokenPublicationChoice) => {
+  const create = async (terms: { metadata: FungibleMetadata; supply: bigint }, choice: TokenPublicationChoice) => {
     const opened = wallet.wallet;
     if (opened === undefined) return;
     const before = new Set((await opened.assets()).filter((asset) => asset.created).map((asset) => asset.assetId));
     const outcome = await tx.run(choice, (publication) => opened.createAsset({ ...terms, ...publication }),
-      { kind: "token-created", amount: terms.initialSupply, unit: { symbol: terms.metadata.symbol, decimals: terms.metadata.decimals } });
+      { kind: "token-created", amount: terms.supply, unit: { symbol: terms.metadata.symbol, decimals: terms.metadata.decimals } });
     const creation = (contentHash: string, extra: Partial<CreationState> = {}): { creation: CreationState } =>
       ({ creation: { contentHash, mode: choice.mode, ...extra } });
     if (outcome.state === "sent") {

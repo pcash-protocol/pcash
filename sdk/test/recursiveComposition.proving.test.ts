@@ -17,7 +17,8 @@ import { createChonkCircuitResolver } from "../src/node/chonkMaterial.ts";
 import { isProverAvailable, nativeChonkBackend } from "../src/node/nativeProver.ts";
 import { proveChonkStack, type NativeChonkStep } from "../src/prover/chonk.ts";
 import {
-  assetCreationStack,
+  mintStack,
+  restrictedTransferStack,
   transferTransactionStack,
   sponsoredTransferStack,
   userAccountUpdateStack,
@@ -27,7 +28,10 @@ import {
 import { circuitCatalog } from "../../scripts/circuits/catalog.mjs";
 import { privateValueProfileFixture } from "./privateValueProfileFixtures.ts";
 import { assetProfileFixture } from "./assetProfileFixtures.ts";
-import { sharedAssetClaimFixture } from "./sharedAssetClaimFixtures.ts";
+import { PUBLICATION_TIMESTAMP, restrictedSponsoredTransferFixture, restrictedTransferFixture } from "@pcash/test-support/restricted-fixtures";
+import { sharedAssetClaimFixture } from "@pcash/test-support/shared-asset-claim-fixtures";
+import { VOUCHER_RULE_CIRCUIT, voucherMintFixture } from "@pcash/test-support/voucher-mint-fixtures";
+import { depositMintFixture } from "@pcash/test-support/deposit-mint-fixtures";
 import { userAccountUpdateFixture } from "./accountActionFixtures.ts";
 import { proverAssetsDir } from "./circuitBundle.ts";
 import { expectRecursiveProofRejection } from "./proofRejection.ts";
@@ -44,14 +48,26 @@ const STACKS: Record<string, (resolve: ChonkCircuitResolver) => Promise<StackPai
       authorizationPackage: transfer.authorizationCircuit!, authorizationWitnessMap: transfer.accountRuleWitnessMap!, resolve });
     return { control: await stack(build), other: await stack(other) };
   },
-  async assetCreation(resolve) {
-    const authorizationVkHash = BigInt((await resolve("account_rule_asset_creation_ecdsa", "app")).vkHash);
+  async mint(resolve) {
+    const authorizationVkHash = BigInt((await resolve("account_rule_mint_ecdsa", "app")).vkHash);
+    const mintRuleVkHash = BigInt((await resolve("mint_rule_fixed_supply", "app")).vkHash);
     const stack = (deadline?: { validUntilTimestamp: bigint }) => {
-      const fixture = assetProfileFixture({ shape: 0, authorizationVkHash, ...deadline });
-      return assetCreationStack({ build: fixture.build, resolve,
+      const fixture = assetProfileFixture({ shape: 0, authorizationVkHash, mintRuleVkHash, ...deadline });
+      return mintStack({ build: fixture.build, resolve, mintRule: fixture.mintRule,
         authorization: { packageName: fixture.prepared.authorizationCircuit, witnessMap: fixture.signed.witnessMap } });
     };
     return { control: await stack(), other: await stack({ validUntilTimestamp: 999_998n }) };
+  },
+  async restrictedTransfer(resolve) {
+    const authorizationVkHash = BigInt((await resolve("account_rule_asset_payment_ecdsa", "app")).vkHash);
+    const policyVkHash = BigInt((await resolve("transfer_rule_sender_deny_list", "app")).vkHash);
+    const stack = (validUntilTimestamp?: bigint) => {
+      const fixture = restrictedTransferFixture({ authorizationVkHash, policyVkHash, ...(validUntilTimestamp === undefined ? {} : { validUntilTimestamp }) });
+      return restrictedTransferStack({ build: fixture.build, resolve,
+        authorization: { packageName: fixture.prepared.authorizationCircuit, witnessMap: fixture.signed.witnessMap },
+        policy: { packageName: "transfer_rule_sender_deny_list", witnessMap: fixture.policyWitness() } });
+    };
+    return { control: await stack(), other: await stack(PUBLICATION_TIMESTAMP + 1_799n) };
   },
   async sponsoredTransfer(resolve) {
     const claimVkHash = BigInt((await resolve("account_rule_shared_asset_claim", "app")).vkHash);
@@ -63,6 +79,41 @@ const STACKS: Record<string, (resolve: ChonkCircuitResolver) => Promise<StackPai
         feePayer: { packageName: "account_rule_contract_fee_sponsorship_ecdsa", witnessMap: fixture.signed!.witnessMap } });
     };
     return { control: await stack(), other: await stack({ validUntilTimestamp: 999_998n }) };
+  },
+  async restrictedSponsoredTransfer(resolve) {
+    const claimVkHash = BigInt((await resolve("account_rule_shared_asset_claim", "app")).vkHash);
+    const sponsorVkHash = BigInt((await resolve("account_rule_contract_fee_sponsorship_ecdsa", "app")).vkHash);
+    const policyVkHash = BigInt((await resolve("transfer_rule_sender_deny_list", "app")).vkHash);
+    const stack = (validUntilTimestamp?: bigint) => {
+      const fixture = restrictedSponsoredTransferFixture({ claimVkHash, sponsorVkHash, policyVkHash,
+        ...(validUntilTimestamp === undefined ? {} : { validUntilTimestamp }) });
+      return sponsoredTransferStack({ build: fixture.build, resolve, buildKernelWitnessMap: fixture.kernelWitnessMap,
+        primary: { packageName: "account_rule_shared_asset_claim", witnessMap: fixture.claimWitnessMap },
+        feePayer: { packageName: "account_rule_contract_fee_sponsorship_ecdsa", witnessMap: fixture.signed.witnessMap },
+        policy: { packageName: "transfer_rule_sender_deny_list", witnessMap: fixture.policyWitness() } });
+    };
+    return { control: await stack(), other: await stack(PUBLICATION_TIMESTAMP + 1_799n) };
+  },
+  // The voucher rule names no account: an ordinary user account mints under it.
+  async voucherMint(resolve) {
+    const voucherVkHash = BigInt((await resolve(VOUCHER_RULE_CIRCUIT, "app")).vkHash);
+    const authorizationVkHash = BigInt((await resolve("account_rule_mint_ecdsa", "app")).vkHash);
+    const stack = (deadline?: { validUntilTimestamp: bigint }) => {
+      const fixture = voucherMintFixture({ voucherVkHash, authorizationVkHash, ...deadline });
+      return mintStack({ build: fixture.build, resolve, mintRule: fixture.mintRule,
+        authorization: { packageName: fixture.prepared.authorizationCircuit, witnessMap: fixture.signed.witnessMap } });
+    };
+    return { control: await stack(), other: await stack({ validUntilTimestamp: 999_998n }) };
+  },
+  // The deposit's recipient mints, opening the vault's log under its recent block.
+  async depositMint(resolve) {
+    const authorizationVkHash = BigInt((await resolve("account_rule_mint_ecdsa", "app")).vkHash);
+    const stack = (deadline?: { validUntilTimestamp: bigint }) => {
+      const fixture = depositMintFixture({ authorizationVkHash, ...deadline });
+      return mintStack({ build: fixture.build, resolve, mintRule: fixture.mintRule,
+        authorization: { packageName: fixture.prepared.authorizationCircuit, witnessMap: fixture.signed.witnessMap } });
+    };
+    return { control: await stack(), other: await stack({ validUntilTimestamp: 1_700_001_799n }) };
   },
   async accountUpdate(resolve) {
     const stack = (deadline?: { validUntilTimestamp: bigint }) =>
@@ -76,8 +127,10 @@ const STACKS: Record<string, (resolve: ChonkCircuitResolver) => Promise<StackPai
 const STACK_OF: Readonly<Record<string, keyof typeof STACKS>> = {
   private_value_transfer_kernel: "transfer",
   private_value_hiding_kernel: "transfer",
-  private_value_asset_creation_kernel: "assetCreation",
+  private_value_restricted_transfer_kernel: "restrictedTransfer",
+  private_value_mint_kernel: "mint",
   private_value_sponsored_transfer_kernel: "sponsoredTransfer",
+  private_value_restricted_sponsored_transfer_kernel: "restrictedSponsoredTransfer",
   user_account_update_kernel: "accountUpdate",
   user_account_update_hiding_kernel: "accountUpdate",
 };

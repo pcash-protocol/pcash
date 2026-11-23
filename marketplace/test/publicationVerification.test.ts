@@ -10,7 +10,14 @@ import {
   emptyLadder, rootFromIndex, ownerCommitment, noteBodyCommitment, outputCommitment, randomFieldEntropy,
   type ContractResult, type PcashNodeClient,
 } from "@pcash/sdk/browser";
-import { derivePcashProfileFromPrivateKey } from "@pcash/sdk/wallet";
+import { DenyLists, derivePcashProfileFromPrivateKey, type L1ListedLog, type L1LogReader } from "@pcash/sdk/wallet";
+import {
+  buildDenyListTree,
+  createAccountMintAsset,
+  LIST_CHANGED_TOPIC0,
+  PUBLICATION_TOPIC0,
+  senderDenyListTransferRule,
+} from "@pcash/sdk/rules";
 import {
   MIN_CLAIM_WINDOW_SECONDS,
   CLAIM_APPLICATION_VK_HASH,
@@ -37,8 +44,17 @@ import { buildBuyCall, claimBatchStandIn, sendRouterCall } from "../src/client/b
 import { verifyOffer, verifyOfferForPayment } from "../src/client/verification.ts";
 import { marketplacePublicationSourceConfigurationOpenings } from "../src/sourceVerification.ts";
 import { addressHex, fieldToHex } from "@pcash/sdk/browser";
-import { bytesToHex, hexToBytes, numberToHex, padHex, toFunctionSelector, type Hex } from "viem";
-import { decodeContractBody, encodeContractBody, functionSelector, type ContractFunction } from "@pcash/sdk/protocol";
+import { bytesToHex, encodeAbiParameters, hexToBytes, numberToHex, padHex, toFunctionSelector, type Address, type Hex } from "viem";
+import {
+  assetDefinitionAssetId,
+  decodeContractBody,
+  encodeAssetDefinition,
+  encodeContractBody,
+  functionSelector,
+  L1_LOG_TREE_DEPTH,
+  type AssetDefinition,
+  type ContractFunction,
+} from "@pcash/sdk/protocol";
 import { deriveVerifiedL2ContractMaterial } from "../src/client/verifiedContractMaterial.ts";
 
 const CHAIN = 1346589512n;
@@ -56,8 +72,9 @@ const ROUTER_CONFIG: PaymentRouterConfig = {
 };
 const PAYMENT_HASH = `0x${"22".repeat(32)}` as const;
 const GUARDIAN = "0x00000000000000000000000000000000000000bb";
+const SNAPSHOT_TIMESTAMP = 1_700_000_000n;
 const SNAPSHOT_BOUNDARY = {
-  header: { number: SNAPSHOT_BLOCK },
+  header: { number: SNAPSHOT_BLOCK, timestamp: SNAPSHOT_TIMESTAMP },
   blockHash: 0xabn,
 };
 
@@ -197,15 +214,19 @@ function sampleTerms(overrides: Partial<OfferTerms> = {}): OfferTerms {
 function buildPublication(
   overrides: Partial<OfferTerms> = {},
   vk: { claim?: bigint; reclaim?: bigint } = {},
+  assetDefinition?: AssetDefinition,
 ): { pub: OfferPublication; terms: OfferTerms } {
   const wallet = derivePcashProfileFromPrivateKey(SELLER_KEY, NETWORK);
-  const terms = sampleTerms(overrides);
+  const terms = sampleTerms(assetDefinition === undefined ? overrides : { ...overrides, assetId: assetDefinitionAssetId(assetDefinition) });
   const offer = createOffer({
     network: NETWORK, terms, sellerWallet: wallet, l2ContractNkRoot: randomFieldEntropy(),
     claimApplicationVkHash: vk.claim ?? CLAIM_APPLICATION_VK_HASH,
     reclaimApplicationVkHash: vk.reclaim ?? RECLAIM_APPLICATION_VK_HASH,
   });
-  return { pub: publicationFromOffer(offer), terms: offer.terms };
+  return {
+    pub: publicationFromOffer(offer, assetDefinition === undefined ? undefined : encodeAssetDefinition(assetDefinition)),
+    terms: offer.terms,
+  };
 }
 
 function withFunction(pub: OfferPublication, selector: number, changes: Partial<ContractFunction>): OfferPublication {
@@ -265,12 +286,11 @@ function liveNode(pub: OfferPublication): PcashNodeClient {
   } as unknown as PcashNodeClient;
 }
 
-function fundedPublication() {
-  const { pub } = buildPublication();
+function fundedPublication(pub = buildPublication().pub) {
   const escrow = { leafIndex: 0, noteSecret: fieldToHex(0x44n), amount: pub.terms.amount };
   const funded = { ...pub, escrow };
   const owner = ownerCommitment(deriveVerifiedL2ContractMaterial(pub).address, BigInt(escrow.noteSecret));
-  const leaf = outputCommitment(noteBodyCommitment(owner, 0n, BigInt(escrow.amount)), 0n);
+  const leaf = outputCommitment(noteBodyCommitment(owner, BigInt(pub.terms.assetId), BigInt(escrow.amount)), 0n);
   const siblings = emptyLadder(40).slice(0, 40);
   const root = rootFromIndex(leaf, 0n, siblings);
   const base = liveNode(pub) as unknown as Record<string, unknown>;
@@ -734,6 +754,75 @@ describe("payment node freshness", () => {
     assert.equal(paid.routerPaid, true);
     assert.equal(paid.safeToPay, false);
     assert.ok(paid.checks.includes("the router already records a payment for this listing"));
+  });
+
+  describe("a listing of a token under a deny list", () => {
+    const DENY_LIST = { contractAddress: 0x5fbdb2315678afecb367f032d93f642f64180aa3n, listId: new Uint8Array(32).fill(9), maxDelta: 7_200n };
+    const { definition } = createAccountMintAsset({
+      metadata: { name: "Pilot USD", symbol: "pUSD", decimals: 6, contentDigest: new Uint8Array(32) }, accountAddress: 0xabcn,
+      transferRule: senderDenyListTransferRule(DENY_LIST), startSalt: 0n,
+    });
+
+    /** The list as Ethereum block 1 left it: its denied addresses and one publication. */
+    const denyLists = (list: { denied: bigint[]; paused: boolean }): DenyLists => {
+      const hash = (number: bigint) => numberToHex(number, { size: 32 });
+      const log = (topic0: Uint8Array, blockLogIndex: number, data: Hex): L1ListedLog => ({
+        blockNumber: 1n, blockHash: hash(1n), transactionHash: hash(0xabcn), transactionIndex: 0, blockLogIndex,
+        emitter: DENY_LIST.contractAddress, topics: [topic0, DENY_LIST.listId], data: hexToBytes(data),
+      });
+      const logs = [
+        log(LIST_CHANGED_TOPIC0, 0, encodeAbiParameters([{ type: "address[]" }, { type: "address[]" }],
+          [list.denied.map((address) => addressHex(address) as Address), []])),
+        log(PUBLICATION_TOPIC0, 1, encodeAbiParameters([{ type: "uint256" }, { type: "bool" }, { type: "uint64" }],
+          [buildDenyListTree(list.denied).root, list.paused, 3_600n])),
+      ];
+      const reader: L1LogReader = {
+        head: async () => ({ number: 1_000n, hash: hash(1_000n) }),
+        block: async (number) => number > 1_000n ? null : { number, hash: hash(number) },
+        logs: async ({ topics, fromBlock, toBlock }) => logs.filter((item) => bytesToHex(item.topics[0]!) === bytesToHex(topics[0]!)
+          && item.blockNumber >= fromBlock && item.blockNumber <= toBlock),
+        receiptLogIndex: async (item) => item.blockLogIndex,
+      };
+      return new DenyLists(reader, 0n);
+    };
+    const { funded, fundedNode } = fundedPublication(buildPublication({}, {}, definition).pub);
+    const escrow = deriveVerifiedL2ContractMaterial(funded).address;
+    const node = {
+      ...fundedNode,
+      getL1LogProof: async (anchorHash: bigint, l1BlockNumber: bigint, transactionIndex: number, logIndex: number) => ({
+        recentPcashBlockHash: anchorHash, l1OriginRoot: 0n, l1OriginRootSiblings: Array(4).fill(0n), l1BlockNumber,
+        l1BlockHash: new Uint8Array(32), l1BlockTimestamp: SNAPSHOT_TIMESTAMP, l1OriginIndex: 1n,
+        l1OriginSiblings: Array(40).fill(0n), l1LogsRoot: 0n, l1LogCount: 2n, logLeafIndex: 1n,
+        logSiblings: Array(L1_LOG_TREE_DEPTH).fill(0n), transactionIndex: BigInt(transactionIndex), logIndex: BigInt(logIndex),
+      }),
+    } as unknown as PcashNodeClient;
+    const verify = (list?: { denied: bigint[]; paused: boolean }) => withPaymentRouterRpc("0x", l1Url => verifyOfferForPayment(node, funded, {
+      expectedRouter: EXPECTED_ROUTER, expectedNetwork: NETWORK, l1Urls: [l1Url], routerDeployment: sharedDeployment,
+      ...(list === undefined ? {} : { denyLists: denyLists(list) }),
+    }));
+
+    it("is payable while its escrow is not frozen and its list not paused", async () => {
+      const verification = await verify({ denied: [0xdeadn], paused: false });
+      assert.equal(verification.safeToPay, true, verification.checks.join("; "));
+    });
+
+    it("refuses payment once its escrow is frozen", async () => {
+      const verification = await verify({ denied: [escrow], paused: false });
+      assert.equal(verification.safeToPay, false);
+      assert.ok(verification.checks.includes("the escrow cannot release its token: the issuer has frozen this account for this asset"));
+    });
+
+    it("refuses payment while its list is paused", async () => {
+      const verification = await verify({ denied: [], paused: true });
+      assert.equal(verification.safeToPay, false);
+      assert.ok(verification.checks.includes("the escrow cannot release its token: the issuer has paused transfers of this asset"));
+    });
+
+    it("refuses payment without an Ethereum reading of its list", async () => {
+      const verification = await verify();
+      assert.equal(verification.safeToPay, false);
+      assert.ok(verification.checks.some((check) => /needs an Ethereum connection to read its deny list/.test(check)));
+    });
   });
 
   it("preserves the verified router and fee quote when the selected L1 head is unavailable", async () => {

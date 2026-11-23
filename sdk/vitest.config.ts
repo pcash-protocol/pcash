@@ -7,7 +7,7 @@ export default defineConfig({
       ...configDefaults.exclude,
       "test/**/*.proving.test.ts",
       ...["allDummyCircuits", "eventFamilies", "fullBurnNamespace", "kernelTamper", "multisigContract",
-        "proverArtifacts", "readableRuleAdversarial", "witnessMaps", "browser/proverClient"]
+        "proverArtifacts", "readableRuleAdversarial", "restrictedKernel", "witnessMaps", "browser/proverClient"]
         .map(name => `test/${name}.test.ts`),
     ] : configDefaults.exclude,
   },

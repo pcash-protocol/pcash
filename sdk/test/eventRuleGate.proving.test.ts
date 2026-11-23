@@ -9,7 +9,7 @@ import { NO_OP_EVENT_APPLICATION, prepareEventApplication, sponsoredTransferStac
 import type { FieldNumberish } from "../src/crypto/field.ts";
 import { fm, privateValueMap } from "../src/protocol/witness.ts";
 import { privateValueProfileFixture } from "./privateValueProfileFixtures.ts";
-import { sharedAssetClaimFixture } from "./sharedAssetClaimFixtures.ts";
+import { sharedAssetClaimFixture } from "@pcash/test-support/shared-asset-claim-fixtures";
 import { proverAssetsDir } from "./circuitBundle.ts";
 import { verifyGeneratedProof } from "./proofVerification.ts";
 

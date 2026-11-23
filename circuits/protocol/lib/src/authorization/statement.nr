@@ -11,13 +11,11 @@
 // depend on which kernel runs.
 
 use crate::generated::pcash_constants::{
-    ACCOUNT_UPDATE_ACTION_DOMAIN, ASSET_CREATION_ACTION_DOMAIN, AUTHORIZATION_COMMITMENT_DOMAIN,
-    CONTRACT_FEE_SPONSORSHIP_ACTION_DOMAIN, SPONSORED_TRANSFER_ACTION_DOMAIN,
+    ACCOUNT_UPDATE_ACTION_DOMAIN, AUTHORIZATION_COMMITMENT_DOMAIN,
+    CONTRACT_FEE_SPONSORSHIP_ACTION_DOMAIN, MINT_ACTION_DOMAIN, SPONSORED_TRANSFER_ACTION_DOMAIN,
     TRANSFER_ACTION_DOMAIN,
 };
-use crate::ledger::private_value::{
-    private_value_commitment, PrivateValue, SLOT_CLASS_ASSET_CREATION,
-};
+use crate::ledger::private_value::{private_value_commitment, PrivateValue, SLOT_CLASS_MINT};
 use crate::primitives::hash::pcash_hash;
 
 pub global RULE_STATEMENT_LENGTH: u32 = 4;
@@ -41,7 +39,7 @@ fn action_commitment(
     )
 }
 
-// One account moves its own value: the transfer kernel.
+// One account moves its own value: the transfer and restricted-transfer kernels.
 pub fn transfer_action_commitment(pcash_chain_id: Field, private_value_commitment: Field) -> Field {
     action_commitment(
         TRANSFER_ACTION_DOMAIN,
@@ -51,44 +49,44 @@ pub fn transfer_action_commitment(pcash_chain_id: Field, private_value_commitmen
     )
 }
 
-// One account creates an asset and its supply: the asset-creation kernel. The
-// extra data is the ID of the asset the kernel derives.
-pub fn asset_creation_action_commitment(
+// One account mints an asset: the mint kernel. The extra data is the ID of the
+// asset the kernel derives.
+pub fn mint_action_commitment(
     pcash_chain_id: Field,
     private_value_commitment: Field,
     asset_id: Field,
 ) -> Field {
     action_commitment(
-        ASSET_CREATION_ACTION_DOMAIN,
+        MINT_ACTION_DOMAIN,
         pcash_chain_id,
         private_value_commitment,
         asset_id,
     )
 }
 
-// A rule that opens the private value and serves both one-account kernels
-// chooses between their actions by its slot classes: the asset-creation action
-// for `created_asset_id` when an input is a creation marker, else the transfer
-// action, which ignores `created_asset_id`.
+// A rule that opens the private value and serves both the transfer and the
+// mint kernel chooses between their actions by its slot classes: the mint
+// action for `minted_asset_id` when an input is a mint marker, else the
+// transfer action, which ignores `minted_asset_id`.
 pub fn owner_action_commitment<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
     pcash_chain_id: Field,
     private_value: PrivateValue<N_IN, N_OUT, SHAPE>,
-    created_asset_id: Field,
+    minted_asset_id: Field,
 ) -> Field {
     let commitment = private_value_commitment(private_value);
-    let mut creates_asset = false;
+    let mut mints = false;
     for i in 0..N_IN {
-        creates_asset |= private_value.input_slot_classes[i] == SLOT_CLASS_ASSET_CREATION;
+        mints |= private_value.input_slot_classes[i] == SLOT_CLASS_MINT;
     }
-    if creates_asset {
-        asset_creation_action_commitment(pcash_chain_id, commitment, created_asset_id)
+    if mints {
+        mint_action_commitment(pcash_chain_id, commitment, minted_asset_id)
     } else {
         transfer_action_commitment(pcash_chain_id, commitment)
     }
 }
 
-// The contract side of a sponsored transfer: the contract moves the asset and
-// another account pays the native fee.
+// The contract side of a sponsored transfer, restricted or not: the contract
+// moves the asset and another account pays the native fee.
 pub fn sponsored_transfer_action_commitment(
     pcash_chain_id: Field,
     private_value_commitment: Field,
@@ -101,8 +99,9 @@ pub fn sponsored_transfer_action_commitment(
     )
 }
 
-// A user account pays the native fee for one named existing contract's asset
-// action in a sponsored transfer.
+// A user account pays the native fee for one named existing contract's
+// sponsored transfer, restricted or not: it pays for that contract's action and
+// nothing else.
 pub fn contract_fee_sponsorship_action_commitment(
     pcash_chain_id: Field,
     private_value_commitment: Field,
@@ -175,17 +174,16 @@ pub fn assert_rule_statement(
 
 mod tests {
     use crate::generated::pcash_constants::{
-        ASSET_CREATION_ACTION_DOMAIN, AUTHORIZATION_COMMITMENT_DOMAIN, TRANSFER_ACTION_DOMAIN,
+        AUTHORIZATION_COMMITMENT_DOMAIN, MINT_ACTION_DOMAIN, TRANSFER_ACTION_DOMAIN,
     };
     use crate::ledger::private_value::{
         private_value_commitment, PrivateValue, SLOT_CLASS_APPLICATION, SLOT_CLASS_ASSET,
-        SLOT_CLASS_ASSET_CREATION, SLOT_CLASS_DUMMY, SLOT_CLASS_NATIVE,
+        SLOT_CLASS_DUMMY, SLOT_CLASS_MINT, SLOT_CLASS_NATIVE,
     };
     use crate::primitives::hash::pcash_hash;
     use super::{
-        account_update_action_commitment, asset_creation_action_commitment,
-        authorization_commitment, contract_action_commitment,
-        contract_fee_sponsorship_action_commitment, owner_action_commitment,
+        account_update_action_commitment, authorization_commitment, contract_action_commitment,
+        contract_fee_sponsorship_action_commitment, mint_action_commitment, owner_action_commitment,
         sponsored_transfer_action_commitment, transfer_action_commitment,
     };
 
@@ -194,11 +192,11 @@ mod tests {
         let transfer = transfer_action_commitment(1, 0x10);
         assert(transfer == pcash_hash([TRANSFER_ACTION_DOMAIN, 1, 0x10, 0]));
         assert(transfer != transfer_action_commitment(2, 0x10));
-        let asset_creation = asset_creation_action_commitment(1, 0x10, 0x50);
-        assert(asset_creation == pcash_hash([ASSET_CREATION_ACTION_DOMAIN, 1, 0x10, 0x50]));
-        assert(transfer != asset_creation_action_commitment(1, 0x10, 0));
-        assert(asset_creation != asset_creation_action_commitment(2, 0x10, 0x50));
-        assert(asset_creation != asset_creation_action_commitment(1, 0x10, 0x51));
+        let mint = mint_action_commitment(1, 0x10, 0x50);
+        assert(mint == pcash_hash([MINT_ACTION_DOMAIN, 1, 0x10, 0x50]));
+        assert(transfer != mint_action_commitment(1, 0x10, 0));
+        assert(mint != mint_action_commitment(2, 0x10, 0x50));
+        assert(mint != mint_action_commitment(1, 0x10, 0x51));
         assert(transfer != sponsored_transfer_action_commitment(1, 0x10));
         assert(transfer != contract_fee_sponsorship_action_commitment(1, 0x10, 0));
         assert(transfer != account_update_action_commitment(1, 0x10, 0));
@@ -239,14 +237,14 @@ mod tests {
         }
     }
 
-    // A creation marker selects the asset-creation action for the created
-    // asset; every other input class leaves the transfer action.
+    // A mint marker selects the mint action for the minted asset; every other
+    // input class leaves the transfer action.
     #[test]
-    fn test_owner_action_selects_the_asset_creation_action_by_creation_marker() {
-        let creation = private_value([SLOT_CLASS_NATIVE, SLOT_CLASS_ASSET_CREATION]);
+    fn test_owner_action_selects_the_mint_action_by_mint_marker() {
+        let mint = private_value([SLOT_CLASS_NATIVE, SLOT_CLASS_MINT]);
         assert(
-            owner_action_commitment(1, creation, 0x50)
-                == asset_creation_action_commitment(1, private_value_commitment(creation), 0x50),
+            owner_action_commitment(1, mint, 0x50)
+                == mint_action_commitment(1, private_value_commitment(mint), 0x50),
         );
         let other_classes =
             [SLOT_CLASS_DUMMY, SLOT_CLASS_NATIVE, SLOT_CLASS_ASSET, SLOT_CLASS_APPLICATION];

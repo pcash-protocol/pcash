@@ -14,6 +14,7 @@
     "marketplace",
     "web/tokens",
     "lineage",
+    "stablecoin",
     "web",
     "e2e",
     "bench",
@@ -21,7 +22,7 @@
     "web/board"
   ],
   "scripts": {
-    "build:packages": "npm run build --workspace @pcash/sdk && npm run build --workspace @pcash/wallet && npm run build --workspace @pcash/relayer && npm run build --workspace @pcash/marketplace && npm run build --workspace @pcash/tokens && npm run build --workspace @pcash/lineage && npm run build --workspace @pcash/board",
+    "build:packages": "npm run build --workspace @pcash/sdk && npm run build --workspace @pcash/wallet && npm run build --workspace @pcash/relayer && npm run build --workspace @pcash/marketplace && npm run build --workspace @pcash/tokens && npm run build --workspace @pcash/lineage && npm run build --workspace @pcash/stablecoin && npm run build --workspace @pcash/board",
     "build": "npm run build:packages && npm run build --workspace @pcash/web",
     "preinstall": "node scripts/live_run_lock.mjs check",
     "circuit-bundle:test": "node --test scripts/circuits/browser_assets.test.mjs scripts/circuits/browser_gateway.test.mjs scripts/circuits/bundle.test.mjs scripts/circuits/refresh_prover_assets.test.mjs scripts/live_run_lock.test.mjs",

@@ -1509,22 +1509,12 @@ describe("durable transfer journal reconciliation (nullifier-based)", () => {
   const INPUT_NULLIFIER = word(0xa1n);
   const SECOND_INPUT_NULLIFIER = word(0xa2n);
   /** The synced chain's record of the transaction that consumed a watched nullifier. */
-  const consumedAt = (
-    block: bigint,
-    contentHash: string,
-    nullifiers = [
-      INPUT_NULLIFIER,
-      word(0xb1n),
-      word(0xb2n),
-      word(0xb3n),
-    ],
-  ): NullifierConsumption => ({
+  const consumedAt = (block: bigint, contentHash: string): NullifierConsumption => ({
     pcashNumber: block,
     pcashHash: word(block),
     timestamp: 1_800_000_000n + block * 12n,
     transactionId: word(block + 0x50n),
     contentHash,
-    nullifiers,
   });
   /** Reconcile against a chain synced to `latest` whose finalized head is `finalized`. */
   const reconcileAt = async (
@@ -1653,12 +1643,7 @@ describe("durable transfer journal reconciliation (nullifier-based)", () => {
   it("settles when one finalized conflicting transaction consumed every journaled input", async () => {
     const data = pendingData();
     addSecondInput(data);
-    const conflict = consumedAt(5n, conflictContentHash, [
-      INPUT_NULLIFIER,
-      SECOND_INPUT_NULLIFIER,
-      word(0xb2n),
-      word(0xb3n),
-    ]);
+    const conflict = consumedAt(5n, conflictContentHash);
     expect(await reconcileAt(data, 7n, 5n, [[INPUT_NULLIFIER, conflict], [SECOND_INPUT_NULLIFIER, conflict]])).toBe(true);
     expect(data.pendingNoteFundedTransfers).toBeUndefined();
     expect(data.paymentHistory).toEqual([expect.objectContaining({ contentHash: pendingContentHash, state: "conflicted" })]);
@@ -1667,18 +1652,8 @@ describe("durable transfer journal reconciliation (nullifier-based)", () => {
   it("keeps all inputs reserved until every latest-head conflict is finalized", async () => {
     const data = pendingData();
     addSecondInput(data);
-    const firstConflict = consumedAt(5n, conflictContentHash, [
-      INPUT_NULLIFIER,
-      word(0xb1n),
-      word(0xb2n),
-      word(0xb3n),
-    ]);
-    const secondConflict = consumedAt(6n, `0x${"dd".repeat(32)}`, [
-      SECOND_INPUT_NULLIFIER,
-      word(0xc1n),
-      word(0xc2n),
-      word(0xc3n),
-    ]);
+    const firstConflict = consumedAt(5n, conflictContentHash);
+    const secondConflict = consumedAt(6n, `0x${"dd".repeat(32)}`);
     expect(await reconcileAt(data, 7n, 5n, [
       [INPUT_NULLIFIER, firstConflict],
       [SECOND_INPUT_NULLIFIER, secondConflict],

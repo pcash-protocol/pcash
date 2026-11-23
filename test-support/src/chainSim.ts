@@ -24,6 +24,8 @@ import {
   receiveKeyHash,
   stateRoot,
   TX_KIND_PRIVATE_VALUE,
+  TX_KIND_USER_ACCOUNT_UPDATE,
+  userAccountUpdatePublicInputs,
   type CurrentBoundaryEnvelope,
 } from "@pcash/sdk/protocol";
 import { keccak256, toHex } from "@pcash/sdk/utils";
@@ -174,6 +176,8 @@ export interface SimNote {
 
 export interface SimTransaction {
   contentHash?: string;
+  /** A private-value transaction by default; an account update's section is always in the S profile. */
+  transactionType?: typeof TX_KIND_PRIVATE_VALUE | typeof TX_KIND_USER_ACCOUNT_UPDATE;
   shape?: number;
   /** Every nullifier the transaction consumes, in input-slot order. */
   nullifiers?: readonly string[];
@@ -307,6 +311,7 @@ export class ChainSim {
     for (const transaction of input.transactions ?? []) {
       const contentHash = transaction.contentHash ?? toHex(randomBytes(32));
       const transactionId = toHex(randomBytes(32));
+      const transactionType = transaction.transactionType ?? TX_KIND_PRIVATE_VALUE;
       const shape = transaction.shape ?? PRIVATE_VALUE_PROFILES.S.shapeId;
       const arena = transaction.arena ?? randomArena(shape as 0 | 1);
       transaction.outputs.forEach((output, slot) => {
@@ -336,8 +341,8 @@ export class ChainSim {
           outputData,
           transactionId,
           contentHash: contentHash as `0x${string}`,
-          transactionType: 0,
-          privateValueShape: shape as 0 | 1,
+          transactionType,
+          privateValueShape: transactionType === TX_KIND_PRIVATE_VALUE ? shape as 0 | 1 : null,
           outputSlot: slot,
           nullifiers: slot === 0 ? (transaction.nullifiers ?? []).map((value) => value.toLowerCase() as `0x${string}`) : [],
           arena: slot === 0 ? arena : null,
@@ -378,24 +383,33 @@ export class ChainSim {
     return this.head;
   }
 
-  /** Include an encoded private-value transaction, as the node would after admission. */
+  /**
+   * Include an encoded private-value transaction, or a user-account update's
+   * fee section, as the node would after admission. The update's account
+   * change is not applied.
+   */
   include(entry: Uint8Array, input: Omit<SimBlockInput, "transactions"> = {}): SimBlock {
     const decoded = decodeTransaction(entry);
-    if (decoded.kind !== TX_KIND_PRIVATE_VALUE) throw new Error("the simulator includes private-value transactions only");
-    const profile = privateValueProfile(decoded.shape);
-    const publicInputs = privateValuePublicInputs(decoded);
-    const nullifiers = publicInputs.slice(profile.offsets.nullifiers, profile.offsets.nullifiers + profile.inputs).map(word);
-    const bodies = publicInputs.slice(profile.offsets.outputs, profile.offsets.outputs + profile.outputs);
+    const section = decoded.kind === TX_KIND_PRIVATE_VALUE
+      ? { transactionType: decoded.kind, shape: decoded.shape, arena: decoded.arena, outputData: decoded.outputData, publicInputs: privateValuePublicInputs(decoded) }
+      : decoded.kind === TX_KIND_USER_ACCOUNT_UPDATE
+        ? { transactionType: decoded.kind, shape: PRIVATE_VALUE_PROFILES.S.shapeId, arena: decoded.section.arena, outputData: decoded.section.outputData, publicInputs: userAccountUpdatePublicInputs(decoded) }
+        : null;
+    if (section === null) throw new Error("the simulator includes private-value transactions and user-account updates only");
+    const profile = privateValueProfile(section.shape);
+    const nullifiers = section.publicInputs.slice(profile.offsets.nullifiers, profile.offsets.nullifiers + profile.inputs).map(word);
+    const bodies = section.publicInputs.slice(profile.offsets.outputs, profile.offsets.outputs + profile.outputs);
     const contentHash = toHex(keccak256(entry)).toLowerCase();
     this.#entries.set(contentHash, entry);
     return this.addBlock({
       ...input,
       transactions: [{
         contentHash,
-        shape: decoded.shape,
+        transactionType: section.transactionType,
+        shape: section.shape,
         nullifiers,
-        arena: decoded.arena,
-        outputs: bodies.map((body, slot) => ({ body, outputData: decoded.outputData[slot]! })),
+        arena: section.arena,
+        outputs: bodies.map((body, slot) => ({ body, outputData: section.outputData[slot]! })),
       }],
     });
   }
@@ -426,7 +440,7 @@ export class ChainSim {
       settledOpenFeeAmount: 0n,
       settledNativeBurnAmount: 0n,
       settledIssuanceAmount: 0n,
-      kind: "privateValue",
+      kind: first.transactionType === TX_KIND_USER_ACCOUNT_UPDATE ? "userAccountUpdate" : "privateValue",
       accountCreation: 0,
       outputLeafStart: first.outputIndex,
       outputsAdded: BigInt(rows.length),
@@ -518,8 +532,10 @@ export class ChainSim {
         fromOutputIndex: bigint;
         target: { pcashNumber: bigint; pcashHash: string };
         continuation?: Record<string, unknown>;
+        limits?: { maxOutputs?: number };
       }) => {
         record("getOutputs", [query]);
+        const pageSize = Math.min(this.pageSize, query.limits?.maxOutputs ?? Infinity);
         const block = this.#target(query.target);
         const all = this.#blocks.slice(0, Number(block.number) + 1).flatMap((candidate) => candidate.outputs);
         // A request inside a transaction starts at that transaction's first output.
@@ -534,7 +550,7 @@ export class ChainSim {
           let end = next + 1;
           while (first.kind === "ordinary" && end < rows.length && rows[end]!.kind === "ordinary"
             && (rows[end] as typeof first).transactionId === first.transactionId) end++;
-          if (page.length + end - next > this.pageSize) {
+          if (page.length + end - next > pageSize) {
             if (page.length === 0) throw new Error("invalid derived-index request: limits are too small for one transaction");
             break;
           }

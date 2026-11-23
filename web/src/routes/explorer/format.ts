@@ -5,6 +5,7 @@ import type {
   FailureDetail,
   ReceiptResult,
   TransactionOutcome,
+  TransactionSummaryResult,
 } from "@pcash/sdk/clients";
 
 /** Truncated hex for a table cell. Full values live on detail pages. */
@@ -43,10 +44,10 @@ function compactDuration(seconds: number): string {
 }
 
 /** `privateValue` -> `Private payment`, the reader-facing name for a kind. */
-export function formatKind(kind: string): string {
+export function formatKind(kind: string, accountCreation: TransactionSummaryResult["accountCreation"] = 0): string {
   switch (kind) {
     case "privateValue":
-      return "Private payment";
+      return accountCreation === 1 ? "Private payment + account creation" : "Private payment";
     case "userAccountCreation":
       return "Account creation";
     case "userAccountUpdate":
@@ -107,24 +108,6 @@ export type Tone = "good" | "bad" | "warn" | "info";
 
 export function outcomeTone(outcome: TransactionOutcome): Tone {
   return outcome === "succeeded" ? "good" : "bad";
-}
-
-/**
- * What a transaction did to the note set. This is the column that replaces
- * Etherscan's Value: amounts and parties are encrypted, but the shape of the
- * effect is public by construction.
- */
-export function describeEffect(summary: {
-  kind: string;
-  outcome: TransactionOutcome;
-  nullifiers: string[] | null;
-  outputsAdded: bigint;
-  account: { address: string } | null;
-}): string {
-  if (summary.outcome !== "succeeded") return "None — the transaction failed";
-  if (summary.account !== null) return summary.account.address;
-  const spent = summary.nullifiers?.length ?? 0;
-  return `${spent} in → ${summary.outputsAdded} out`;
 }
 
 /** Whether a block is final, given the node's reported finalized height. */

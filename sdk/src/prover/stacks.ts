@@ -201,28 +201,95 @@ export function userAccountUpdateStack(params: UserAccountUpdateParams): Promise
   });
 }
 
-interface AssetCreationParams {
-  eventApplication?: EventApplication;
+/** An asset's transfer or mint rule: its application package and its witness for this transaction. */
+export interface PolicyApplication {
+  packageName: string;
+  witnessMap: WitnessMap;
+}
+
+export type MintRuleApplication = PolicyApplication;
+
+interface RestrictedTransferParams {
+  eventApplication?: EventApplication | undefined;
   build: AssetActionBuild;
   authorization: { packageName: string; witnessMap: WitnessMap };
+  policy: PolicyApplication;
   resolve: ChonkCircuitResolver;
 }
 
-/** Fold the initiating account's installed authorization into the asset-creation kernel. */
-export async function proveAssetCreationChonk(params: AssetCreationParams & ProveOptions): Promise<NativeChonkResult> {
-  return proveStack(await assetCreationStack(params), params);
+/** Fold the owner's rule and the asset's transfer rule into the restricted-transfer kernel. */
+export async function proveRestrictedTransferChonk(params: RestrictedTransferParams & ProveOptions): Promise<NativeChonkResult> {
+  return proveStack(await restrictedTransferStack(params), params);
 }
 
-export function assetCreationStack(params: AssetCreationParams): Promise<ChonkStack> {
-  const prefix = privateValuePrefix(params.build.shape);
-  return singleRuleStack({
-    rule: params.authorization,
+export function restrictedTransferStack(params: RestrictedTransferParams): Promise<ChonkStack> {
+  return twoRuleStack({
+    build: params.build,
     eventApplication: params.eventApplication,
-    kernelName: `${prefix}_asset_creation_kernel`,
-    buildKernelWitnessMap: params.build.buildAssetCreationKernelWitnessMap,
-    hidingKernelName: `${prefix}_hiding_kernel`,
-    publicInputNames: privateValuePublicInputNames(privateValueProfile(params.build.shape)),
-    publicInputs: params.build.publicInputs,
+    authorization: params.authorization,
+    second: params.policy,
+    kernelName: `${privateValuePrefix(params.build.shape)}_restricted_transfer_kernel`,
+    buildKernelWitnessMap: params.build.buildRestrictedKernelWitnessMap,
+    resolve: params.resolve,
+  });
+}
+
+/** The account's rule, an asset rule, the event application, a kernel that consumes both rules, and the hiding kernel. */
+async function twoRuleStack(params: {
+  build: AssetActionBuild;
+  eventApplication?: EventApplication | undefined;
+  authorization: { packageName: string; witnessMap: WitnessMap };
+  second: PolicyApplication;
+  kernelName: string;
+  buildKernelWitnessMap: (authorizationVk: ChonkVkArtifacts, secondVk: ChonkVkArtifacts) => WitnessMap;
+  resolve: ChonkCircuitResolver;
+}): Promise<ChonkStack> {
+  const { kernelName } = params;
+  const hidingKernelName = `${privateValuePrefix(params.build.shape)}_hiding_kernel`;
+  const rule = await params.resolve(params.authorization.packageName, "app");
+  const second = await params.resolve(params.second.packageName, "app");
+  const applicationName = params.eventApplication?.preparedEvent.application.packageName ?? NO_OP_EVENT_APPLICATION;
+  const eventApplication = params.eventApplication?.preparedEvent.application.material
+    ?? await params.resolve(applicationName, "app");
+  const kernel = await params.resolve(kernelName, "kernel");
+  const hidingKernel = await params.resolve(hidingKernelName, "hiding");
+  const kernelWitness = params.buildKernelWitnessMap(rule, second);
+  const eventStatement = eventStatementFromKernel(kernelWitness, params.eventApplication?.preparedEvent.application.event);
+  return { steps: [
+    step(params.authorization.packageName, rule, params.authorization.witnessMap),
+    step(params.second.packageName, second, params.second.witnessMap),
+    step(applicationName, eventApplication, params.eventApplication?.witnessMap ?? noOpEventWitness(eventStatement)),
+    step(kernelName, kernel, { ...kernelWitness,
+      event_application_vk: vk(eventApplication),
+      event_statement: fields(eventStatement),
+    }),
+    hidingStep(hidingKernelName, hidingKernel, kernel,
+      privateValuePublicInputNames(privateValueProfile(params.build.shape)), params.build.publicInputs),
+  ], publicInputs: params.build.publicInputs };
+}
+
+interface MintParams {
+  eventApplication?: EventApplication | undefined;
+  build: AssetActionBuild;
+  authorization: { packageName: string; witnessMap: WitnessMap };
+  /** The asset's mint rule for this profile. */
+  mintRule: MintRuleApplication;
+  resolve: ChonkCircuitResolver;
+}
+
+/** Fold the minting account's rule and the asset's mint rule into the mint kernel. */
+export async function proveMintChonk(params: MintParams & ProveOptions): Promise<NativeChonkResult> {
+  return proveStack(await mintStack(params), params);
+}
+
+export function mintStack(params: MintParams): Promise<ChonkStack> {
+  return twoRuleStack({
+    build: params.build,
+    eventApplication: params.eventApplication,
+    authorization: params.authorization,
+    second: params.mintRule,
+    kernelName: `${privateValuePrefix(params.build.shape)}_mint_kernel`,
+    buildKernelWitnessMap: params.build.buildMintKernelWitnessMap,
     resolve: params.resolve,
   });
 }
@@ -232,34 +299,44 @@ interface SponsoredTransferParams {
   build: AssetActionBuild;
   primary: { packageName: string; witnessMap: WitnessMap };
   feePayer: { packageName: string; witnessMap: WitnessMap };
+  /** The asset's transfer rule, exactly for a restricted asset. */
+  policy?: PolicyApplication | undefined;
   buildKernelWitnessMap: (
     primaryVk: ChonkVkArtifacts,
     feePayerVk: ChonkVkArtifacts,
+    policyVk?: ChonkVkArtifacts,
   ) => WitnessMap;
   resolve: ChonkCircuitResolver;
 }
 
-/** Fold two installed applications into the two-account sponsored-transfer kernel. */
+/** Fold two installed applications, and a restricted asset's transfer rule, into a sponsored-transfer kernel. */
 export async function proveSponsoredTransferChonk(params: SponsoredTransferParams & ProveOptions): Promise<NativeChonkResult> {
   return proveStack(await sponsoredTransferStack(params), params);
 }
 
-export async function sponsoredTransferStack(params: SponsoredTransferParams): Promise<ChonkStack> {
+export function sponsoredTransferStack(params: SponsoredTransferParams): Promise<ChonkStack> {
   const prefix = privateValuePrefix(params.build.shape);
-  const kernelName = `${prefix}_sponsored_transfer_kernel`;
-  const hidingKernelName = `${prefix}_hiding_kernel`;
+  return sponsoredStack(params, params.policy === undefined
+    ? `${prefix}_sponsored_transfer_kernel`
+    : `${prefix}_restricted_sponsored_transfer_kernel`);
+}
+
+async function sponsoredStack(params: SponsoredTransferParams, kernelName: string): Promise<ChonkStack> {
+  const hidingKernelName = `${privateValuePrefix(params.build.shape)}_hiding_kernel`;
   const primary = await params.resolve(params.primary.packageName, "app");
   const fee = await params.resolve(params.feePayer.packageName, "app");
+  const policy = params.policy === undefined ? undefined : await params.resolve(params.policy.packageName, "app");
   const applicationName = params.eventApplication?.preparedEvent.application.packageName ?? NO_OP_EVENT_APPLICATION;
   const eventApplication = params.eventApplication?.preparedEvent.application.material
     ?? await params.resolve(applicationName, "app");
   const kernel = await params.resolve(kernelName, "kernel");
   const hidingKernel = await params.resolve(hidingKernelName, "hiding");
-  const kernelWitness = params.buildKernelWitnessMap(primary, fee);
+  const kernelWitness = params.buildKernelWitnessMap(primary, fee, policy);
   const eventStatement = eventStatementFromKernel(kernelWitness, params.eventApplication?.preparedEvent.application.event);
   return { steps: [
     step(params.primary.packageName, primary, params.primary.witnessMap),
     step(params.feePayer.packageName, fee, params.feePayer.witnessMap),
+    ...(params.policy === undefined ? [] : [step(params.policy.packageName, policy!, params.policy.witnessMap)]),
     step(applicationName, eventApplication, params.eventApplication?.witnessMap ?? noOpEventWitness(eventStatement)),
     step(kernelName, kernel, { ...kernelWitness,
       event_application_vk: vk(eventApplication),

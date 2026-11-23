@@ -11,6 +11,7 @@ import {
   getAddress,
   type Address,
   type Hex,
+  type PublicClient,
 } from "viem";
 import { PRIVATE_VALUE_PROFILES, type PcashNodeClient, type StatusResult } from "@pcash/sdk/browser";
 import type { ProvePhase, ProveStatus } from "@pcash/sdk/browser-prover";
@@ -18,6 +19,8 @@ import { nativeBurnAmount, networkConfigFromStatus } from "@pcash/sdk/protocol";
 import type { SelectedRelayHttpClient } from "@pcash/sdk/relay";
 import { randomFieldEntropy } from "@pcash/sdk/utils";
 import {
+  DenyLists,
+  viemL1LogReader,
   walletAction,
   type DurableSubmissionAdapter,
   type SpendableWalletExecutionContext,
@@ -770,7 +773,7 @@ export class MarketplaceController {
     }
   }
 
-  private verifyWith(
+  private async verifyWith(
     node: PcashNodeClient,
     publication: OfferPublication,
     status: StatusResult,
@@ -782,6 +785,8 @@ export class MarketplaceController {
       expectedNetwork: networkConfigFromStatus(status),
       l1Urls: this.l1RpcUrls,
       ...(routerDeployment === undefined ? {} : { routerDeployment }),
+      // Without an Ethereum endpoint a restricted listing reports that it needs one.
+      ...await this.denyLists({ node, status }, publication).catch(() => ({})),
     });
   }
 
@@ -997,6 +1002,29 @@ export class MarketplaceController {
     return sendRouterCall(node, this.l1RpcUrls, signer, call, callbacks);
   }
 
+  #denyLists: Promise<DenyLists> | undefined;
+
+  /**
+   * The deny lists of a restricted token, read from Ethereum through this
+   * session's endpoint; nothing for an offer whose asset has no transfer rule.
+   */
+  private async denyLists(
+    context: { node: PcashNodeClient; status: StatusResult },
+    publication: OfferPublication,
+  ): Promise<{ denyLists?: DenyLists }> {
+    if (publicationAssetDefinition(publication)?.transferRule === undefined) return {};
+    if (this.#denyLists === undefined) {
+      const created = selectedL1Client(context.node, this.l1RpcUrls, context.status)
+        .then((client) => new DenyLists(viemL1LogReader(client as PublicClient), context.status.genesisL1Block));
+      this.#denyLists = created;
+      // A failed endpoint selection is not kept, so the next restricted offer tries again.
+      created.catch(() => {
+        if (this.#denyLists === created) this.#denyLists = undefined;
+      });
+    }
+    return { denyLists: await this.#denyLists };
+  }
+
   /** `paid`: the claim is for `retry`, after the payment landed. A claim for `buy` bounds the fee from the current Ethereum head. */
   private async proveClaim(publication: OfferPublication, wallet: SpendableWalletExecutionContext, snapshot: ClaimSnapshot, paid: boolean): Promise<ProvedClaim> {
     return proveCarriedClaim({
@@ -1005,6 +1033,7 @@ export class MarketplaceController {
       buyer: wallet.profile,
       ...(paid ? { paid: true } : { ethereumHead: await this.l1Head(wallet) }),
       sponsor: this.requireIdentity().wallet,
+      ...await this.denyLists(wallet, publication),
       snapshot,
       buyerReceiveKey: (accountStateRoot: bigint) => loadSelfReceiveKeyAtSnapshot(
         wallet.store, wallet.profile.address, accountStateRoot, () => wallet.synchronize(),
@@ -1517,6 +1546,7 @@ export class MarketplaceController {
         options.assertActive?.();
         return reclaimMarketplaceOffer({
           node,
+          ...await this.denyLists(wallet, publication),
           submitTransaction: createMarketplaceTransactionSubmitter(wallet),
           offer: publication,
           sellerProfile: wallet.profile,

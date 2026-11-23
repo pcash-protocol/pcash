@@ -180,7 +180,7 @@ function deriveVerifiedProfile(
   const largeBatchTransferCommitmentBlinder = expandScalar(
     ikm, pcashChainId, PROFILE_LARGE_BATCH_TRANSFER_COMMITMENT_BLINDER_SALT_LABEL,
   );
-  const largeAssetCreationCommitmentBlinder = expandScalar(ikm, pcashChainId, "pcash.profile.large-asset-creation-commitment-blinder");
+  const largeMintCommitmentBlinder = expandScalar(ikm, pcashChainId, "pcash.profile.large-mint-commitment-blinder");
   const largeContractFeeCommitmentBlinder = expandScalar(ikm, pcashChainId, "pcash.profile.large-contract-fee-commitment-blinder");
   const accountAdminCommitmentBlinder = expandScalar(
     ikm,
@@ -202,7 +202,7 @@ function deriveVerifiedProfile(
     pcashChainId,
     PROFILE_CONTRACT_FEE_COMMITMENT_BLINDER_SALT_LABEL,
   );
-  const assetCreationCommitmentBlinder = expandScalar(ikm, pcashChainId, "pcash.profile.asset-creation-commitment-blinder");
+  const mintCommitmentBlinder = expandScalar(ikm, pcashChainId, "pcash.profile.mint-commitment-blinder");
   const mlKemSeed = hkdf(
     sha256,
     ikm,
@@ -230,13 +230,13 @@ function deriveVerifiedProfile(
     paymentCommitmentBlinder,
     batchTransferCommitmentBlinder,
     largeBatchTransferCommitmentBlinder,
-    largeAssetCreationCommitmentBlinder,
+    largeMintCommitmentBlinder,
     largeContractFeeCommitmentBlinder,
     accountAdminCommitmentBlinder,
     assetPaymentCommitmentBlinder,
     assetBurnCommitmentBlinder,
     contractFeeCommitmentBlinder,
-    assetCreationCommitmentBlinder,
+    mintCommitmentBlinder,
   };
   return {
     recoveryContract: "ethereum-signature-derived",

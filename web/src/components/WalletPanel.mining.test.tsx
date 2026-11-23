@@ -24,6 +24,8 @@ vi.mock("./ConnectWalletDialog.tsx", () => ({ useConnectWalletDialog: () => ({ o
 vi.mock("../lib/useNativeActivity.ts", () => ({ useNativeActivity: () => ({ activity: undefined, failed: false, checking: false }) }));
 vi.mock("../lib/usePaymentIssuance.ts", () => ({ usePaymentIssuance: () => ({ issuance: undefined, inputs: undefined }) }));
 vi.mock("../lib/useNetworkFee.ts", () => ({ S_ACTION_UNITS: 4n, S_ACTION_WITH_ACCOUNT_UNITS: 6n, useNetworkFee: () => 0n }));
+// Mainnet, where the home page labels its button Get PCASH.
+vi.mock("./NetworkContext.tsx", () => ({ useNetwork: () => ({ network: { l1ChainId: 1 } }) }));
 // The toast watcher has its own tests; the panel tests do not drive wallet events.
 vi.mock("./WalletPanelToasts.tsx", async (original) => ({ ...await original<typeof import("./WalletPanelToasts.tsx")>(), WalletToastWatcher: () => null }));
 vi.mock("../routes/wallet/Activity.tsx", () => ({ Activity: () => null }));
@@ -131,8 +133,8 @@ describe("Get PCASH navigation", () => {
 
   it("closes the wallet when following its Get PCASH link", async () => {
     await act(async () => root.render(tree("/explorer#wallet")));
-    await act(async () => panel().querySelector<HTMLAnchorElement>('a[href="/get"]')!.click());
-    expect(location()).toBe("/get");
+    await act(async () => panel().querySelector<HTMLAnchorElement>('a[href="/get/earn"]')!.click());
+    expect(location()).toBe("/get/earn");
     expect(panel().open).toBe(false);
     expect(wallet.wallet.mine).not.toHaveBeenCalled();
   });

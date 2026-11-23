@@ -216,7 +216,7 @@ describe("parseCli", () => {
       } },
       { method: "POST", url: "http://wallet.test/assets/import", body: { definition: "text", wallet: "0xabc" } },
       { method: "POST", url: "http://wallet.test/assets", body: {
-        waitMode: "latest", name: "Asset", symbol: "AST", decimals: 0, initialSupply: "1", contentDigest: DIGEST, assetId: "85",
+        waitMode: "latest", name: "Asset", symbol: "AST", decimals: 0, supply: "1", contentDigest: DIGEST, assetId: "85",
       } },
     ]);
   });

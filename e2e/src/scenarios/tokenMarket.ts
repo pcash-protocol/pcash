@@ -92,7 +92,7 @@ export async function runTokenMarketScenario(fixture: ScenarioFixture): Promise<
     const supply = 1_000_000_000n;
     const created = await alice.createAsset({
       metadata: { name: "Foo", symbol: "FOO", decimals: 6, contentDigest: createHash("sha256").update("FOO token terms").digest() },
-      initialSupply: supply,
+      supply,
       submission: selfPublished("token-market-create", aliceActor),
     });
     if (!created.accepted) throw new Error("FOO creation was not accepted");

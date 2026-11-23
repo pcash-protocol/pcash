@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+export PCASH_WALLET_DATA_DIR="${PCASH_WALLET_DATA_DIR:-$HOME/.pcash/wallet-testnet}"
+
+exec "$root/bin/node" "$root/wallet/dist/cli/bin.js" "$@"

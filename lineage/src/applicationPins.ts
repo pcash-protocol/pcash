@@ -2,7 +2,7 @@
 // Inputs: lineage/circuits.json, the circuit bundle.
 
 /** Mega VK hash of `event_lineage`. */
-export const EVENT_LINEAGE_APPLICATION_VK_HASH = 0x0ba23c108e34a3a0f535612fe129ca1b8454ffb6a3dc81dc19cd24f601b26832n;
+export const EVENT_LINEAGE_APPLICATION_VK_HASH = 0x1a2a6ce28e6bdb1675d94c2f8298292592b48e5a38ef9208705d63f7da97caf2n;
 
 /** Mega VK hash of `lineage_gated`. */
-export const LINEAGE_GATED_APPLICATION_VK_HASH = 0x048382777724071952a4c6c49d9e7dc5cc985d0d26cd767113806dcef3de2d35n;
+export const LINEAGE_GATED_APPLICATION_VK_HASH = 0x2197ddc2d5abbc9603d58e06cd6ef0065c9a9ff2d7dddfe0ac7cdd59294470f9n;

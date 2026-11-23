@@ -3,20 +3,19 @@ import { computeCircuitVkHash, VK_LEN } from "@pcash/sdk/protocol";
 import { describe, expect, it } from "vitest";
 import { fieldToHex } from "@pcash/sdk/crypto";
 import {
+  assetCoreCommitment,
   assetCovenantSuccessorConfigurationCommitment,
-  assetCreationMarker,
-  createStandardFungibleAsset,
-  deriveStandardFungibleAssetFromEntropy,
-  assetSecretCommitment,
+  assetIdOf,
   fungibleMetadataCommitment,
-  standardFungibleAssetId,
+  mintMarker,
+  transferRuleCommitment,
   verifyAssetDescriptor,
 } from "@pcash/sdk/protocol";
 import {
   buildAssetAction,
   buildFixedSupplyCreationToCustomContract,
   createFixedSupplyCreationToCustomContract,
-  type BuildStandardAssetCreationParams,
+  type BuildAssetMintParams,
   type FixedSupplyCreationMaterial,
   openedAssetActionOutput,
   ownerChangeAssetActionOutput,
@@ -32,17 +31,33 @@ import { accountStateCommitment } from "@pcash/sdk/protocol";
 import { SlotClass } from "@pcash/sdk/protocol";
 import { SparseMerkleTree } from "@pcash/sdk/crypto";
 import { addressHex } from "@pcash/sdk/utils";
-import { MERKLE_DEPTH, PRIVATE_VALUE_PROFILES } from "@pcash/sdk/constants";
+import { FIXED_SUPPLY_RULE_VK_HASH, MERKLE_DEPTH, PRIVATE_VALUE_PROFILES } from "@pcash/sdk/constants";
 import { recoverSentTransaction, scanFeed } from "../../src/wallet/actions/scan.ts";
 import { spendableNotes, type WalletFileData } from "../../src/wallet/noteStore.ts";
 import { buildExtendedCode } from "../../src/wallet/wallet.ts";
 import { EMPTY_OUTPUT_ROOT, syntheticRecentBlockFixture } from "./builderTestHelpers.ts";
+import { networkForChain, nullifierKeyCommitment } from "@pcash/sdk/protocol";
+import {
+  MAX_FIXED_SUPPLY,
+  DEFAULT_MINT_RULE_ENTRY_INDEX,
+  accountMintRule,
+  accountMintWitness,
+  createAccountMintAsset,
+  createFixedSupplyAsset,
+  deriveFixedSupplyAsset,
+  ecdsaRuleConfigurationCommitment,
+  fixedSupplyConfigurationCommitment,
+  fixedSupplyMintRule,
+  fixedSupplyMintWitness,
+  fixedSupplySecretCommitment,
+} from "@pcash/sdk/rules";
+import { deriveTestWallet } from "../testWallet.ts";
 
 const testOwner = { address: 0x1234n, nkRoot: 123n, accountIndex: 0, accountSiblings: Array(40).fill(0n), accountRuleSetCommitment: 1n, accountKind: 0n, accountRevision: 0n, receiveKeyHash: 0n, rule: { configurationCommitment: 1n, commitmentBlinder: 0n, entryIndex: 0, siblings: Array(8).fill(0n) } };
 
 const siblings4 = Array.from({ length: 4 }, () => 0n);
-const assetSecret = 0x1234n;
-const initialSupply = 1_000n;
+const secret = 0x1234n;
+const supply = 1_000n;
 const metadata = {
   name: "Example Dollar",
   symbol: "EXD",
@@ -50,20 +65,15 @@ const metadata = {
   contentDigest: new Uint8Array(32),
 };
 const metadataCommitment = fungibleMetadataCommitment(metadata);
-const assetFields = {
-  metadataCommitment,
-  initialSupply,
-  assetSecretCommitment: assetSecretCommitment(assetSecret),
+const configuration = { supply, secretCommitment: fixedSupplySecretCommitment(secret) };
+const mintRule = {
+  sVkHash: FIXED_SUPPLY_RULE_VK_HASH,
+  lVkHash: FIXED_SUPPLY_RULE_VK_HASH,
+  configurationCommitment: fixedSupplyConfigurationCommitment(configuration),
 };
-const descriptor = {
-  assetId: standardFungibleAssetId(assetFields),
-  ...assetFields,
-};
-const deterministicAsset = deriveStandardFungibleAssetFromEntropy({
-  metadata,
-  initialSupply,
-  assetSecret,
-});
+const assetFields = { metadataCommitment, mintRule };
+const deterministicAsset = deriveFixedSupplyAsset({ metadata, supply, secret });
+const descriptor = deterministicAsset.descriptor;
 
 const snapshot = {
   recentPcashBlockHash: 1n,
@@ -75,15 +85,14 @@ const snapshot = {
   accountStateRootStateSiblings: siblings4,
 };
 
-function creation(overrides: Partial<BuildStandardAssetCreationParams> = {}) {
+function creation(overrides: Partial<BuildAssetMintParams> = {}) {
   return buildAssetAction({
     pcashChainId: 0x1ff6n,
     snapshot,
     owner: testOwner,
-    assetDescriptor: descriptor,
-    assetSecret,
+    mint: { descriptor },
     inputs: [
-      { kind: "creation-marker" },
+      { kind: "mint-marker", replayId: secret },
       { kind: "dummy" },
       { kind: "dummy" },
       { kind: "dummy" },
@@ -93,7 +102,7 @@ function creation(overrides: Partial<BuildStandardAssetCreationParams> = {}) {
         kind: "asset",
         recipientAddress: 0x1234n,
         noteSecret: 0x10n,
-        amount: initialSupply,
+        amount: supply,
         outputData: sizeClassFiller(),
       }),
       { kind: "dummy", dummySecret: 0x11n, amount: 0n, outputData: sizeClassFiller() },
@@ -109,15 +118,16 @@ function creation(overrides: Partial<BuildStandardAssetCreationParams> = {}) {
   });
 }
 
-describe("standard fungible asset builder", () => {
+describe("fungible asset builder", () => {
   it("uses CSPRNG entropy by default and keeps deterministic derivation explicit", () => {
-    const first = createStandardFungibleAsset({ metadata, initialSupply });
-    const second = createStandardFungibleAsset({ metadata, initialSupply });
-    expect(first.assetSecret).not.toBe(0n);
-    expect(first.assetSecret).not.toBe(second.assetSecret);
+    const first = createFixedSupplyAsset({ metadata, supply });
+    const second = createFixedSupplyAsset({ metadata, supply });
+    expect(first.secret).not.toBe(0n);
+    expect(first.secret).not.toBe(second.secret);
     expect(first.descriptor.assetId).not.toBe(second.descriptor.assetId);
-    expect(deterministicAsset.descriptor).toEqual(descriptor);
-    expect(deterministicAsset.assetSecret).toBe(assetSecret);
+    expect(deriveFixedSupplyAsset({ metadata, supply, secret })).toEqual(deterministicAsset);
+    expect(descriptor).toMatchObject(assetFields);
+    expect(deterministicAsset.secret).toBe(secret);
   });
 
   it("canonicalizes the interoperable metadata profile", () => {
@@ -141,13 +151,13 @@ describe("standard fungible asset builder", () => {
     })).toThrow("printable ASCII");
   });
 
-  it("builds one fixed 4-input/5-output asset creation", () => {
+  it("builds one fixed 4-input/5-output fixed-supply mint", () => {
     const build = creation();
-    expect(build.operation).toBe("assetCreation");
+    expect(build.operation).toBe("mint");
     expect(build.assetId).toBe(descriptor.assetId);
     expect(build.publicInputs).toHaveLength(PRIVATE_VALUE_PROFILES.S.publicInputs);
     expect(build.transaction.inputs.map((input) => input.slotClass)).toEqual([
-      SlotClass.ASSET_CREATION,
+      SlotClass.MINT,
       SlotClass.DUMMY,
       SlotClass.DUMMY,
       SlotClass.DUMMY,
@@ -160,59 +170,101 @@ describe("standard fungible asset builder", () => {
       SlotClass.DUMMY,
     ]);
     expect(build.transaction.inputs[0]!.nullifier).toBe(
-      assetCreationMarker(descriptor.assetId, assetSecret),
+      mintMarker(descriptor.assetId, secret),
     );
     expect(build.transaction.outputs[1]!.outputBodyCommitment).toBe(
       noteBodyCommitment(ownerCommitment(0n, 0x11n), 0n, 0n),
     );
   });
 
-  it("binds the standard identity to every immutable asset field", () => {
+  it("binds the asset identity to every immutable asset field", () => {
     expect(verifyAssetDescriptor(descriptor)).toBe(descriptor.assetId);
     expect(() => verifyAssetDescriptor({ ...descriptor, assetId: descriptor.assetId + 1n }))
       .toThrow("asset descriptor does not match assetId");
+    const idOf = (fields: Parameters<typeof assetCoreCommitment>[0], rule?: Parameters<typeof transferRuleCommitment>[0]) =>
+      assetIdOf(assetCoreCommitment(fields), transferRuleCommitment(rule));
+    expect(idOf(descriptor)).toBe(descriptor.assetId);
     for (const changed of [
-      { initialSupply: initialSupply + 1n },
+      { mintRule: { ...mintRule, configurationCommitment: fixedSupplyConfigurationCommitment({ ...configuration, supply: supply + 1n }) } },
+      { mintRule: { ...mintRule, configurationCommitment: fixedSupplyConfigurationCommitment({ ...configuration, secretCommitment: configuration.secretCommitment + 1n }) } },
+      { mintRule: { ...mintRule, sVkHash: mintRule.sVkHash + 1n } },
+      { mintRule: { ...mintRule, lVkHash: mintRule.lVkHash + 1n } },
+      { mintRule: accountMintRule({ accountAddress: testOwner.address }) },
       { metadataCommitment: metadataCommitment + 1n },
-      { assetSecretCommitment: assetFields.assetSecretCommitment + 1n },
-    ]) expect(standardFungibleAssetId({ ...assetFields, ...changed })).not.toBe(descriptor.assetId);
+      { instanceSalt: descriptor.instanceSalt + 1n },
+    ]) expect(idOf({ ...descriptor, ...changed })).not.toBe(descriptor.assetId);
+    expect(idOf(descriptor, { sVkHash: 1n, lVkHash: 0n, configurationCommitment: 0n })).not.toBe(descriptor.assetId);
   });
 
-  it("requires exactly the configured supply and asset secret", () => {
-    expect(() => creation({ assetSecret: assetSecret + 1n })).toThrow(
-      "asset secret does not match",
-    );
-    expect(() => creation({
+  it("proves a fixed-supply mint only of exactly its supply under the one marker its secret keys", () => {
+    const dummies = (count: number) => Array.from({ length: count }, () => ({ kind: "dummy" as const }));
+    const prove = (build = creation(), overrides: Partial<Parameters<typeof fixedSupplyMintWitness>[0]> = {}) =>
+      fixedSupplyMintWitness({ mint: build, configuration, secret, ...overrides });
+    expect(prove().secret).toBe(fieldToHex(secret));
+    expect(() => prove(creation(), { secret: secret + 1n })).toThrow("the secret does not open the asset's secret commitment");
+    expect(() => prove(creation(), { configuration: { ...configuration, supply: supply + 1n } }))
+      .toThrow("the configuration does not open the asset's mint rule");
+    expect(() => prove(creation({
       outputs: [
-        outOfBandAssetActionOutput({ kind: "asset", recipientAddress: 1n, noteSecret: 2n, amount: initialSupply - 1n, outputData: sizeClassFiller() }),
+        outOfBandAssetActionOutput({ kind: "asset", recipientAddress: 1n, noteSecret: 2n, amount: supply - 1n, outputData: sizeClassFiller() }),
         { kind: "dummy", dummySecret: 3n, amount: 0n, outputData: sizeClassFiller() },
         { kind: "dummy", dummySecret: 4n, amount: 0n, outputData: sizeClassFiller() },
         { kind: "dummy", dummySecret: 5n, amount: 0n, outputData: sizeClassFiller() },
         { kind: "dummy", dummySecret: 6n, amount: 0n, outputData: sizeClassFiller() },
       ],
-    })).toThrow("outputs must equal initialSupply");
-    expect(() => creation({
-      inputs: [
-        { kind: "dummy" },
-        { kind: "dummy" },
-        { kind: "dummy" },
-        { kind: "dummy" },
-      ],
-    })).toThrow("exactly one creation marker");
+    }))).toThrow("a fixed-supply mint's asset outputs must total its supply");
+    for (const inputs of [
+      [{ kind: "mint-marker" as const, replayId: 1n }, ...dummies(3)],
+      [{ kind: "mint-marker" as const, replayId: secret }, { kind: "mint-marker" as const, replayId: 1n }, ...dummies(2)],
+    ]) expect(() => prove(creation({ inputs }))).toThrow("a fixed-supply mint carries exactly one mint marker, keyed by its secret");
+    expect(() => creation({ inputs: dummies(4) })).toThrow("a mint carries at least one mint marker");
+  });
+
+  it("mints an account-mint asset under one mint marker per replay ID, only from its configured account", () => {
+    const created = createAccountMintAsset({ metadata, accountAddress: testOwner.address, startSalt: 0n });
+    const accountConfiguration = { accountAddress: testOwner.address };
+    const markers = (...replayIds: bigint[]) => [
+      ...replayIds.map((replayId) => ({ kind: "mint-marker" as const, replayId })),
+      ...Array.from({ length: 4 - replayIds.length }, () => ({ kind: "dummy" as const })),
+    ];
+    const mint = (overrides: Partial<BuildAssetMintParams> = {}) =>
+      creation({ mint: { descriptor: created.descriptor }, inputs: markers(0x77n), ...overrides });
+    const build = mint();
+    expect(build.operation).toBe("mint");
+    expect(build.assetId).toBe(created.descriptor.assetId);
+    expect(build.mintRule).toEqual(created.descriptor.mintRule);
+    expect(build.transaction.inputs[0]!.slotClass).toBe(SlotClass.MINT);
+    expect(build.transaction.inputs[0]!.nullifier).toBe(mintMarker(created.descriptor.assetId, 0x77n));
+    expect(mint({ inputs: markers(0x77n, 0x78n) }).transaction.inputs.slice(0, 2).map((input) => input.nullifier))
+      .toEqual([mintMarker(created.descriptor.assetId, 0x77n), mintMarker(created.descriptor.assetId, 0x78n)]);
+    expect(() => mint({ inputs: markers() })).toThrow("a mint carries at least one mint marker");
+    expect(accountMintWitness({ mint: build, configuration: accountConfiguration }).account_address).toBe(fieldToHex(testOwner.address));
+    expect(() => accountMintWitness({ mint: mint({ owner: { ...testOwner, address: 0x4321n } }), configuration: accountConfiguration }))
+      .toThrow("only the asset's configured account mints it");
+    expect(() => accountMintWitness({ mint: build, configuration: { accountAddress: 0x4321n } }))
+      .toThrow("the configuration does not open the asset's mint rule");
+  });
+
+  it("refuses a readable mint that keeps minted units as owner change", () => {
+    const wallet = deriveTestWallet({ mlKem: "deterministic" });
+    const owner = { ...testOwner, address: wallet.address, nkRoot: wallet.nkRoot, rule: { ...testOwner.rule,
+      entryIndex: DEFAULT_MINT_RULE_ENTRY_INDEX,
+      configurationCommitment: ecdsaRuleConfigurationCommitment(networkForChain(0x1ff6n), nullifierKeyCommitment(wallet.nkRoot)) } };
+    const build = creation({ owner, outputs: [
+      ownerChangeAssetActionOutput({ kind: "asset", pcashChainId: 0x1ff6n, assetId: descriptor.assetId, amount: supply, receiveKey: wallet.mlKemPublicKey }),
+      { kind: "dummy", dummySecret: 0x11n, amount: 0n, outputData: sizeClassFiller() },
+      { kind: "dummy", dummySecret: 0x12n, amount: 0n, outputData: sizeClassFiller() },
+      { kind: "dummy", dummySecret: 0x13n, amount: 0n, outputData: sizeClassFiller() },
+      { kind: "dummy", dummySecret: 0x14n, amount: 0n, outputData: sizeClassFiller() },
+    ] });
+    expect(() => build.prepareOwnerAuthorization({ wallet })).toThrow("a mint declares every asset output");
   });
 
   it("uses the full existing 128-bit encrypted amount field for assets", () => {
     const maximalNote = (1n << 128n) - 1n;
-    const maximalFields = {
-      ...assetFields,
-      initialSupply: maximalNote,
-    };
-    const maximalDescriptor = {
-      assetId: standardFungibleAssetId(maximalFields),
-      ...maximalFields,
-    };
-    expect(() => creation({
-      assetDescriptor: maximalDescriptor,
+    const maximal = deriveFixedSupplyAsset({ metadata, supply: maximalNote, secret });
+    const maximalMint = creation({
+      mint: { descriptor: maximal.descriptor },
       outputs: [
         outOfBandAssetActionOutput({ kind: "asset", recipientAddress: 1n, noteSecret: 2n, amount: maximalNote, outputData: sizeClassFiller() }),
         { kind: "dummy", dummySecret: 3n, amount: 0n, outputData: sizeClassFiller() },
@@ -220,7 +272,8 @@ describe("standard fungible asset builder", () => {
         { kind: "dummy", dummySecret: 5n, amount: 0n, outputData: sizeClassFiller() },
         { kind: "dummy", dummySecret: 6n, amount: 0n, outputData: sizeClassFiller() },
       ],
-    })).not.toThrow();
+    });
+    expect(() => fixedSupplyMintWitness({ mint: maximalMint, configuration: { ...configuration, supply: maximalNote }, secret })).not.toThrow();
     expect(() => outOfBandAssetActionOutput({
       kind: "asset",
       recipientAddress: 1n,
@@ -237,10 +290,7 @@ describe("standard fungible asset builder", () => {
         { kind: "dummy", dummySecret: 6n, amount: 0n, outputData: sizeClassFiller() },
       ],
     })).toThrow("2^128");
-    expect(() => standardFungibleAssetId({
-      ...assetFields,
-      initialSupply: 5n * ((1n << 128n) - 1n) + 1n,
-    })).toThrow("five maximal asset outputs");
+    expect(() => fixedSupplyMintRule({ ...configuration, supply: MAX_FIXED_SUPPLY + 1n })).toThrow("supply exceeds what one mint can carry");
   });
 
   it("builds canonical recipient delivery and spends the recovered note with assetId alone", async () => {
@@ -258,7 +308,7 @@ describe("standard fungible asset builder", () => {
         mlKemPublicKey: recipient.publicKey,
       }),
       noteSecret,
-      amount: initialSupply,
+      amount: supply,
     });
     if (output.kind !== "asset" || output.delivery.kind !== "canonical-encrypted") throw new Error("opened asset output changed kind");
     // The builder seals the envelope once the arena exists.
@@ -334,7 +384,7 @@ describe("standard fungible asset builder", () => {
         { kind: "dummy" },
       ],
       outputs: [
-        outOfBandAssetActionOutput({ kind: "asset", recipientAddress, noteSecret: 0x6161n, amount: initialSupply, outputData: sizeClassFiller() }),
+        outOfBandAssetActionOutput({ kind: "asset", recipientAddress, noteSecret: 0x6161n, amount: supply, outputData: sizeClassFiller() }),
         { kind: "dummy", dummySecret: 0x41n, amount: 0n, outputData: sizeClassFiller() },
         { kind: "dummy", dummySecret: 0x42n, amount: 0n, outputData: sizeClassFiller() },
         { kind: "dummy", dummySecret: 0x43n, amount: 0n, outputData: sizeClassFiller() },
@@ -353,7 +403,7 @@ describe("standard fungible asset builder", () => {
     const opaque = 0x123456789n;
     const build = creation({
       outputs: [
-        recipientCommittedAssetActionOutput({ kind: "asset", ownerCommitment: opaque, amount: initialSupply, outputData: sizeClassFiller(), recipientAcceptedDelivery: true }),
+        recipientCommittedAssetActionOutput({ kind: "asset", ownerCommitment: opaque, amount: supply, outputData: sizeClassFiller(), recipientAcceptedDelivery: true }),
         { kind: "dummy", dummySecret: 0x41n, amount: 0n, outputData: sizeClassFiller() },
         { kind: "dummy", dummySecret: 0x42n, amount: 0n, outputData: sizeClassFiller() },
         { kind: "dummy", dummySecret: 0x43n, amount: 0n, outputData: sizeClassFiller() },
@@ -364,7 +414,7 @@ describe("standard fungible asset builder", () => {
     expect(() => unsafeRawAssetActionOutput({
       kind: "asset",
       ownerCommitment: opaque,
-      amount: initialSupply,
+      amount: supply,
       outputData: sizeClassFiller(),
       allowUnspendableOutput: false as true,
     })).toThrow("allowUnspendableOutput=true");
@@ -592,7 +642,7 @@ describe("standard fungible asset builder", () => {
       snapshot: contractSnapshot,
       owner: testOwner,
       metadata,
-      initialSupply,
+      supply,
       contract: {
         body,
         manifest,
@@ -600,7 +650,7 @@ describe("standard fungible asset builder", () => {
         accountIndex: 0,
         accountSiblings: accounts.proof(0).siblings,
       },
-      inventory: [{ noteSecret: 0xabcden, amount: initialSupply }],
+      inventory: [{ noteSecret: 0xabcden, amount: supply }],
       dummySecrets: [2n, 3n, 4n, 5n],
       validUntilTimestamp: 100n,
       dummyInputSeed: 0x123n,
@@ -610,16 +660,17 @@ describe("standard fungible asset builder", () => {
       },
     });
     expect(persisted).not.toBeNull();
-    expect(persisted!.assetSecret).toBe(result.asset.assetSecret);
-    expect(persisted!.metadata).toEqual(metadata);
+    expect(persisted!.secret).toBe(result.asset.secret);
+    expect(persisted!.definition).toEqual(result.asset.definition);
+    expect(persisted!.definition.metadata).toEqual(metadata);
     expect(persisted!.inventoryOpenings).toEqual([{
       assetId: result.asset.descriptor.assetId,
       owner: verified.address,
       noteSecret: 0xabcden,
-      amount: initialSupply,
+      amount: supply,
       outputIndex: 0,
     }]);
-    expect(result.build.operation).toBe("assetCreation");
+    expect(result.build.operation).toBe("mint");
     expect(result.build.address).toBe(testOwner.address);
     await expect(buildFixedSupplyCreationToCustomContract({
       pcashChainId: 0x1ff6n,
@@ -633,7 +684,7 @@ describe("standard fungible asset builder", () => {
         accountIndex: 0,
         accountSiblings: accounts.proof(0).siblings,
       },
-      inventory: [{ noteSecret: 1n, amount: initialSupply }],
+      inventory: [{ noteSecret: 1n, amount: supply }],
       dummySecrets: [2n, 3n, 4n, 5n],
       validUntilTimestamp: 100n,
       allowIrreversibleCustomContract: true,
@@ -674,7 +725,7 @@ describe("asset account opening arity", () => {
       inputs: [
         {
           kind: "asset",
-          amount: initialSupply,
+          amount: supply,
           noteSecret: 0x10n,
           leafIndex: 0,
           siblings: Array.from({ length: MERKLE_DEPTH }, () => 0n),
@@ -688,7 +739,7 @@ describe("asset account opening arity", () => {
           kind: "asset",
           recipientAddress: 0x4321n,
           noteSecret: 0x20n,
-          amount: initialSupply,
+          amount: supply,
           outputData: sizeClassFiller(),
         }),
         { kind: "dummy", dummySecret: 0x21n, amount: 0n, outputData: sizeClassFiller() },
@@ -736,7 +787,7 @@ it("recovers explicit data on reused asset change and private relay envelopes wi
   const build = creation({
     sender: { outgoingKey },
     inputs: [
-      { kind: "creation-marker" },
+      { kind: "mint-marker", replayId: secret },
       { kind: "native", amount: 10n, noteSecret: 0x12n, leafIndex: 1, siblings: Array(40).fill(0n) },
       { kind: "dummy" }, { kind: "dummy" },
     ],

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { bytesToHex, type Hex } from "viem";
 import { addressHex, DEFAULT_NETWORK_CONFIG, fieldToHex, fullOutputCommitment, type PcashNodeClient, type StatusResult } from "@pcash/sdk/browser";
-import { assetDefinitionAssetId, encodeAssetDefinition, planArena, encodeRecords, sentEnvelopesSchema, sentOpeningsSchema, assetDefinitionSchema, type DataRecord } from "@pcash/sdk/protocol";
+import { assetDefinitionAssetId, encodeAssetDefinition, findAssetDefinition, MAX_ASSET_DEFINITION_BYTES, MAX_RULE_CONFIGURATION_BYTES, planArena, encodeRecords, sentEnvelopesSchema, sentOpeningsSchema, assetDefinitionSchema, type DataRecord } from "@pcash/sdk/protocol";
 import { PRIVATE_VALUE_PROFILES } from "@pcash/sdk/constants";
 import { derivePcashProfileFromPrivateKey, type WalletExecutionContext } from "@pcash/sdk/wallet";
 import { createOffer, deriveOfferSecrets } from "../src/offer.mts";
@@ -96,8 +96,11 @@ test("the seller record fits the seller's S sender region beside either escrow a
   // A uint128 price takes at most ⌈128 / 7⌉ = 19 bytes and a uint64 deadline ⌈64 / 7⌉ = 10.
   const largest = sellerRecord({ ...offer, terms: { ...offer.terms, ethPriceWei: (1n << 128n) - 1n, deadlineT: (1n << 64n) - 1n } });
   assert.equal(largest.data.length, 32 + 19 + 10 + 20 + 20);
-  const definition = { ...asset.definition, metadata: { ...asset.definition.metadata, name: "N".repeat(64), symbol: "S".repeat(12) } };
-  assert.equal(encodeAssetDefinition(definition).length, 161);
+  // The largest definition: a mint rule and a transfer rule, each with the longest configuration.
+  const metadata = { ...asset.definition.metadata, name: "N".repeat(64), symbol: "S".repeat(12) };
+  const rule = (vkHash: bigint) => ({ sVkHash: vkHash, lVkHash: vkHash, configurationCommitment: 3n, configuration: new Uint8Array(MAX_RULE_CONFIGURATION_BYTES) });
+  const definition = findAssetDefinition({ mintRule: rule(1n), transferRule: rule(2n), metadata }, 0n);
+  assert.equal(encodeAssetDefinition(definition).length, MAX_ASSET_DEFINITION_BYTES);
   // A native escrow is the contract's envelope; a token escrow is an opening sent out of band, with its definition.
   const native = (record: DataRecord) => [
     sentEnvelopesSchema.encode([{ slot: 0, sharedSecret: new Uint8Array(32), recipientAddress: offer.l2ContractAddress }]),
@@ -110,12 +113,12 @@ test("the seller record fits the seller's S sender region beside either escrow a
   ];
   const senders = [native(listed), token(listed), native(largest), token(largest)];
   // Headers: a sent-entry record 2 bytes, the seller record 5 (four-byte ID and one-byte length), the definition 3.
-  // The sent envelope is 55 bytes with its header, the opening 103 and the definition 164.
-  assert.deepEqual(senders.map((sender) => encodeRecords(sender).length), [55 + 84, 103 + 164 + 84, 55 + 106, 103 + 164 + 106]);
-  // Three cells carry 160 bytes, six 352 and seven 417. The native region needs a fourth only when price and deadline
+  // The sent envelope is 55 bytes with its header, the opening 103 and the definition 470.
+  assert.deepEqual(senders.map((sender) => encodeRecords(sender).length), [55 + 84, 103 + 470 + 84, 55 + 106, 103 + 470 + 106]);
+  // Three cells carry 160 bytes, eleven 677 and twelve 742. The native region needs a fourth only when price and deadline
   // together take more than 28 bytes: with the price at most 19, only a deadline of 2^63 or more. The token region
-  // needs a seventh when they take more than 8.
-  assert.deepEqual(senders.map((sender) => planArena({ shape, sender: encodeRecords(sender).length, regions: [] }).senderCells), [3, 6, 4, 7]);
+  // needs a twelfth when they take more than 27.
+  assert.deepEqual(senders.map((sender) => planArena({ shape, sender: encodeRecords(sender).length, regions: [] }).senderCells), [3, 11, 4, 12]);
 });
 
 function buyerRecoveryFixture(token: boolean) {

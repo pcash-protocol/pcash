@@ -1,22 +1,23 @@
 import { TransactionDetails } from "../../components/TransactionDetails.tsx";
 import { ProofProgress } from "../../components/ProofProgress.tsx";
 import { useWebsiteSettings } from "../../lib/WebsiteSettings.tsx";
-import { EthereumGasCost } from "../../components/SubmissionChoice.tsx";
 import { SubmissionModeControl } from "../../components/SubmissionModeControl.tsx";
 import { usePaymentIssuance, type DisplayIssuanceInputs } from "../../lib/usePaymentIssuance.ts";
 import { S_ACTION_UNITS, S_ACTION_WITH_ACCOUNT_UNITS, useNetworkFee } from "../../lib/useNetworkFee.ts";
 import { FastPaymentResult, usePaymentConfirmation, type PaymentConfirmation } from "./FastPaymentResult.tsx";
 import { NAMES_OFF_MESSAGE } from "../../names/NameResolutionSession.ts";
 import { FittedCode } from "../../components/EthereumAddress.tsx";
-import { recipientReach, useL1AddressReader, useRecipientInput, useRecipientReach } from "./useRecipient.ts";
+import { recipientReach, useAddressHistoryReader, useRecipientInput, useRecipientReach } from "./useRecipient.ts";
 import { directSendLinkOf } from "./directSends.ts";
 import { etherscanTransactionUrl } from "../explorer/format.ts";
 import { transactionPath } from "../explorer/paths.ts";
 import { useEthereumNetwork } from "../../lib/EthereumProvider.tsx";
-import { NetworkContext } from "../../components/NetworkContext.tsx";
+import { useNetwork } from "../../components/NetworkContext.tsx";
+import { HelpTip } from "../../components/Tooltip.tsx";
 import { useFastSendEstimate } from "../../lib/useFastSendEstimate.ts";
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useRef,
@@ -146,6 +147,8 @@ interface SendController {
   chooseSpeed(speed: SendSpeed): void;
   chooseIncludeSender(include: boolean): void;
   chooseByLink(byLink: boolean): void;
+  /** Marks a send form shown on a page rather than in the sidebar; returns the call that unmarks it. */
+  showInlineSend(): () => void;
   reviewTransfer(event: FormEvent): void;
   confirmTransfer(): void;
   retryPreparation(): void;
@@ -197,8 +200,16 @@ function panelViewForHash(hash: string, ready: boolean): SendController["panelVi
   return hash === "#wallet" ? "overview" : "closed";
 }
 
+/** The address vitalik.eth names, for a testnet draft while ENS names are off. */
+const TESTNET_RECIPIENT_ADDRESS = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
+
 function useSendControllerState(): SendController {
-  const { getDefaultSubmissionMode } = useWebsiteSettings();
+  const { getDefaultSubmissionMode, ensEnabled } = useWebsiteSettings();
+  // On a testnet the first payment is filled in, a step fewer: 1 PCASH to vitalik.eth.
+  // A render without a network drafts as on mainnet, from empty fields.
+  const l1ChainId = useNetwork()?.network.l1ChainId;
+  const testnetDraft = l1ChainId !== undefined && l1ChainId !== 1;
+  const draftAmount = testnetDraft ? "1" : "";
   const {
     status,
     connectedAccount,
@@ -221,6 +232,13 @@ function useSendControllerState(): SendController {
   currentLocation.current = { pathname, search, hash };
   const reviewRequestRef = useRef(0);
   const [panelView, setPanelView] = useState<SendController["panelView"]>("closed");
+  // A send form is on screen in the sidebar's Send view or on a page such as Try PCASH's Pay tab.
+  const [inlineSendForms, setInlineSendForms] = useState(0);
+  const sendVisible = panelView === "send" || inlineSendForms > 0;
+  const showInlineSend = useCallback(() => {
+    setInlineSendForms((count) => count + 1);
+    return () => setInlineSendForms((count) => count - 1);
+  }, []);
   const [hiddenView, setHiddenView] = useState<SendController["panelView"]>("overview");
   const [unseenOutcome, setUnseenOutcome] = useState(false);
   const panelViewRef = useRef(panelView);
@@ -269,7 +287,8 @@ function useSendControllerState(): SendController {
         || review !== undefined && paymentStage.state === "failed" || paymentError !== undefined) ? "send"
       : "overview");
   };
-  const initialRecipient = new URLSearchParams(search).get("to") ?? "";
+  const linkedRecipient = new URLSearchParams(search).get("to") ?? "";
+  const initialRecipient = linkedRecipient !== "" || !testnetDraft ? linkedRecipient : ensEnabled ? "vitalik.eth" : TESTNET_RECIPIENT_ADDRESS;
   const [to, setTo] = useState(initialRecipient);
   const openSendTo = (recipient: string) => {
     if (phase !== "ready") { setPendingSend({ recipient, pathname: currentLocation.current.pathname }); setPanelView("overview"); return; }
@@ -286,7 +305,7 @@ function useSendControllerState(): SendController {
     const internal = internalNavigation.current === destination;
     internalNavigation.current = undefined;
     if (internal) return;
-    if (hash === "#send" && initialRecipient !== "") { openSendTo(initialRecipient); return; }
+    if (hash === "#send" && linkedRecipient !== "") { openSendTo(linkedRecipient); return; }
     const destinationView = panelViewForHash(hash, phase === "ready");
     if (destinationView === "send" && review === undefined) setSpeed(getDefaultSubmissionMode());
     setPanelView((view) => destinationView === "closed" ? view : destinationView);
@@ -295,19 +314,19 @@ function useSendControllerState(): SendController {
     if (["#wallet", "#send", "#ethereum-submission"].includes(hash)) setPanelView(panelViewForHash(hash, phase === "ready"));
     else if (phase !== "ready") setPanelView((view) => view === "send" ? "overview" : view);
   }, [phase]);
-  const [amountDraft, setAmountDraft] = useState("");
+  const [amountDraft, setAmountDraft] = useState(draftAmount);
   // Max tracks the balance and fee until the user types an amount.
   const [amountIsMax, setAmountIsMax] = useState(false);
   // Undefined until the user edits the fee: the field then shows the prefilled default.
   const [feeDraft, setFeeDraft] = useState<string>();
-  const issuanceQuote = usePaymentIssuance(panelView === "send" && phase === "ready");
+  const issuanceQuote = usePaymentIssuance(sendVisible && phase === "ready");
   const [speed, setSpeed] = useState<SendSpeed>(getDefaultSubmissionMode);
   const estimatedIssuance = issuanceQuote.issuance;
   // Blank until the first issuance read settles, so the prefilled fee does not change under the user.
   const fee = feeDraft ?? (issuanceQuote.inputs === undefined ? "" : formatPcashInput(defaultOpenFee(estimatedIssuance)));
   const feeAmount = speed === "fast" ? 0n : pcashInput(fee, "Relayer fee", true).amount;
   const [byLink, setByLink] = useState(false);
-  const networkFee = useNetworkFee(byLink ? S_ACTION_WITH_ACCOUNT_UNITS : S_ACTION_UNITS, panelView === "send" && phase === "ready");
+  const networkFee = useNetworkFee(byLink ? S_ACTION_WITH_ACCOUNT_UNITS : S_ACTION_UNITS, sendVisible && phase === "ready");
   const fees = feeAmount === undefined ? undefined : feeAmount + (networkFee ?? 0n);
   const maxAmount = funds === undefined || fees === undefined ? undefined
     : funds.spendablePrivate > fees ? floorToDisplay(funds.spendablePrivate - fees, PCASH_UNIT) : 0n;
@@ -316,7 +335,7 @@ function useSendControllerState(): SendController {
   const [memo, setMemo] = useState("");
   const [includeSender, setIncludeSender] = useState(true);
   /** Clears what the last payment carried; the recipient and fee stay. */
-  const clearPaymentDraft = () => { setAmount(""); setMemo(""); setIncludeSender(true); };
+  const clearPaymentDraft = () => { setAmount(draftAmount); setMemo(""); setIncludeSender(true); };
   const [review, setReview] = useState<ReviewedPayment>();
   // The last payment attempt failed because the network fee rose above its burn.
   const [feeRose, setFeeRose] = useState(false);
@@ -325,6 +344,12 @@ function useSendControllerState(): SendController {
   const [message, setMessage] = useState<string>();
   const [paymentError, setPaymentError] = useState<string>();
   const ready = phase === "ready";
+  // A form coming on screen, in the sidebar or on a page, starts at the current default speed unless a review or error waits in it.
+  const sendShown = useRef(sendVisible);
+  useEffect(() => {
+    if (sendVisible && !sendShown.current && review === undefined && paymentError === undefined) setSpeed(getDefaultSubmissionMode());
+    sendShown.current = sendVisible;
+  }, [sendVisible]);
   useEffect(() => {
     dismissPaymentReview();
     setTo(initialRecipient); clearPaymentDraft(); setFeeDraft(undefined); setSpeed(getDefaultSubmissionMode()); setHighlightContentHash(undefined);
@@ -334,7 +359,7 @@ function useSendControllerState(): SendController {
   const [reviewingName, setReviewingName] = useState(false);
   const { name, nameResolver, recipient, resolvingName } = useRecipientInput(to);
   const recipientReceiveKey = useRecipientReach(recipient?.kind === "address" ? recipient.address : undefined);
-  const readL1 = useL1AddressReader();
+  const readHistory = useAddressHistoryReader();
   const resolvingRecipient = reviewingName || resolvingName;
 
   useEffect(() => {
@@ -396,7 +421,7 @@ function useSendControllerState(): SendController {
       if (fresh === null) throw new Error("This name does not resolve to an Ethereum address. Check the name and retry.");
       const resolved = fresh === undefined ? recipient : { kind: "address" as const, address: fresh.address };
       // Checked again for the address actually paid: a recipient without PCASH gets a direct send.
-      const reach = wallet === undefined || resolved?.kind !== "address" ? undefined : await recipientReach(wallet, readL1, resolved.address);
+      const reach = wallet === undefined || resolved?.kind !== "address" ? undefined : await recipientReach(wallet, readHistory, resolved.address);
       if (reviewRequestRef.current !== request) return;
       if (reach === "smart-contract") throw new Error(SMART_CONTRACT_RECIPIENT_NOTE);
       if (reach === "unchecked") throw new Error(UNCHECKED_RECIPIENT_MESSAGE);
@@ -616,7 +641,7 @@ function useSendControllerState(): SendController {
     void (async () => {
       // A recipient that still has not set up PCASH is paid a direct send again.
       const reach = wallet === undefined || !/^0x[0-9a-fA-F]{40}$/.test(payment.deliveryTarget) ? undefined
-        : await recipientReach(wallet, readL1, payment.recipientAddress);
+        : await recipientReach(wallet, readHistory, payment.recipientAddress);
       if (reviewRequestRef.current !== request) return;
       if (reach === "smart-contract") throw new Error(SMART_CONTRACT_RECIPIENT_NOTE);
       if (reach === "unchecked") throw new Error(UNCHECKED_RECIPIENT_MESSAGE);
@@ -691,14 +716,14 @@ function useSendControllerState(): SendController {
     resetPrivateSend();
   }, [confirmation.finished, paymentStage]);
 
-  // Send errors and unsubmitted reviews belong to the Send view and end when the
-  // user leaves it. A proof in progress and a submission already made keep
-  // running; a failure that arrives while the user is elsewhere waits for them.
-  const previousPanelView = useRef(panelView);
+  // Send errors and unsubmitted reviews belong to the send form and end when the
+  // user leaves every form showing it. A proof in progress and a submission already
+  // made keep running; a failure that arrives while the user is elsewhere waits for them.
+  const previousSendVisible = useRef(sendVisible);
   useEffect(() => {
-    const leftSend = previousPanelView.current === "send";
-    previousPanelView.current = panelView;
-    if (!leftSend || panelView === "send") return;
+    const leftSend = previousSendVisible.current && !sendVisible;
+    previousSendVisible.current = sendVisible;
+    if (!leftSend) return;
     setPaymentError(undefined);
     setByLink(false);
     if (review !== undefined && (paymentStage.state === "failed" || (paymentStage.state === "idle" && awaitsConfirmation(review)))) {
@@ -707,7 +732,7 @@ function useSendControllerState(): SendController {
       setReview(undefined);
       setMessage(undefined);
     }
-  }, [panelView]);
+  }, [sendVisible]);
 
   return {
     panelView, highlightContentHash, unseenOutcome, showPanel, openOverview, openSend, openSendTo, pendingRecipient, openReceive, receiveAddress, closePanel,
@@ -737,6 +762,7 @@ function useSendControllerState(): SendController {
     chooseSpeed,
     chooseIncludeSender,
     chooseByLink: setByLink,
+    showInlineSend,
     reviewTransfer,
     confirmTransfer,
     retryPreparation,
@@ -846,7 +872,13 @@ export function SendCard({ onClose }: { onClose?: () => void } = {}) {
     sendAnother,
     finishPayment,
     clearFailedPayment,
+    showInlineSend,
   } = useWalletPanel();
+  // A render without a network shows mainnet's cautions.
+  const l1ChainId = useNetwork()?.network.l1ChainId;
+  const testnet = l1ChainId !== undefined && l1ChainId !== 1;
+  // Without onClose the form sits on a page, not in the sidebar, and still needs the fee reads.
+  useEffect(() => onClose === undefined ? showInlineSend() : undefined, [onClose, showInlineSend]);
   // Under review, the reviewed transport: a payment loaded by Check status keeps its own.
   const fast = review === undefined ? speed === "fast" : review.preflight.publication === "self";
   const contentHash = sent?.contentHash ?? ("contentHash" in paymentStage ? paymentStage.contentHash : undefined);
@@ -858,6 +890,8 @@ export function SendCard({ onClose }: { onClose?: () => void } = {}) {
   const directSend = recipient?.kind === "address" && (recipientReceiveKey === "regular" || recipientReceiveKey === "never-used");
   const recipientNote = recipient?.kind !== "address" ? undefined
     : recipientReceiveKey === "smart-contract" ? SMART_CONTRACT_RECIPIENT_NOTE
+    // Cautions about who can spend a direct send protect real money: a testnet shows none.
+    : testnet ? undefined
     : recipientReceiveKey === "regular" ? REGULAR_RECIPIENT_NOTE
     : recipientReceiveKey === "never-used" ? NEVER_USED_RECIPIENT_NOTE : undefined;
   // Counted as sent: the intent carries the trimmed memo.
@@ -894,6 +928,10 @@ export function SendCard({ onClose }: { onClose?: () => void } = {}) {
   const burned = review === undefined ? networkFee : nativeBurnAmount(review.preflight.burn);
   const [scanning, setScanning] = useState(false);
   const [linkPhase, setLinkPhase] = useState<LinkSendPhase>("draft");
+  // Switching how to send keeps the card at least as tall as it was, so a page scrolled to its end does not jump.
+  const card = useRef<HTMLElement>(null);
+  const [heldHeight, setHeldHeight] = useState<number>();
+  const chooseWay = (value: boolean) => { setHeldHeight(card.current?.offsetHeight); chooseByLink(value); };
   const submitTransfer = (event: FormEvent) => {
     if (rejected) clearFailedPayment();
     reviewTransfer(event);
@@ -902,12 +940,12 @@ export function SendCard({ onClose }: { onClose?: () => void } = {}) {
   // A name resolves to an address the field does not show; under review, the freshly resolved one is paid.
   const payee = review?.displayName !== undefined ? review.displayRecipient : recipient?.kind === "address" ? recipient.address : undefined;
   const namedAddress = payee !== undefined && payee.toLowerCase() !== to.trim().toLowerCase() ? payee : undefined;
-  return <article id="send" className={`panel ${styles.sendCard}`}>
+  return <article id="send" ref={card} className={`panel ${styles.sendCard}`} style={drafting && heldHeight !== undefined ? { minHeight: heldHeight } : undefined}>
     <h2 id="send-title">{byLink && drafting ? linkPhase === "sent" ? "Link ready" : "Send PCASH" : l1Hash !== undefined ? "Payment submitted" : sent === undefined ? "Send PCASH" : "Payment sent"}</h2>
-    {drafting && linkPhase === "draft" && <div className={modeStyles.segmented} role="radiogroup" aria-label="Send to">
+    {drafting && linkPhase === "draft" && <div className={`${modeStyles.segmented} ${styles.sendWay}`} role="radiogroup" aria-label="Send to">
       {([[false, "To an address"], [true, "By link"]] as const).map(([value, label]) =>
         <label key={label} className={byLink === value ? modeStyles.selected : undefined}>
-          <input type="radio" name="send-way" checked={byLink === value} onChange={() => chooseByLink(value)} />{label}
+          <input type="radio" name="send-way" checked={byLink === value} onChange={() => chooseWay(value)} />{label}
         </label>)}
     </div>}
     {byLink && drafting ? <SendByLink amount={amount} fee={fee} speed={speed} maxAmount={maxAmount} estimatedIssuance={estimatedIssuance} networkFee={networkFee}
@@ -939,8 +977,10 @@ export function SendCard({ onClose }: { onClose?: () => void } = {}) {
               <label>Message (optional)<textarea className={memoTooLong ? `${styles.memoInput} ${styles.fieldInvalid}` : styles.memoInput} value={memo} onChange={(event) => updateDraft("memo", event.target.value)} rows={2} aria-describedby="send-memo-hint" /></label>
               <p id="send-memo-hint" className={`${styles.formHint} ${styles.memoHint}`}><span>{directSend ? "Encrypted: only you and whoever has the payment link can read it." : "Encrypted: only you and the recipient can read it."}</span><span>{memoBytes} / {memoLimit} bytes</span></p>
               {memoTooLong && <p className={styles.fieldError}>Shorten the message to {memoLimit} bytes or fewer.</p>}
-              <label className={styles.senderChoice}><input type="checkbox" checked={includeSender} onChange={(event) => chooseIncludeSender(event.target.checked)} aria-describedby="send-sender-hint" />Include my address</label>
-              <p id="send-sender-hint" className={styles.formHint}>Shows the recipient who paid. It is not proof of identity: any payer can name any address.</p>
+              <div className={styles.senderRow}>
+                <label className={styles.senderChoice}><input type="checkbox" checked={includeSender} onChange={(event) => chooseIncludeSender(event.target.checked)} />Include my address</label>
+                <HelpTip label="About including your address" tip="Shows the recipient who paid. It is not proof of identity: any payer can name any address." />
+              </div>
             </div>
             <SubmissionModeControl label="Speed" value={fast ? "fast" : "slow"} onChange={chooseSpeed} fastDisabled={selfPublication === undefined} />
             {!fast && <div className={styles.feeField}>
@@ -949,9 +989,8 @@ export function SendCard({ onClose }: { onClose?: () => void } = {}) {
             </div>}
           </fieldset>
           {recipientGets !== undefined && (fast || relayerGets !== undefined) && <p className={styles.summary} data-testid="payment-split">
-            Recipient gets <span data-split="recipient"><PcashAmount value={recipientGets} /></span>{" · "}
-            {fast ? <EthereumGasCost estimate={drafting || rejected ? fastEstimate : undefined} />
-              : <>relayer gets <span data-split="relayer-fee"><PcashAmount value={relayerGets!} rounding="up" /></span> extra</>}
+            Recipient gets <span data-split="recipient"><PcashAmount value={recipientGets} /></span>
+            {!fast && <>{" · "}relayer gets <span data-split="relayer-fee"><PcashAmount value={relayerGets!} rounding="up" /></span> extra</>}
             {burned !== undefined && burned > 0n && <>{" · "}network fee <span data-split="network-fee"><PcashAmount value={burned} rounding="up" /></span></>}
           </p>}
           {/* A zero payment has no recipient note to carry either. */}

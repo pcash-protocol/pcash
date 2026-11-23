@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { configuredNetwork, networkInstanceKey } from "./networks.ts";
+import { chainInstanceKey, configuredNetwork } from "./networks.ts";
 import { withRpcEndpoints } from "./NetworkProvider.tsx";
 import { explorerIdentityMismatch, networkChangedMessage, resolveNetworkExplorerConfig } from "../routes/explorer/config.ts";
 import type { StatusResult } from "@pcash/sdk/clients";
@@ -48,14 +48,13 @@ describe("PCASH deployment profile", () => {
     expect(network.l1RpcUrls).toEqual(["https://first.example/rpc", "https://second.example"]);
   });
 
-  it("uses a browser's RPC endpoints without changing the chain instance", () => {
+  it("uses a browser's RPC endpoints in place of the deployment's", () => {
     const network = configuredNetwork({ ...local, VITE_L1_RPC_URLS: "https://first.example,https://second.example" });
     const custom = withRpcEndpoints(network, { pcashRpcUrl: "https://mine.example/pcash", l1Rpcs: {
       added: [{ url: "https://mine.example/eth", enabled: true }, { url: "https://spare.example/eth", enabled: false }], paused: ["https://first.example"], removed: [],
     } });
     // Only what is on: the deployment's endpoints first, then the browser's own.
     expect(custom).toMatchObject({ pcashRpcUrl: "https://mine.example/pcash", l1RpcUrls: ["https://second.example", "https://mine.example/eth"] });
-    expect(networkInstanceKey(custom)).toBe(networkInstanceKey(network));
     // Browser storage is user-editable; an unusable endpoint falls back to the default.
     expect(withRpcEndpoints(network, { pcashRpcUrl: "javascript:alert(1)" })).toEqual(network);
     expect(withRpcEndpoints(network, { l1Rpcs: {
@@ -63,10 +62,16 @@ describe("PCASH deployment profile", () => {
     } })).toEqual(network);
   });
 
-  it("isolates replacement chains", () => {
+  it("keys browser state by the chain the node reports", () => {
+    const status = { l1ChainId: 1234567890n, pcashChainId: 23100, genesisHash: GENESIS };
+    for (const replacement of [{ ...status, l1ChainId: status.l1ChainId + 1n }, { ...status, pcashChainId: 23101 }, { ...status, genesisHash: `0x${"13".repeat(32)}` }]) {
+      expect(chainInstanceKey(replacement)).not.toBe(chainInstanceKey(status));
+    }
+  });
+
+  it("refuses a node that serves another chain than the one configured", () => {
     const original = configuredNetwork(local);
     for (const replacement of [{ ...original, l1ChainId: original.l1ChainId + 1 }, { ...original, genesisHash: `0x${"13".repeat(32)}` }]) {
-      expect(networkInstanceKey(replacement)).not.toBe(networkInstanceKey(original));
       const config = resolveNetworkExplorerConfig(original);
       if (config.status !== "valid") throw new Error("expected valid deployment");
       expect(explorerIdentityMismatch(config.config, {

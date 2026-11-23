@@ -37,6 +37,7 @@ import {
   type StoredOffer,
 } from "../src/client/offerPersistence.ts";
 import { anchoredPrivateValueTransaction, BUY_COMMITMENT, escrowSpenderResult } from "./anchoredTransaction.ts";
+import { testToken } from "./tokenFixtures.ts";
 
 const FIELD = `0x${"00".repeat(31)}01`;
 const ADDRESS = `0x${"01".repeat(20)}`;
@@ -854,7 +855,9 @@ test("a prepared reclaim whose anchor is still canonical resumes its exact bytes
 });
 
 test("a prepared token reclaim whose burn the network fee outgrew keeps its saved bytes until they can no longer land", async () => {
-  const tokenListing: OfferPublication = { ...publication, terms: { ...publication.terms, assetId: `0x${"00".repeat(31)}05` } };
+  const token = testToken();
+  const tokenListing: OfferPublication = { ...publication, terms: { ...publication.terms, assetId: numberToHex(token.assetId, { size: 32 }) },
+    assetDefinition: bytesToHex(token.bytes) };
   const transactionHex = bytesToHex(anchoredPrivateValueTransaction(RECLAIM_ANCHOR));
   for (const outcome of ["protocolFeeTooLow", "expired"] as const) {
     const events: string[] = [];

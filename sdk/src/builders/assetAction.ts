@@ -18,14 +18,14 @@ import {
   type VerifiedPcashAuthorization,
 } from "../eip712/authorization.ts";
 import {
-  assetCreationTypedData,
+  mintTypedData,
   assetBurnTypedData,
   assetPaymentTypedData,
   batchTransferTypedData,
 } from "../rules/semanticRules.ts";
 import {
-  DEFAULT_ASSET_CREATION_RULE_ENTRY_INDEX,
-  DEFAULT_LARGE_ASSET_CREATION_RULE_ENTRY_INDEX,
+  DEFAULT_MINT_RULE_ENTRY_INDEX,
+  DEFAULT_LARGE_MINT_RULE_ENTRY_INDEX,
   DEFAULT_LARGE_BATCH_TRANSFER_RULE_ENTRY_INDEX,
   DEFAULT_ASSET_BURN_RULE_ENTRY_INDEX,
   DEFAULT_ASSET_PAYMENT_RULE_ENTRY_INDEX,
@@ -33,7 +33,7 @@ import {
   ecdsaRuleConfigurationCommitment,
 } from "../rules/referenceRules.ts";
 import {
-  buildAssetCreationRuleWitness,
+  buildMintRuleWitness,
   buildAssetBurnRuleWitness,
   buildAssetPaymentRuleWitness,
   buildBatchTransferRuleWitness,
@@ -41,10 +41,15 @@ import {
 import {
   assertAssetAggregate,
   assertAssetAmount,
-  assetCreationMarker,
-  assetSecretCommitment,
-  standardFungibleAssetId,
-  type StandardFungibleAssetDescriptor
+  assetIdOf,
+  isRestrictedAssetId,
+  mintContext,
+  mintMarker,
+  policyContext,
+  transferRuleCommitment,
+  verifyAssetDescriptor,
+  type AssetDescriptor,
+  type MintRule,
 } from "../protocol/asset.ts";
 import { encodePrivateValueTransaction, TX_KIND_PRIVATE_VALUE, type PrivateValueOutputData } from "../protocol/codec.ts";
 import { assertOutputDataItems, sizeClassFiller } from "../protocol/envelope.ts";
@@ -72,8 +77,8 @@ import {
 } from "../protocol/witness.ts";
 import type { ChonkVkArtifacts } from "../protocol/account.ts";
 import {
-  assetCreationActionCommitment,
   authorizationCommitment,
+  mintActionCommitment,
   ruleStatement,
   transferActionCommitment,
 } from "../protocol/statement.ts";
@@ -99,6 +104,7 @@ import type {
   AssetActionInput,
   AssetActionOutput,
   BuildAssetActionParams,
+  RestrictedAssetOpening,
 } from "./assetOutputs.ts";
 
 export interface ResolvedInput {
@@ -155,11 +161,26 @@ function inputMap(input: ResolvedInput, present: boolean): WitnessMap {
   return present ? inputNoteMap(input) : absentInputMap();
 }
 
+/** The restricted kernels' asset opening: the kernel supplies its own profile's rule VK hash. */
+export function restrictedAssetMap(restricted: RestrictedAssetOpening, shape: PrivateValueShape, policyVkHash: bigint): WitnessMap {
+  const large = shape === PRIVATE_VALUE_PROFILES.L.shapeId;
+  const ownHash = large ? restricted.transferRule.lVkHash : restricted.transferRule.sVkHash;
+  if (ownHash === 0n) throw new Error("the asset's transfer rule does not support this profile");
+  if (ownHash !== policyVkHash) throw new Error("transfer rule VK does not match the asset's rule for this profile");
+  return {
+    core_commitment: fm(restricted.coreCommitment),
+    other_profile_vk_hash: fm(large ? restricted.transferRule.sVkHash : restricted.transferRule.lVkHash),
+    configuration_commitment: fm(restricted.transferRule.configurationCommitment),
+  };
+}
+
 export interface AssetActionBuild {
   eventOpening: { eventEntry: bigint; eventSalt: bigint; eventsCommitment: bigint };
   shape: PrivateValueShape;
-  operation: "transfer" | "assetCreation";
+  operation: "transfer" | "mint";
   assetId: bigint;
+  /** The definition a restricted transfer opens; undefined for every other action. */
+  restricted: RestrictedAssetOpening | undefined;
   /** The acting account's address: the owner of its inputs and change. */
   address: bigint;
   transaction: PrivateValue;
@@ -182,12 +203,23 @@ export interface AssetActionBuild {
   outputAmounts: readonly bigint[];
   /** Note secret per output slot; zero for dummies. Owner change carries the derived secret. */
   outputNoteSecrets: readonly bigint[];
-  buildAssetCreationKernelWitnessMap: (authorizationVk: ChonkVkArtifacts) => WitnessMap;
+  /** The asset's mint rule; undefined for a transfer. */
+  mintRule: MintRule | undefined;
+  /** The definition a mint opens, as the mint kernel's witness; undefined for a transfer. */
+  mintDefinition: WitnessMap | undefined;
+  /** The statement the asset's mint rule must return; undefined for a transfer. */
+  mintStatement: readonly [bigint, bigint, bigint, bigint] | undefined;
+  /** The mint kernel's witness; `mintRuleVk` is the asset's mint rule for this profile. */
+  buildMintKernelWitnessMap: (authorizationVk: ChonkVkArtifacts, mintRuleVk: ChonkVkArtifacts) => WitnessMap;
   buildKernelWitnessMap: (authorizationVk: ChonkVkArtifacts) => WitnessMap;
+  /** The restricted-transfer kernel's witness; `policyVk` is the asset's transfer rule for this profile. */
+  buildRestrictedKernelWitnessMap: (authorizationVk: ChonkVkArtifacts, policyVk: ChonkVkArtifacts) => WitnessMap;
+  /** The statement the asset's transfer rule must return when `ownerAddress` owns the asset inputs. */
+  policyStatement: (ownerAddress: FieldNumberish, actionCommitment: bigint) => readonly [bigint, bigint, bigint, bigint];
   prepareOwnerAuthorization: (params: OwnerAuthorizationParams) => PreparedOwnerAuthorization;
 }
 
-export type AssetAuthorizationKind = "asset-creation" | "asset-payment" | "asset-burn" | "batch-transfer";
+export type AssetAuthorizationKind = "mint" | "asset-payment" | "asset-burn" | "batch-transfer";
 
 export interface OwnerAuthorizationParams {
   wallet: WalletProfile;
@@ -197,8 +229,8 @@ export interface OwnerAuthorizationParams {
 export interface PreparedOwnerAuthorization {
   authorizationKind: AssetAuthorizationKind;
   authorizationCircuit:
-    | "account_rule_asset_creation_ecdsa"
-    | "account_rule_large_asset_creation_ecdsa"
+    | "account_rule_mint_ecdsa"
+    | "account_rule_large_mint_ecdsa"
     | "account_rule_large_batch_transfer_ecdsa"
     | "account_rule_asset_payment_ecdsa"
     | "account_rule_asset_burn_ecdsa"
@@ -215,7 +247,6 @@ export interface AssetActionInputNullifierParams {
   inputs: readonly AssetActionInput[];
   dummyInputSeed: FieldNumberish;
   nativeFeePayer?: boolean;
-  assetSecret?: bigint;
 }
 
 /** The ordered input nullifiers used by the action builder, before outputs exist. */
@@ -236,9 +267,9 @@ function resolveAssetActionInputs(params: AssetActionInputNullifierParams): Reso
       const entry = toField(input.selectedEntryCommitment, "selectedEntryCommitment");
       return noteFreeInput(input.kind, SlotClass.APPLICATION, applicationNullifier(address, entry, replayId), replayId);
     }
-    if (input.kind === "creation-marker") {
-      if (params.assetSecret === undefined) throw new Error("a creation marker input requires assetSecret");
-      return noteFreeInput(input.kind, SlotClass.ASSET_CREATION, assetCreationMarker(assetId, params.assetSecret));
+    if (input.kind === "mint-marker") {
+      const replayId = toField(input.replayId, "replayId");
+      return noteFreeInput(input.kind, SlotClass.MINT, mintMarker(assetId, replayId), replayId);
     }
     requireLength(input.siblings, MERKLE_DEPTH, `${input.kind} input siblings`);
     if (input.kind === "asset") assertAssetAmount(input.amount, `${input.kind} input amount`);
@@ -268,8 +299,8 @@ function resolveAssetActionInputs(params: AssetActionInputNullifierParams): Reso
 }
 
 export function buildAssetAction(params: BuildAssetActionParams): AssetActionBuild {
-  // The sponsored-transfer kernel authenticates both authorizing accounts, so
-  // this transfer-kernel account opening stays absent on that path.
+  // A sponsored kernel authenticates both authorizing accounts, so this
+  // one-account kernel opening stays absent on that path.
   const nativeFeePayer = params.nativeFeePayer === true;
   const shape = params.shape ?? PRIVATE_VALUE_PROFILES.S.shapeId;
   const profile = privateValueProfile(shape);
@@ -279,47 +310,43 @@ export function buildAssetAction(params: BuildAssetActionParams): AssetActionBui
   const pcashChainId = toField(params.pcashChainId, "pcashChainId");
   const recent = toField(params.snapshot.recentPcashBlockHash, "recentPcashBlockHash");
   const assetInputCount = params.inputs.filter((input) => input.kind === "asset").length;
-  const markerCount = params.inputs.filter((input) => input.kind === "creation-marker").length;
-  const operation = params.assetDescriptor !== undefined || markerCount > 0 ? "assetCreation" : "transfer";
+  const markerCount = params.inputs.filter((input) => input.kind === "mint-marker").length;
+  const operation = params.mint !== undefined ? "mint" : "transfer";
   let assetId: bigint;
-  let assetSecret = 0n;
-  let creationDescriptor: StandardFungibleAssetDescriptor | null = null;
-  if (operation === "transfer") {
+  let mintDescriptor: AssetDescriptor | undefined;
+  let restricted: RestrictedAssetOpening | undefined;
+  if (params.mint === undefined) {
     if (params.assetId === undefined) throw new Error("asset transfer requires assetId");
     assetId = toField(params.assetId, "assetId");
     if (assetId === 0n && (assetInputCount > 0 || params.outputs.some(output => output.kind === "asset"))) {
       throw new Error("asset slots require a nonzero assetId");
     }
-    if (params.assetDescriptor !== undefined || params.assetSecret !== undefined) {
-      throw new Error("asset transfer does not accept an asset definition");
+    if (markerCount !== 0) throw new Error("asset transfer cannot contain a mint marker");
+    restricted = params.restricted;
+    if (restricted !== undefined) {
+      if (assetIdOf(toField(restricted.coreCommitment, "coreCommitment"), transferRuleCommitment(restricted.transferRule)) !== assetId) {
+        throw new Error("restricted opening does not derive the assetId");
+      }
+      if (assetInputCount === 0) throw new Error("a restricted transfer spends at least one asset input");
+    }
+    if (assetId !== 0n && isRestrictedAssetId(assetId) !== (restricted !== undefined)) {
+      throw new Error(restricted === undefined
+        ? "an asset with a transfer rule moves only with its restricted opening"
+        : "an asset without a transfer rule takes no restricted opening");
     }
   } else {
-    if (params.assetDescriptor === undefined || params.assetSecret === undefined) {
-      throw new Error("asset creation requires assetDescriptor and assetSecret");
-    }
-    creationDescriptor = params.assetDescriptor;
-    assetId = standardFungibleAssetId(creationDescriptor);
-    if (toField(creationDescriptor.assetId, "assetDescriptor.assetId") !== assetId) {
-      throw new Error("asset descriptor does not match its assetId");
-    }
-    assetSecret = toField(params.assetSecret, "assetSecret");
-  }
-  if (operation === "transfer" && markerCount !== 0) {
-    throw new Error("asset transfer cannot contain a creation marker");
-  }
-  if (operation === "assetCreation" && markerCount !== 1) {
-    throw new Error("asset creation requires exactly one creation marker");
-  }
-  if (operation === "assetCreation") {
-    if (assetSecretCommitment(assetSecret)
-      !== toField(creationDescriptor!.assetSecretCommitment)) {
-      throw new Error("asset secret does not match the asset descriptor");
-    }
+    mintDescriptor = params.mint.descriptor;
+    assetId = verifyAssetDescriptor(mintDescriptor);
+    const ownVkHash = large ? mintDescriptor.mintRule.lVkHash : mintDescriptor.mintRule.sVkHash;
+    if (ownVkHash === 0n) throw new Error("the asset's mint rule does not support this profile");
+    if (nativeFeePayer) throw new Error("a mint has one account, which pays its own fee");
+    if (markerCount === 0) throw new Error("a mint carries at least one mint marker");
+    if (assetInputCount !== 0) throw new Error("a mint spends no asset input");
   }
   const assetBurnAmount = params.assetBurnAmount ?? 0n;
   assertAssetAggregate(assetBurnAmount, "assetBurnAmount");
-  if (operation === "assetCreation" && assetBurnAmount !== 0n) {
-    throw new Error("asset creation cannot burn");
+  if (operation === "mint" && assetBurnAmount !== 0n) {
+    throw new Error("a mint cannot burn");
   }
   const dummyInputSeed = toField(params.dummyInputSeed ?? randomFieldEntropy(), "dummyInputSeed");
 
@@ -339,10 +366,7 @@ export function buildAssetAction(params: BuildAssetActionParams): AssetActionBui
     throw new Error("native effects and fees require a real native input");
   }
   const address = toAddressField(owner.address, "owner.address");
-  const resolvedInputs = resolveAssetActionInputs({
-    owner, assetId, inputs: params.inputs, dummyInputSeed, nativeFeePayer,
-    ...(operation === "assetCreation" ? { assetSecret } : {}),
-  });
+  const resolvedInputs = resolveAssetActionInputs({ owner, assetId, inputs: params.inputs, dummyInputSeed, nativeFeePayer });
   const nullifiers = resolvedInputs.map((input) => input.nullifier);
   const relaySlot = params.privateRelayPayment === undefined ? undefined : profile.outputs - 1;
   const envelopeOutputs: EnvelopeOutput[] = [];
@@ -554,13 +578,6 @@ export function buildAssetAction(params: BuildAssetActionParams): AssetActionBui
   if (nativeInputTotal !== nativeOutputTotal + openFeeAmount + nativeBurnAmount) {
     throw new Error("native inputs must equal native outputs plus openFeeAmount and nativeBurnAmount");
   }
-  if (operation === "assetCreation") {
-    const initialSupply = toField(creationDescriptor!.initialSupply, "initialSupply");
-    if (assetOutputTotal !== initialSupply) {
-      throw new Error("asset creation outputs must equal initialSupply");
-    }
-    if (assetOutputTotal === 0n) throw new Error("asset creation requires an asset output");
-  }
   const eventOpening = prepareEvent(params);
   const publicInputs = [
     pcashChainId,
@@ -581,9 +598,8 @@ export function buildAssetAction(params: BuildAssetActionParams): AssetActionBui
   const prepareReadableOwnerAuthorization = (
     authorizationParams: OwnerAuthorizationParams,
   ): PreparedOwnerAuthorization => {
-    if (transaction.inputs.some((input) =>
-      input.slotClass === SlotClass.APPLICATION || (operation !== "assetCreation" && input.slotClass === SlotClass.ASSET_CREATION))) {
-      throw new Error("semantic owner authorization does not cover application or creation markers");
+    if (transaction.inputs.some((input) => input.slotClass === SlotClass.APPLICATION)) {
+      throw new Error("semantic owner authorization does not cover application markers");
     }
     const wallet = authorizationParams.wallet;
     if (toField(owner.address) !== wallet.address || toField(owner.nkRoot) !== wallet.nkRoot) {
@@ -652,8 +668,8 @@ export function buildAssetAction(params: BuildAssetActionParams): AssetActionBui
         && !(relayPayment !== undefined && index === profile.outputs - 1)
         ? [index]
         : []);
-    const authorizationKind = operation === "assetCreation"
-      ? "asset-creation"
+    const authorizationKind = operation === "mint"
+      ? "mint"
       : large ? "batch-transfer"
       : assetBurnAmount !== 0n && externalOutputIndices.length === 0
       ? "asset-burn"
@@ -667,9 +683,9 @@ export function buildAssetAction(params: BuildAssetActionParams): AssetActionBui
       entryIndex: number;
       authorizationCircuit: PreparedOwnerAuthorization["authorizationCircuit"];
     }> = {
-      "asset-creation": large
-        ? { entryIndex: DEFAULT_LARGE_ASSET_CREATION_RULE_ENTRY_INDEX, authorizationCircuit: "account_rule_large_asset_creation_ecdsa" }
-        : { entryIndex: DEFAULT_ASSET_CREATION_RULE_ENTRY_INDEX, authorizationCircuit: "account_rule_asset_creation_ecdsa" },
+      "mint": large
+        ? { entryIndex: DEFAULT_LARGE_MINT_RULE_ENTRY_INDEX, authorizationCircuit: "account_rule_large_mint_ecdsa" }
+        : { entryIndex: DEFAULT_MINT_RULE_ENTRY_INDEX, authorizationCircuit: "account_rule_mint_ecdsa" },
       "asset-payment": { entryIndex: DEFAULT_ASSET_PAYMENT_RULE_ENTRY_INDEX, authorizationCircuit: "account_rule_asset_payment_ecdsa" },
       "asset-burn": { entryIndex: DEFAULT_ASSET_BURN_RULE_ENTRY_INDEX, authorizationCircuit: "account_rule_asset_burn_ecdsa" },
       "batch-transfer": large
@@ -724,18 +740,19 @@ export function buildAssetAction(params: BuildAssetActionParams): AssetActionBui
         authorize: (authorization) => ruleWitness(requirePcashAuthorization(request, authorization)),
       };
     };
-    if (authorizationKind === "asset-creation") {
-      const descriptor = creationDescriptor!;
+    if (authorizationKind === "mint") {
+      // The kernel bounds no minted output, so the readable mint rule proves no
+      // asset owner change: every minted unit is a declared output.
+      if (resolvedOutputs.some((output, index) => output.kind === "asset" && isOwnerChange(index))) {
+        throw new Error("a mint declares every asset output; send the minted units to an opened output");
+      }
       const message = {
         ...commonMessage,
-        metadataCommitment: toField(descriptor.metadataCommitment),
-        initialSupply: toField(descriptor.initialSupply),
-        assetSecretCommitment: toField(descriptor.assetSecretCommitment),
         outputs: declaredOutputs,
       };
       return prepared(
-        assetCreationTypedData(network, message, shape, burn),
-        (authorization) => buildAssetCreationRuleWitness({
+        mintTypedData(network, message, shape, burn),
+        (authorization) => buildMintRuleWitness({
           ...ruleContext,
           shape,
           authorization,
@@ -803,6 +820,26 @@ export function buildAssetAction(params: BuildAssetActionParams): AssetActionBui
     );
   };
 
+  // The kernel takes its own profile's mint rule VK hash from the rule it folds.
+  const mintDefinition: WitnessMap | undefined = mintDescriptor === undefined ? undefined : {
+    instance_salt: fm(mintDescriptor.instanceSalt),
+    metadata_commitment: fm(mintDescriptor.metadataCommitment),
+    mint_rule_other_profile_vk_hash: fm(large ? mintDescriptor.mintRule.sVkHash : mintDescriptor.mintRule.lVkHash),
+    mint_rule_configuration_commitment: fm(mintDescriptor.mintRule.configurationCommitment),
+    transfer_rule_commitment: fm(transferRuleCommitment(mintDescriptor.transferRule)),
+  };
+  const mintAction = mintDescriptor === undefined ? undefined : mintActionCommitment(pcashChainId, pvCommitment, assetId);
+  const mintStatement = mintDescriptor === undefined ? undefined : ruleStatement(
+    mintContext({
+      assetId,
+      configurationCommitment: mintDescriptor.mintRule.configurationCommitment,
+      accountAddress: address,
+      validUntilTimestamp: transaction.global.validUntilTimestamp,
+    }),
+    mintAction!,
+    recent,
+    eventOpening.eventEntry,
+  );
   const outputOwnerCommitments = resolvedOutputs.map((output) => output.ownerCommitment);
   const outputDummySecrets = resolvedOutputs.map((output) => output.dummySecret);
   const outputAmounts = resolvedOutputs.map((output) => output.amount);
@@ -828,6 +865,20 @@ export function buildAssetAction(params: BuildAssetActionParams): AssetActionBui
       eventOpening.eventEntry,
     )),
   });
+  function policyStatement(ownerAddress: FieldNumberish, actionCommitment: bigint): readonly [bigint, bigint, bigint, bigint] {
+    if (restricted === undefined) throw new Error("only a restricted asset has a transfer rule");
+    return ruleStatement(
+      policyContext({
+        assetId,
+        configurationCommitment: restricted.transferRule.configurationCommitment,
+        ownerAddress,
+        validUntilTimestamp: transaction.global.validUntilTimestamp,
+      }),
+      actionCommitment,
+      recent,
+      eventOpening.eventEntry,
+    );
+  }
   return {
     shape,
     operation,
@@ -851,21 +902,28 @@ export function buildAssetAction(params: BuildAssetActionParams): AssetActionBui
     outputDummySecrets,
     outputAmounts,
     outputNoteSecrets: resolvedOutputs.map((output) => output.noteSecret),
-    buildAssetCreationKernelWitnessMap(authorizationVk) {
-      if (operation !== "assetCreation") throw new Error("asset-creation kernel is absent");
-      const authorizationVkMap = vkWitnessMap(authorizationVk, "asset-creation authorization");
+    restricted,
+    mintRule: mintDescriptor?.mintRule,
+    mintDefinition,
+    mintStatement,
+    buildMintKernelWitnessMap(authorizationVk, mintRuleVk) {
+      if (mintDescriptor === undefined) throw new Error("mint kernel is absent");
+      const ownVkHash = large ? mintDescriptor.mintRule.lVkHash : mintDescriptor.mintRule.sVkHash;
+      if (toField(mintRuleVk.vkHash, "mint rule VK hash") !== ownVkHash) {
+        throw new Error("mint rule VK does not match the asset's rule for this profile");
+      }
       return {
-        ...kernelPrivateValueMap(assetCreationActionCommitment(pcashChainId, pvCommitment, assetId)),
-        metadata_commitment: fm(creationDescriptor!.metadataCommitment),
-        initial_supply: fm(creationDescriptor!.initialSupply),
-        asset_secret: fm(assetSecret),
+        ...kernelPrivateValueMap(mintAction!),
+        definition: mintDefinition,
         native_inputs: resolvedInputs.map((input) => inputMap(input, input.kind === "native")),
-        authorization_vk: authorizationVkMap,
+        authorization_vk: vkWitnessMap(authorizationVk, "mint authorization"),
+        mint_statement: ruleStatementMap(mintStatement!),
+        mint_rule_vk: vkWitnessMap(mintRuleVk, "mint rule"),
       };
     },
     buildKernelWitnessMap(authorizationVk) {
-      if (operation !== "transfer" || nativeFeePayer) {
-        throw new Error("asset creation and sponsored transfers use dedicated CHONK kernels");
+      if (operation !== "transfer" || nativeFeePayer || restricted !== undefined) {
+        throw new Error("mints, sponsored transfers and restricted transfers use dedicated CHONK kernels");
       }
       const authorizationVkMap = vkWitnessMap(authorizationVk, "authorization");
       return {
@@ -875,6 +933,19 @@ export function buildAssetAction(params: BuildAssetActionParams): AssetActionBui
         authorization_vk: authorizationVkMap,
       };
     },
+    buildRestrictedKernelWitnessMap(authorizationVk, policyVk) {
+      if (restricted === undefined || nativeFeePayer) throw new Error("restricted-transfer kernel is absent");
+      const action = transferActionCommitment(pcashChainId, pvCommitment);
+      return {
+        ...kernelPrivateValueMap(action),
+        asset: restrictedAssetMap(restricted, shape, toField(policyVk.vkHash, "policy VK hash")),
+        owner_inputs: resolvedInputs.map((input) => inputMap(input, input.kind === "asset" || input.kind === "native")),
+        authorization_vk: vkWitnessMap(authorizationVk, "authorization"),
+        policy_statement: ruleStatementMap(policyStatement(address, action)),
+        policy_vk: vkWitnessMap(policyVk, "transfer rule"),
+      };
+    },
+    policyStatement,
     prepareOwnerAuthorization(authorizationParams) {
       return prepareReadableOwnerAuthorization(authorizationParams);
     },

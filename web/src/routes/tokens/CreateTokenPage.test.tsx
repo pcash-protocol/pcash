@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { WebsiteSettingsContext, WebsiteSettingsStore } from "../../lib/WebsiteSettings.tsx";
+import { WebsiteSettingsContext, WebsiteSettingsStore, defaultPreferences } from "../../lib/WebsiteSettings.tsx";
 
 const ZERO = new Uint8Array(32);
 const state = vi.hoisted(() => ({ wallet: {} as Record<string, any> }));
@@ -12,10 +12,13 @@ vi.mock("../../lib/usePaymentIssuance.ts", () => ({ usePaymentIssuance: () => ({
 vi.mock("../wallet/OwnerPanels.tsx", () => ({ useWalletPanel: () => ({ openOverview: vi.fn() }) }));
 import CreateTokenPage, { tokenTerms } from "./CreateTokenPage.tsx";
 
+/** Mainnet's defaults: these tests start at More private. */
+const MORE_PRIVATE_FIRST = defaultPreferences(1);
+
 describe("token terms", () => {
   const fields = { name: " Harbor Credit ", symbol: "HBR", decimals: "2", supply: "1,000,000" };
   it("commits to trimmed NFC text and supply in base units", () => {
-    expect(tokenTerms(fields, ZERO)).toEqual({ metadata: { name: "Harbor Credit", symbol: "HBR", decimals: 2, contentDigest: ZERO }, initialSupply: 100_000_000n });
+    expect(tokenTerms(fields, ZERO)).toEqual({ metadata: { name: "Harbor Credit", symbol: "HBR", decimals: 2, contentDigest: ZERO }, supply: 100_000_000n });
     expect(tokenTerms({ ...fields, name: "Café" }, ZERO).metadata.name).toBe("Café");
   });
   it("names the first rule a field breaks", () => {
@@ -47,7 +50,7 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); element.remove(); vi.unstubAllGlobals(); });
 
-const render = () => act(async () => root.render(<WebsiteSettingsContext.Provider value={new WebsiteSettingsStore(() => localStorage)}>
+const render = () => act(async () => root.render(<WebsiteSettingsContext.Provider value={new WebsiteSettingsStore(() => localStorage, MORE_PRIVATE_FIRST)}>
   <MemoryRouter initialEntries={["/tokens/new"]}><Routes>
     <Route path="/tokens/new" element={<CreateTokenPage />} />
     <Route path="/token/:assetId" element={<Landing />} />
@@ -95,7 +98,7 @@ describe("creating a token", () => {
     expect(text()).toContain("No content. The digest is 32 zero bytes.");
     await act(async () => button("Create token").click());
     expect(state.wallet.wallet.createAsset).toHaveBeenCalledWith(expect.objectContaining({
-      metadata: { name: "Harbor Credit", symbol: "HBR", decimals: 2, contentDigest: ZERO }, initialSupply: 100_000_000n, openFeeAmount: 10n ** 18n,
+      metadata: { name: "Harbor Credit", symbol: "HBR", decimals: 2, contentDigest: ZERO }, supply: 100_000_000n, openFeeAmount: 10n ** 18n,
     }));
     expect(landed).toEqual({ pathname: `/token/0x${"0".repeat(61)}abc`, state: { creation: { contentHash: "0xcreate", mode: "slow" } } });
   });

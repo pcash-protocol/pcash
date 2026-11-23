@@ -79,14 +79,15 @@ test("the catalog accounts for every executable, library, and profile wrapper", 
   const wrappers = catalog.filter(circuit => circuit.wrapper !== undefined);
   for (const profile of ["S", "L"]) {
     assert.deepEqual(wrappers.filter(circuit => circuit.profile === profile).map(circuit => circuit.wrapper).sort(), [
-      "asset_creation", "asset_creation_kernel", "batch_transfer", "contract_fee_sponsorship", "hiding_kernel",
-      "sponsored_transfer_kernel", "transfer_kernel",
+      "batch_transfer", "contract_fee_sponsorship", "hiding_kernel", "mint", "mint_kernel",
+      "restricted_sponsored_transfer_kernel", "restricted_transfer_kernel", "sponsored_transfer_kernel",
+      "transfer_kernel",
       ...(profile === "S" ? ["user_account_update_hiding_kernel"] : []),
     ].sort());
   }
   assert.deepEqual(catalog.filter(circuit => circuit.fixture).map(circuit => circuit.packageName).sort(), [
     "account_rule_asset_covenant", "account_rule_event_gate", "account_rule_full_ecdsa", "account_rule_multisig", "account_rule_shared_asset_claim",
-    "event_fixture", "event_large_sender_authentication", "event_sender_authentication",
+    "event_fixture", "event_large_sender_authentication", "event_sender_authentication", "mint_rule_voucher",
   ]);
   for (const circuit of catalog) assert.equal(circuit.fixture, circuit.packagePath.startsWith("circuits/fixtures/"));
 });

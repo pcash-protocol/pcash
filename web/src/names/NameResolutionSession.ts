@@ -3,8 +3,12 @@ import type { EthereumNameResolver } from "@pcash/sdk/names";
 import { NameCache } from "./nameCache.ts";
 
 export const NAMES_OFF_MESSAGE = "ENS names are off. Use an address, or turn on Show ENS names in wallet settings.";
-export type NameResolverFactory = (signal: AbortSignal) => EthereumNameResolver;
-type Snapshot = { enabled: boolean; resolver: EthereumNameResolver | undefined };
+/** Naming, and an address's code and transaction count, all read on Ethereum mainnet. */
+export type MainnetNames = EthereumNameResolver & {
+  readAddress(address: `0x${string}`): Promise<{ code: string | undefined; nonce: number }>;
+};
+export type NameResolverFactory = (signal: AbortSignal) => MainnetNames;
+type Snapshot = { enabled: boolean; resolver: MainnetNames | undefined };
 const PRIVATE: Snapshot = { enabled: false, resolver: undefined };
 
 /** Owns the permission, transport lifetime, and both naming caches as one session. */
@@ -45,6 +49,7 @@ export class NameResolutionSession {
         resolveName: (name) => run(() => resolver.resolveName(name)),
         reverseAddress: (address) => run(() => resolver.reverseAddress(address)),
         getAvatar: (identity) => run(() => resolver.getAvatar(identity)),
+        readAddress: (address) => run(() => resolver.readAddress(address)),
       } };
     }
     for (const listener of this.listeners) listener();

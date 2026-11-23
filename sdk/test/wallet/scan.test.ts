@@ -6,12 +6,14 @@ import { orderedRecords } from "../recordHelpers.ts";
 // exercises the full builder -> envelope -> scan cross-wallet path.
 
 import { PRIVATE_VALUE_PROFILES } from "@pcash/sdk/constants";
+import { createAccountMintAsset, senderDenyListTransferRule } from "@pcash/sdk/rules";
 import { testForkCapability, testStatus } from "./statusFixture.ts";
 import { describe, expect, it } from "vitest";
 import { randomBytes } from "node:crypto";
 import { buildNativeTransfer } from "@pcash/sdk/builders";
-import { addressHex, randomFieldEntropy, toHex } from "@pcash/sdk/utils";
+import { addressHex, fromHex, randomFieldEntropy, toHex } from "@pcash/sdk/utils";
 import {
+  assetDefinitionOf,
   assetDefinitionSchema,
   RECORD_SCHEMA,
   claimedSenderSchema,
@@ -21,6 +23,7 @@ import {
   encodePayload,
   encryptEnvelope,
   generateMlKemKeyPair,
+  openEnvelope,
   sealEnvelope,
   sizeClassFiller,
   trialOpenEnvelopeWithKeys,
@@ -43,7 +46,7 @@ import {
 } from "../../src/wallet/noteStore.ts";
 import { type ScanFeedItem, scanFeed, scanOutputPages, scanWallet, synchronizeWalletInventory } from "../../src/wallet/actions/scan.ts";
 import { retainReceiveKeyPair } from "../../src/wallet/receiveKeyring.ts";
-import { withSyntheticTransferOpenings } from "./builderTestHelpers.ts";
+import { fixedSupplyAssetDefinition, withSyntheticTransferOpenings } from "./builderTestHelpers.ts";
 import { requireReceiveKeys } from "../../src/wallet/wallet.ts";
 import { TEST_NK_ROOT, TEST_PRIV_KEY, deriveTestWallet } from "./testWallet.ts";
 import { syncWallet } from "../../src/wallet/actions/syncWallet.ts";
@@ -655,11 +658,11 @@ describe("dense private-output inventory synchronization", () => {
 
   it("records a delivered asset definition beside its note", async () => {
     const wallet = randomWallet();
-    const definition: AssetDefinition = {
-      initialSupply: 50n,
-      assetSecretCommitment: 0x82n,
+    const definition: AssetDefinition = fixedSupplyAssetDefinition({
+      supply: 50n,
+      secretCommitment: 0x82n,
       metadata: { name: "Scanned Token", symbol: "SCN", decimals: 1, contentDigest: new Uint8Array(32).fill(3) },
-    };
+    });
     const assetId = assetDefinitionAssetId(definition);
     const noteSecret = 0x6300n;
     const sim = new ChainSim(chainId);
@@ -683,6 +686,38 @@ describe("dense private-output inventory synchronization", () => {
     expect(BigInt(data.assets![0]!.assetId)).toBe(assetId);
     expect(storedAssetDefinition(data.assets![0]!)).toEqual(definition);
     expect(data.assets![0]!.assetSecret).toBeUndefined();
+  });
+
+  it("keeps a delivered standard-rule definition only when its configuration opens the commitment", async () => {
+    const wallet = randomWallet();
+    const rule = senderDenyListTransferRule({ contractAddress: 0x5fbdb2315678afecb367f032d93f642f64180aa3n, listId: new Uint8Array(32).fill(9), maxDelta: 7_200n });
+    const created = createAccountMintAsset({
+      metadata: { name: "Ruled Token", symbol: "RUL", decimals: 2, contentDigest: new Uint8Array(32).fill(5) },
+      accountAddress: 0xabcn, transferRule: rule,
+    });
+    const genuine = created.definition;
+    // Same asset ID: the ID commits to the configuration commitment, not to its opening.
+    const junk = assetDefinitionOf(created.descriptor, genuine.metadata, {
+      mintRule: genuine.mintRule.configuration, transferRule: new Uint8Array(60).fill(1),
+    });
+    const assetId = created.descriptor.assetId;
+    const sim = new ChainSim(chainId);
+    sim.addBlock({ transactions: [deliveredTransaction({ chainId, outputs: [{
+      receiveKey: wallet.mlKemPublicKey, owner: wallet.address, amount: 1n, assetId, noteSecret: 0x6320n, records: [assetDefinitionSchema.encode(junk)],
+    }] })] });
+    const data = simInventory(sim, wallet.address);
+    const store = memoryWalletStateStore(data);
+    await synchronizeWalletInventory(sim.client(), wallet, chainId, data, { store, target: simTarget(sim.head) });
+    expect(data.notes).toHaveLength(1);
+    expect(data.assets).toBeUndefined();
+
+    sim.addBlock({ transactions: [deliveredTransaction({ chainId, outputs: [{
+      receiveKey: wallet.mlKemPublicKey, owner: wallet.address, amount: 5n, assetId, noteSecret: 0x6321n, records: [assetDefinitionSchema.encode(genuine)],
+    }] })] });
+    await synchronizeWalletInventory(sim.client(), wallet, chainId, data, { store, target: simTarget(sim.head) });
+    expect(data.notes).toHaveLength(2);
+    expect(data.assets).toHaveLength(1);
+    expect(storedAssetDefinition(data.assets![0]!)).toEqual(genuine);
   });
 
   it("records a received note's memo and claimed sender", async () => {
@@ -764,22 +799,24 @@ describe("dense private-output inventory synchronization", () => {
       recipientAddress: addressHex(recipient.address),
       assetId: "0x0",
       amount: "50",
-      ...(explicit ? {} : { memo: toHex(memo) }),
+      ...(explicit ? {} : { memo: toHex(memo), disclosureKey: expect.stringMatching(/^0x[0-9a-f]{64}$/) }),
       senderIncluded: !explicit,
       blockNumber: "2",
       blockHash: word(b2.hash),
       blockTimestamp: paid.origin.timestamp.toString(),
     });
+    // The disclosure key opens the recipient's envelope.
+    if (!explicit) expect(openEnvelope(fromHex(data.sentOutputs![0]!.disclosureKey!), paid.outputData)).not.toBeNull();
   });
 
   it("restores an asset definition carried only by its sender region", async () => {
     const wallet = randomWallet();
     const recipient = randomWallet();
-    const definition: AssetDefinition = {
-      initialSupply: 50n,
-      assetSecretCommitment: 0x83n,
+    const definition: AssetDefinition = fixedSupplyAssetDefinition({
+      supply: 50n,
+      secretCommitment: 0x83n,
       metadata: { name: "Imported Token", symbol: "IMP", decimals: 0, contentDigest: new Uint8Array(32).fill(4) },
-    };
+    });
     const assetId = assetDefinitionAssetId(definition);
     const sim = new ChainSim(chainId);
     const noteSecret = 0x917n;

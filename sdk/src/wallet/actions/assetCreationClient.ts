@@ -3,19 +3,25 @@ import type { PcashNodeClient } from "@pcash/sdk/clients";
 import { decodeTransaction, nativeBurnAmount, quoteNativeBurn, type AccountCreationAttachment, type RawPrivateValueTransaction } from "@pcash/sdk/protocol";
 import { buildAssetAction, openedAssetActionOutput, ownerChangeAssetActionOutput, type AssetActionBuild, type AssetActionOutput } from "@pcash/sdk/builders";
 import { requestPcashAuthorization, type PcashActionSigner, type SelectedRelayQuoteProvider } from "@pcash/sdk/eip712";
-import { PRIVATE_VALUE_PROFILES } from "@pcash/sdk/constants";
+import { PRIVATE_VALUE_PROFILES, type PrivateValueShape } from "@pcash/sdk/constants";
 import {
-  assetDefinitionFromCreated,
-  assetCreationMarker,
-  createStandardFungibleAsset,
-  deriveStandardFungibleAssetFromEntropy,
   fungibleMetadataCommitment,
+  mintMarker,
   dummyNullifier,
   networkConfigFromStatus,
   ownerCommitment,
   type AssetDefinition,
   type FungibleMetadata,
 } from "@pcash/sdk/protocol";
+import type { MintRuleApplication } from "@pcash/sdk/prover";
+import {
+  createFixedSupplyAsset,
+  deriveFixedSupplyAsset,
+  FIXED_SUPPLY_RULE_CIRCUIT,
+  fixedSupplyMintWitness,
+  fixedSupplySecretCommitment,
+  recognizeMintRule,
+} from "@pcash/sdk/rules";
 import { addressHex, bytes32Hex, fromHex, randomFieldEntropy } from "@pcash/sdk/utils";
 import type { PcashProfile } from "../externalIdentity.ts";
 import { loadWalletStateOrEmpty, type WalletStateStore } from "../store.ts";
@@ -27,14 +33,17 @@ import { actionPublication, fixPublication, noteNullifier, pendingIssuanceBenefi
 
 import { registeredSelfReceiveKey } from "./selfDelivery.ts";
 
+/** Proves a mint: the minting account's readable mint rule and the asset's mint rule. */
 export interface AssetCreationProver {
-  proveAndEncode(build: AssetActionBuild, authorizationWitnessMap: Record<string, unknown>): Promise<Uint8Array>;
+  /** The shapes this prover can prove; a mint chooses its profile only among these. */
+  readonly shapes: readonly PrivateValueShape[];
+  proveAndEncode(build: AssetActionBuild, authorizationWitnessMap: Record<string, unknown>, mintRule: MintRuleApplication): Promise<Uint8Array>;
 }
 
 export interface AssetCreationIntent extends DurableSubmissionCallbacks {
   accountCreation?: AccountCreationAttachment;
   metadata: FungibleMetadata;
-  initialSupply: bigint;
+  supply: bigint;
   validUntilTimestamp?: bigint;
   openFeeAmount?: bigint;
   privateRelayFeeAmount?: bigint;
@@ -46,7 +55,7 @@ export interface AssetCreationIntent extends DurableSubmissionCallbacks {
   /**
    * Prove this wallet's persisted creation of `assetId` again after its earlier
    * proof expired uncommitted. The identity and asset secret are reused;
-   * `metadata` and `initialSupply` must match its definition.
+   * `metadata` and `supply` must match its definition.
    */
   assetId?: bigint;
 }
@@ -57,25 +66,26 @@ async function persistedCreation(params: {
   data: WalletFileData;
   assetId: bigint;
   metadata: FungibleMetadata;
-  initialSupply: bigint;
+  supply: bigint;
 }) {
   const record = walletAssetRecord(params.data, params.assetId);
   if (record?.assetSecret === undefined) throw new Error("this wallet holds no creation material for the asset");
   const definition = storedAssetDefinition(record);
+  const mintRule = recognizeMintRule(definition.mintRule);
   if (fungibleMetadataCommitment(definition.metadata) !== fungibleMetadataCommitment(params.metadata)
-    || definition.initialSupply !== params.initialSupply) {
+    || mintRule.kind !== "fixed-supply" || mintRule.configuration.supply !== params.supply) {
     throw new Error("persisted asset definition differs from the reviewed terms");
   }
   const pending = params.data.pendingAssetActions?.find((action) =>
     action.assetCreationReview !== undefined && BigInt(action.assetId) === params.assetId);
   if (pending !== undefined) throw new Error(`asset creation ${pending.contentHash} is still pending; retry its exact bytes`);
   const assetSecret = BigInt(record.assetSecret);
-  const marker = assetCreationMarker(params.assetId, assetSecret);
+  const marker = mintMarker(params.assetId, assetSecret);
   if ((await params.node.getWitnessSnapshot({ nullifiers: [bytes32Hex(marker)] })).nullifiers.statuses[0]!.spent) {
     throw new Error("the asset was already created");
   }
-  return deriveStandardFungibleAssetFromEntropy({
-    metadata: definition.metadata, initialSupply: definition.initialSupply, assetSecret,
+  return deriveFixedSupplyAsset({
+    metadata: definition.metadata, supply: params.supply, secret: assetSecret, instanceSalt: definition.instanceSalt,
   });
 }
 
@@ -105,10 +115,10 @@ export async function runAssetCreationClient<Prepared, Output>(params: AssetCrea
     }
     const transaction = decodeTransaction(fromHex(pending.transactionHex)) as RawPrivateValueTransaction;
     if (BigInt(pending.assetCreationReview.metadataCommitment) !== fungibleMetadataCommitment(params.metadata)
-      || BigInt(pending.assetCreationReview.initialSupply) !== params.initialSupply
+      || BigInt(pending.assetCreationReview.supply) !== params.supply
       || !sameAccountCreation(transaction.accountCreation, params.accountCreation)
       || BigInt(pending.ownedOutputs.find((output) => output.outputIndex === 0)?.owner ?? 0n) !== params.wallet.address
-      || BigInt(pending.ownedOutputs.find((output) => output.outputIndex === 0)?.amount ?? 0n) !== params.initialSupply
+      || BigInt(pending.ownedOutputs.find((output) => output.outputIndex === 0)?.amount ?? 0n) !== params.supply
       || (params.openFeeAmount !== undefined && BigInt(pending.openFeeAmount) !== params.openFeeAmount)
       || (params.privateRelayFeeAmount !== undefined && BigInt(pending.privateRelayFeeAmount ?? 0n) !== params.privateRelayFeeAmount)
       || (params.validUntilTimestamp !== undefined && BigInt(pending.validUntilTimestamp) !== params.validUntilTimestamp)) {
@@ -134,10 +144,10 @@ export async function runAssetCreationClient<Prepared, Output>(params: AssetCrea
     };
   }
   const asset = params.assetId === undefined
-    ? createStandardFungibleAsset({ metadata: params.metadata, initialSupply: params.initialSupply })
+    ? createFixedSupplyAsset({ metadata: params.metadata, supply: params.supply })
     : await persistedCreation({ ...params, assetId: params.assetId, data });
-  const assetId = BigInt(asset.descriptor.assetId);
-  const definition = assetDefinitionFromCreated(asset);
+  const assetId = asset.descriptor.assetId;
+  const definition = asset.definition;
   const plan = await planPublication({
     qualifying: true, byteSize: null, publication: publicationOf(params.submission, params.privateRelayFeeAmount), node: params.node,
     openFeeAmount: params.openFeeAmount, privateRelayFeeAmount: params.privateRelayFeeAmount,
@@ -149,20 +159,22 @@ export async function runAssetCreationClient<Prepared, Output>(params: AssetCrea
   params.onProgress?.("preparing", "reading the registered account…");
   const witnesses = await collectAssetActionWitnesses({
     node: params.node, store: params.store, wallet: params.wallet,
-    authorizationKind: "asset-creation",
+    authorizationKind: "mint",
     inputOpenings: nativeNotes.map((note) => ({
       outputIndex: BigInt(note.leafIndex!), outputCommitment: BigInt(note.commitment!),
     })),
   });
   const receiveKey = registeredSelfReceiveKey(witnesses.account, data);
-  const selfOutput = ownerChangeAssetActionOutput({
-    kind: "asset", pcashChainId: params.chainId, assetId, amount: params.initialSupply,
-    receiveKey,
+  // The mint rule declares every minted unit, the creator's own included.
+  const selfOutput = openedAssetActionOutput({
+    kind: "asset", pcashChainId: params.chainId, assetId, outputIndex: 0, amount: params.supply,
+    recipientAddress: params.wallet.address, recipientMlKemPublicKey: receiveKey, authenticatedRecipient: true,
+    assetDefinition: definition, change: true,
   });
   const dummy = (): AssetActionOutput => ({ kind: "dummy", dummySecret: randomFieldEntropy(), amount: 0n });
   const dummyInputSeed = randomFieldEntropy();
   const nullifiers = [
-    assetCreationMarker(assetId, asset.assetSecret),
+    mintMarker(assetId, asset.secret),
     ...[1, 2, 3].map((slot) => {
       const note = nativeNotes[slot - 1];
       return note === undefined ? dummyNullifier(dummyInputSeed, slot)
@@ -201,8 +213,9 @@ export async function runAssetCreationClient<Prepared, Output>(params: AssetCrea
   const build = buildAssetAction({
     ...(params.accountCreation === undefined ? {} : { accountCreation: params.accountCreation }),
     pcashChainId: params.chainId, snapshot: witnesses.snapshot, owner: witnesses.owner,
-    assetDescriptor: asset.descriptor, assetSecret: asset.assetSecret,
-    inputs: [{ kind: "creation-marker" }, ...[1, 2, 3].map((slot) => {
+    mint: { descriptor: asset.descriptor },
+    // The fixed-supply rule keys the asset's one mint marker by its secret.
+    inputs: [{ kind: "mint-marker", replayId: asset.secret }, ...[1, 2, 3].map((slot) => {
       const note = nativeNotes[slot - 1];
       return note === undefined ? { kind: "dummy" as const } : {
         kind: "native" as const, amount: BigInt(note.amount), noteSecret: BigInt(note.noteSecret),
@@ -224,25 +237,29 @@ export async function runAssetCreationClient<Prepared, Output>(params: AssetCrea
     wallet: params.wallet, network: networkConfigFromStatus(witnesses.status),
   });
   const signed = authorization.authorize(await requestPcashAuthorization(params.signer, authorization.request));
+  const mintRule = { packageName: FIXED_SUPPLY_RULE_CIRCUIT, witnessMap: fixedSupplyMintWitness({
+    mint: build, secret: asset.secret,
+    configuration: { supply: params.supply, secretCommitment: fixedSupplySecretCommitment(asset.secret) },
+  }) };
   params.onProgress?.("proving", "proving the authorized asset creation…");
-  const entry = await params.prover.proveAndEncode(build, signed.witnessMap);
+  const entry = await params.prover.proveAndEncode(build, signed.witnessMap, mintRule);
   const preparedAction = prepareAssetAction({ build, transactionBytes: entry, ...publication,
     ...(publication.privateRelayPayment === undefined ? {} : { privateRelayRecipient: publication.privateRelayPayment.recipientAddress }),
     privateRelayFeeAmount: plan.privateRelayFeeAmount, ownedOutputs: [
       { outputIndex: 0, assetId, owner: params.wallet.address,
-        noteSecret: build.outputNoteSecrets[0]!, amount: params.initialSupply },
+        noteSecret: build.outputNoteSecrets[0]!, amount: params.supply },
       ...(changeAmount === 0n ? [] : [{ outputIndex: 1, assetId: 0n, owner: params.wallet.address,
         noteSecret: build.outputNoteSecrets[1]!, amount: changeAmount }]),
     ] });
   preparedAction.pending.assetCreationReview = {
     metadataCommitment: bytes32Hex(fungibleMetadataCommitment(params.metadata)),
-    initialSupply: params.initialSupply.toString(),
+    supply: params.supply.toString(),
   };
   const preparedSubmission = await params.submission.preflight({ transactionBytes: entry, status: witnesses.status, retry: false });
   const result = await submitPreparedAssetAction({
     node: params.node, store: params.store, data, status: witnesses.status, preparedAction,
     submission: params.submission, preparedSubmission, callbacks: params, ...settlePollOptions(params),
-    createdAsset: { assetId, definition, assetSecret: asset.assetSecret },
+    createdAsset: { assetId, definition, assetSecret: asset.secret },
   });
   return { ...result, publicationDetails: actionPublication(preparedAction.pending, plan.beneficiary), definition };
 }

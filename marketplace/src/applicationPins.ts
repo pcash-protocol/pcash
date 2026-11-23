@@ -2,7 +2,7 @@
 // Inputs: marketplace/circuits.json, the circuit bundle.
 
 /** Mega VK hash of `claim`. */
-export const CLAIM_APPLICATION_VK_HASH = 0x229269b4b7ea712fb48224e3c95ff9a3564035ccbd468df957853e8b120e7364n;
+export const CLAIM_APPLICATION_VK_HASH = 0x1895ee59319dc6ea9cb081c25a5811c446f7fe0ed5a2ac2ed7c2230aca39a86fn;
 
 /** Mega VK hash of `reclaim`. */
-export const RECLAIM_APPLICATION_VK_HASH = 0x14dcb64c1ce9a06342e899bc3615c147da730863c143b14e85671af8300aa2ffn;
+export const RECLAIM_APPLICATION_VK_HASH = 0x098d47ac0c79d6ffe68cd5ed14492c78d645878dd482afdbd199a035b6fb990fn;

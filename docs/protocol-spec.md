@@ -2,7 +2,7 @@
 
 This specification defines the deterministic PCASH state transition: how a node turns canonical Ethereum history into PCASH blocks. It covers canonical commitments, transaction wire formats, proof relations, the account-rule interface, genesis, fork rules, and, in Appendix A, the criterion for when a later protocol may claim monetary continuity with this chain. Outside the appendices, a requirement belongs here only when differing implementations could derive different PCASH state, compute different protocol commitments, or disagree on whether a transaction or proof is valid. Appendix A instead defines when a later protocol may claim canonical monetary continuity with this chain; it imposes no state transition. Appendix B records conventions of the reference node and wallet that are not consensus.
 
-Node, SDK, wallet, RPC, storage, relay, recovery, and application conventions are outside protocol semantics; Appendix B records the few that another implementation needs in order to interoperate. The reference implementation's account rules are described in [`circuits/README.md`](../circuits/README.md#reference-rules-rules).
+Node, SDK, wallet, RPC, storage, relay, recovery, and application conventions are outside protocol semantics; Appendix B records the few that another implementation needs in order to interoperate. The reference implementation's account rules and standard mint and transfer rules are described in [`circuits/README.md`](../circuits/README.md#reference-rules-rules).
 
 **How this document is organized.** Section 1 explains every concept the protocol uses and how the pieces fit together; read it first. Sections 2–8 define data: encodings and primitives, configuration, notes, accounts, state, blocks, and proofs. Sections 9–15 define processing: §9 gives the per-block procedure and how a node reads Ethereum; §10–§13 admit and execute transactions of each type and define fees; §14 covers issuance, block settlement, and the protocol fee; §15 covers system payouts. Section 16 pins the proof-system release, and §17 lists conformance vectors. Appendix A gives the monetary continuity criterion, and Appendix B the reference conventions that are not consensus.
 
@@ -30,11 +30,11 @@ Native PCASH is the network's own money and its fee currency. It starts at zero:
 
 ### 1.2 Concepts
 
-**Notes.** Value exists only as notes. A note has an owner, an asset ID, and an amount, plus a secret known to whoever holds the note. Asset ID `0` is native PCASH. A nonzero asset ID names one instance of the standard fixed-supply fungible asset (§11.6), which anyone can create. The ledger never stores a note's contents. It stores a commitment built in three layers (§4.3): an **owner commitment** hides the owner behind the note secret; a **note-body commitment** adds the asset ID and amount; and an **output commitment** adds the note's position in the output tree. The data needed to recompute a commitment is the note's **opening**. Receiving a note requires no registration and no consent from the recipient.
+**Notes.** Value exists only as notes. A note has an owner, an asset ID, and an amount, plus a secret known to whoever holds the note. Asset ID `0` is native PCASH. A nonzero asset ID names one fungible asset: it is the hash of the asset's definition, which fixes its metadata, a mint rule that every mint must satisfy, and an optional transfer rule that every transfer must satisfy (§11.6). Anyone can define one. The ledger never stores a note's contents. It stores a commitment built in three layers (§4.3): an **owner commitment** hides the owner behind the note secret; a **note-body commitment** adds the asset ID and amount; and an **output commitment** adds the note's position in the output tree. The data needed to recompute a commitment is the note's **opening**. Receiving a note requires no registration and no consent from the recipient.
 
 **The output tree.** Every note ever created is appended, as its output commitment, to one append-only Merkle tree keyed by a sequential `outputIndex` (§6.2). Spent notes are never removed from it.
 
-**Nullifiers.** Spending a note publishes its **nullifier**, a value derived from the note's output commitment, its owner's note key, and its secret (§4.3). Every valid spend of the same note produces the same nullifier, and nothing public links the nullifier to the note. Nodes keep the set of all nullifiers ever published (§6.4); a transaction that presents one already in the set fails. The same set also holds three other kinds of one-time markers: dummy nullifiers for padding slots, application markers that account rules use for replay protection, and asset-creation markers that make each asset's creation happen once (§11.3).
+**Nullifiers.** Spending a note publishes its **nullifier**, a value derived from the note's output commitment, its owner's note key, and its secret (§4.3). Every valid spend of the same note produces the same nullifier, and nothing public links the nullifier to the note. Nodes keep the set of all nullifiers ever published (§6.4); a transaction that presents one already in the set fails. The same set also holds three other kinds of one-time markers: dummy nullifiers for padding slots, application markers that account rules use for replay protection, and mint markers that make each mint of an asset happen once (§11.3).
 
 **Accounts.** An account is the control point for spending. It is identified by a 160-bit address and stored as one `AccountState` row in the account tree (§5, §6.3). The row commits the account's address, its **nullifier-key commitment** (a commitment to the account's note key root, `nkRoot`, normally secret and fixed forever at creation), its **rule set**, its kind, a revision counter, and an optional **receive key** that senders can use to encrypt note openings to it. There are two kinds:
 
@@ -43,11 +43,11 @@ Native PCASH is the network's own money and its fee currency. It starts at zero:
 
 A note's owner is an account address. Spending existing value requires authorization from the owning account's installed rules, so it requires a registered account. One case needs no registered account: a transaction whose inputs are all padding spends nothing and exercises no account's authority (§11.4).
 
-**Actions.** An **action** is the complete content that one transaction asks account rules to authorize. It has two parts. The **private value** is the value the transaction moves: its inputs, outputs, fee, issuance destination, validity conditions, burn, and optional creation attachment, committed as one private-value commitment (§11.3). The **extra data** is what the action needs beyond the private value: the account change of an account update (§12.3), the contract whose fee a sponsor pays (§11.7), and otherwise nothing. Every proof-bearing transaction carries exactly one action, so this document counts qualifying actions and qualifying transactions interchangeably.
+**Actions.** An **action** is the complete content that one transaction asks account rules to authorize. It has two parts. The **private value** is the value the transaction moves: its inputs, outputs, fee, issuance destination, validity conditions, burn, and optional creation attachment, committed as one private-value commitment (§11.3). The **extra data** is what the action needs beyond the private value: the asset a mint mints (§11.6), the account change of an account update (§12.3), the contract whose fee a sponsor pays (§11.7), and otherwise nothing. Every proof-bearing transaction carries exactly one action, so this document counts qualifying actions and qualifying transactions interchangeably.
 
-**Account rules and applications.** An account's rule set is a sparse Merkle tree of up to 256 **entries** (§5.2). An entry commits the hash of one circuit's verification key, called an **application**, plus a configuration commitment that the application interprets. A user account's entries are called **rules**; a contract account's entries are called **functions**. An application decides whether to authorize an action. It returns four values to the protocol, the permanent rule statement (§8.2): a commitment to the account it acts for and the configuration it applied, a commitment to the exact action it approves on this chain, the recent block whose state it read, and the transaction's event entry. PCASH attaches no meaning to an entry beyond that statement: there are no capability flags. Anyone can write an application, and a weak one endangers only the accounts that install it.
+**Account rules and applications.** An account's rule set is a sparse Merkle tree of up to 256 **entries** (§5.2). An entry commits the hash of one circuit's verification key, called an **application**, plus a configuration commitment that the application interprets. A user account's entries are called **rules**; a contract account's entries are called **functions**. An application decides whether to authorize an action. It returns four values to the protocol, the permanent rule statement (§8.2): a commitment to the account it acts for and the configuration it applied, a commitment to the exact action it approves on this chain, the recent block whose state it read, and the transaction's event entry. PCASH attaches no meaning to an entry beyond that statement: there are no capability flags. Anyone can write an application. A weak account rule endangers only the accounts that install it; a weak mint rule endangers the holders of its asset, because the kernel does not bound what a mint rule allows (§11.6).
 
-**Proofs.** Types `0x00` and `0x03` carry one CHONK zero-knowledge proof (§8.1); standalone user-account and contract-account creations carry none. The proof folds two applications, or three for a sponsored transfer, then a **protocol kernel** that enforces the ledger rules (note membership and ownership, nullifier derivation, output construction, value conservation, asset rules) and checks that each account rule approved the exact action, then a **hiding kernel** that accepts only the type's protocol kernels and exposes the transaction's public inputs. A kernel that consumes one rule folds an event application second (§8.6). Nodes verify only the final proof, against a hiding-kernel verification key pinned for the transaction type (and, for type `0x00`, for its profile). A type `0x00` proof uses one of three private kernels: the **transfer** kernel, where one account owns every real input; the **sponsored-transfer** kernel, where a user account pays the native fee of a contract account's asset action; and the **asset-creation** kernel, which creates a new asset (§11.5). Type `0x03` has its own kernel. CHONK is the client-side proof-folding scheme of the Barretenberg proving system, and MegaApp, MegaKernel, and MegaZK are its circuit and verification-key formats. A node verifies proofs by calling the pinned Barretenberg release (§8.1, §16); it does not implement the scheme itself. Which account acted, which rule approved, which notes were spent, and what amounts moved stay private.
+**Proofs.** Types `0x00` and `0x03` carry one CHONK zero-knowledge proof (§8.1); standalone user-account and contract-account creations carry none. The proof folds two applications, three for a sponsored transfer, a restricted transfer, or a mint, and four for a restricted sponsored transfer, then a **protocol kernel** that enforces the ledger rules (note membership and ownership, nullifier derivation, output construction, value conservation, asset rules) and checks that each account rule approved the exact action, then a **hiding kernel** that accepts only the type's protocol kernels and exposes the transaction's public inputs. The last application is always an event application (§8.6). Nodes verify only the final proof, against a hiding-kernel verification key pinned for the transaction type (and, for type `0x00`, for its profile). A type `0x00` proof uses one of five private kernels: the **transfer** kernel, where one account owns every real input; the **sponsored-transfer** kernel, where a user account pays the native fee of a contract account's asset action; a **restricted** variant of each, which moves an asset whose definition carries a **transfer rule** and also folds that rule's application; and the **mint** kernel, which mints an asset and also folds the application of the asset's **mint rule** (§11.5). Type `0x03` has its own kernel. CHONK is the client-side proof-folding scheme of the Barretenberg proving system, and MegaApp, MegaKernel, and MegaZK are its circuit and verification-key formats. A node verifies proofs by calling the pinned Barretenberg release (§8.1, §16); it does not implement the scheme itself. Which account acted, which rule approved, which notes were spent, and what amounts moved stay private.
 
 **Transactions.** A transaction is one byte string, `txBytes`, with a common envelope naming its type and its PCASH chain ID (§10.1). There are four types:
 
@@ -112,7 +112,7 @@ Value ranges:
 
 * `PCASH_CHAIN_ID` is a PCASH network identifier `< 2^32`. `L1_CHAIN_ID` is the EIP-155 identifier of the Ethereum chain that carries PCASH data.
 * A PCASH block number is `< 2^64`.
-* Every note amount, every native-PCASH fee, and every native burn MUST be `< 2^AMOUNT_BITS`, with `AMOUNT_BITS = 128`. Asset burn amounts and an asset's initial supply MUST be `< 2^131`. Asset input and output sums are bounded by provenance (§11.8): no transaction can spend more of an asset than its fixed initial supply, so they are also below `2^131`.
+* Every note amount, every native-PCASH fee, and every native burn MUST be `< 2^AMOUNT_BITS`, with `AMOUNT_BITS = 128`. An asset burn amount MUST be `< 2^133`, the most that a full profile L input set can hold. Asset input and output sums are bounded by note size and slot count, not by any asset's supply, so they are also below `2^133` (§11.6).
 * Gross native issuance is at most `S` (§14), the signed Q128 lag is committed as a signed 256-bit two's-complement integer (§6.5), and §14 evaluates Q128 values with exact integer intermediates. `feeExcess` is at most `MAX_FEE_EXCESS` and the base fee is evaluated in exact integers (§14.5). Issuance and fee arithmetic never reduce values modulo the proof field.
 * Native amounts use 18 decimal places: one PCASH is `10^18` atomic units.
 
@@ -230,8 +230,12 @@ This is the byte-string encoding of §2.3 over `b` without its leading domain, s
 | `DELIVERY_COMMITMENT_DOMAIN` | `delivery_commitment` |
 | `ACCOUNT_CREATION_ATTACHMENT_DOMAIN` | `account_creation_attachment` |
 | `ASSET_ID_DOMAIN` | `asset_id` |
-| `ASSET_SECRET_COMMITMENT_DOMAIN` | `asset_secret_commitment` |
-| `ASSET_CREATION_MARKER_DOMAIN` | `asset_creation_marker` |
+| `ASSET_CORE_DOMAIN` | `asset_core` |
+| `ASSET_MINT_RULE_DOMAIN` | `asset_mint_rule` |
+| `ASSET_TRANSFER_RULE_DOMAIN` | `asset_transfer_rule` |
+| `ASSET_POLICY_DOMAIN` | `asset_policy` |
+| `ASSET_MINT_POLICY_DOMAIN` | `asset_mint_policy` |
+| `MINT_MARKER_DOMAIN` | `mint_marker` |
 | `STATE_COMMITMENT_DOMAIN` | `state_commitment` |
 | `BLOCK_HEADER_DOMAIN` | `block_header` |
 | `GENESIS_PARENT_DOMAIN` | `genesis_parent` |
@@ -246,7 +250,7 @@ This is the byte-string encoding of §2.3 over `b` without its leading domain, s
 | `TRANSACTION_ID_DOMAIN` | `transaction_id` |
 | `AUTHORIZATION_COMMITMENT_DOMAIN` | `authorization_commitment` |
 | `TRANSFER_ACTION_DOMAIN` | `transfer_action` |
-| `ASSET_CREATION_ACTION_DOMAIN` | `asset_creation_action` |
+| `MINT_ACTION_DOMAIN` | `mint_action` |
 | `SPONSORED_TRANSFER_ACTION_DOMAIN` | `sponsored_transfer_action` |
 | `CONTRACT_FEE_SPONSORSHIP_ACTION_DOMAIN` | `contract_fee_sponsorship_action` |
 | `ACCOUNT_UPDATE_ACTION_DOMAIN` | `account_update_action` |
@@ -339,9 +343,9 @@ applicationNullifier = poseidon(
 
 The operands are: `address`, the note's owner in `ownerCommitment` and the authorizing account in `applicationNullifier` (§4.1); `outputIndex`, the note's position in the output tree; `inputIndex`, the zero-based input slot index; `dummyInputSeed`, a private seed chosen once per action; `selectedEntryCommitment`, the `accountRuleEntryCommitment` (§5.2) of the rule entry selected to authorize the action; and `replayId`, a value defined by that rule (§11.3).
 
-`nullifier` is the spend marker of a real note: it binds the exact output (and so its position), the owner's note key, and the note secret, so it is the same for every valid spend of that note and different for every other note. Every operand may take any value in its range, zero included; a zero secret is one operand of a domain-separated hash, not a zero nullifier. `dummyNullifier` and `applicationNullifier` are the markers of padding input slots and of account-rule replay protection; §11.3 defines when each is used. All three, together with asset-creation markers (§11.6), share one spent set (§6.4).
+`nullifier` is the spend marker of a real note: it binds the exact output (and so its position), the owner's note key, and the note secret, so it is the same for every valid spend of that note and different for every other note. Every operand may take any value in its range, zero included; a zero secret is one operand of a domain-separated hash, not a zero nullifier. `dummyNullifier` and `applicationNullifier` are the markers of padding input slots and of account-rule replay protection; §11.3 defines when each is used. All three, together with mint markers (§11.6), share one spent set (§6.4).
 
-`assetId = 0` identifies native PCASH. A nonzero `assetId` identifies one instance of the standard fungible asset (§11.6).
+`assetId = 0` identifies native PCASH. A nonzero `assetId` identifies one fungible asset (§11.6).
 
 Receiving native or asset notes requires neither registration nor the recipient's consent: a note's owner commitment needs only the owner's address, and nothing checks that the address has an account.
 
@@ -444,7 +448,7 @@ The Address Account State Tree (depth 40, §2.4) holds one `accountStateCommitme
 
 ### 6.4 Nullifier set
 
-The spent-nullifier set is an append-only indexed Merkle tree of depth `NULLIFIER_TREE_DEPTH = 41` under the conventions of §2.4: internal nodes are `poseidon(left, right)` and an unallocated slot is `0`. Note, dummy, asset-creation, and application nullifiers all share it. Its values are the nonzero canonical field elements, compared as integers.
+The spent-nullifier set is an append-only indexed Merkle tree of depth `NULLIFIER_TREE_DEPTH = 41` under the conventions of §2.4: internal nodes are `poseidon(left, right)` and an unallocated slot is `0`. Note, dummy, mint, and application nullifiers all share it. Its values are the nonzero canonical field elements, compared as integers.
 
 Leaf `0` is the sentinel, with value `0`. Leaf `i` for `1 <= i <= nullifierCount` holds the `i`-th nullifier inserted, in canonical order: block, then transaction, then input slot. Every allocated leaf, the sentinel included, commits its value, the smallest larger value in the set, and that value's leaf index; both pointer fields are `0` on the leaf with the largest value, which ends the list:
 
@@ -687,9 +691,9 @@ Types `0x00` and `0x03` carry one zero-knowledge proof; standalone user-account 
 
 ### 8.1 CHONK proofs and verification keys
 
-All client proofs are zero-knowledge CHONK proofs over BN254, produced and verified by the pinned Barretenberg build. One proof folds an ordered stack of four Mega circuits, or five for a sponsored transfer:
+All client proofs are zero-knowledge CHONK proofs over BN254, produced and verified by the pinned Barretenberg build. One proof folds an ordered stack of four Mega circuits, five for a sponsored transfer, a restricted transfer, or a mint, and six for a restricted sponsored transfer:
 
-1. private **applications**, proved as MegaApp circuits: the two account rules a sponsored transfer consumes (§11.7), or the one selected rule any other kernel consumes, followed by one event application;
+1. private **applications**, proved as MegaApp circuits: the two account rules a sponsored transfer consumes (§11.7), or the one selected rule any other kernel consumes, then the asset's transfer rule in a restricted kernel (§11.8), or its mint rule in the mint kernel (§11.6), followed by one event application;
 2. one **protocol kernel**, which enforces the transaction's ledger rules and links its applications, proved as a MegaKernel circuit;
 3. one **hiding kernel**, which accepts only release-pinned protocol-kernel verification keys and alone exposes the transaction type's ordered public inputs, proved as a MegaZK circuit.
 
@@ -699,7 +703,7 @@ Verifying each layer's proof inside the next circuit would put browser proving b
 
 The BN254 trusted-setup element `[x]_2` is compiled into the pinned verifier. At run time the verifier uses only the BN254 generator and the first 2^15 points of Barretenberg's Grumpkin SRS, which is transparent: it is generated deterministically from a public seed. The pinned implementation loads those points as part of a 65,536-point prefix, so §16 pins the SHA-256 of `[x]_2` and of the first 65,536 Grumpkin points. There are no per-circuit setup ceremonies; soundness depends on the universal BN254 setup behind `[x]_2` and the pinned proof-system implementation.
 
-**Verification keys.** Applications use the 151-field MegaApp verification key (VK), and protocol kernels the 151-field MegaKernel VK. The persistent identity of each VK is Barretenberg's canonical VK hash, `poseidon(vk_0, ..., vk_150)`. An account-rule entry commits that exact MegaApp VK hash (§5.2). The protocol kernel receives each application's VK privately: it authenticates a rule's hash through the installed entry, binds an event application to the typed action and anchor (§8.6), and links every application through CHONK's databus. Hiding kernels accept only release-pinned protocol-kernel VK hashes. The final 119-field MegaZK hiding-kernel VK is fixed by the active transaction-type rule and is the only VK used in consensus verification.
+**Verification keys.** Applications use the 151-field MegaApp verification key (VK), and protocol kernels the 151-field MegaKernel VK. The persistent identity of each VK is Barretenberg's canonical VK hash, `poseidon(vk_0, ..., vk_150)`. An account-rule entry commits that exact MegaApp VK hash (§5.2). The protocol kernel receives each application's VK privately: it authenticates a rule's hash through the installed entry, derives an asset's ID from the hash of its mint rule or transfer rule (§11.6, §11.8), binds an event application to the typed action and anchor (§8.6), and links every application through CHONK's databus. Hiding kernels accept only release-pinned protocol-kernel VK hashes. The final 119-field MegaZK hiding-kernel VK is fixed by the active transaction-type rule and is the only VK used in consensus verification.
 
 **Verification.** Under the pinned implementation, a compressed CHONK proof begins with the hiding kernel's public inputs, one 32-byte word each: the transaction's statement words, then 28 words of recursion-accumulator data that the verifier consumes. Every statement word is either serialized elsewhere in `txBytes` or derived by the node, so `txBytes` carries the **posted proof body**: the compressed proof without the statement words. The accumulator words remain in the posted body. A proof is valid exactly when the pinned verifier accepts it:
 
@@ -711,7 +715,7 @@ The verifier thus checks the proof against exactly the statement the node recons
 
 ### 8.2 The rule statement
 
-Every protocol kernel that authorizes value or account changes (the transfer, sponsored-transfer, asset-creation, and user-account-update kernels) links private account-rule applications. An application defines the condition under which its entry authorizes the exact action and account contribution that the kernel supplies.
+Every protocol kernel that authorizes value or account changes (the transfer and sponsored-transfer kernels and their restricted variants, the mint kernel, and the user-account-update kernel) links private account-rule applications. An application defines the condition under which its entry authorizes the exact action and account contribution that the kernel supplies.
 
 **Permanent rule statement.** Every account-rule application returns exactly these four values, in this order, as its CHONK `return_data`, which the protocol kernel reads through its `call_data` bus:
 
@@ -721,10 +725,12 @@ Every protocol kernel that authorizes value or account changes (the transfer, sp
 authorizationCommitment = poseidon(AUTHORIZATION_COMMITMENT_DOMAIN, uint160(address), configurationCommitment)
 ```
 
-* `authorizationCommitment` says which account acts, under which settings of the selected rule. `address` names the account (§4.1). It does not change when the account's rule set, receive key, or revision changes. Each application decides which keys may authorize the account, so an account can delegate authority or rotate signers without changing which address owns its notes; the reference ECDSA rules accept only the key whose address is the account's (Appendix B.2). `configurationCommitment` is the opaque, application-owned value that the selected entry commits (§5.2); PCASH defines neither its derivation nor its meaning. The account's nullifier key is not part of the statement: kernels use the authenticated `nkRoot` for note nullifiers and the account leaf, and a rule that needs nullifier-key material takes it from its own configuration or from an opening of an account leaf. The transfer, sponsored-transfer, and asset-creation kernels prove that the account exists under the recent block's account-state root, except in a transfer whose every input is `DUMMY` (§11.4). The user-account-update kernel instead binds the account's current state commitment into the public account update commitment, which the node recomputes from the live row (§12.3).
+* `authorizationCommitment` says which account acts, under which settings of the selected rule. `address` names the account (§4.1). It does not change when the account's rule set, receive key, or revision changes. Each application decides which keys may authorize the account, so an account can delegate authority or rotate signers without changing which address owns its notes; the reference ECDSA rules accept only the key whose address is the account's (Appendix B.2). `configurationCommitment` is the opaque, application-owned value that the selected entry commits (§5.2); PCASH defines neither its derivation nor its meaning. The account's nullifier key is not part of the statement: kernels use the authenticated `nkRoot` for note nullifiers and the account leaf, and a rule that needs nullifier-key material takes it from its own configuration or from an opening of an account leaf. Every type `0x00` kernel proves that the account exists under the recent block's account-state root, except the transfer kernel when every input is `DUMMY` (§11.4). The user-account-update kernel instead binds the account's current state commitment into the public account update commitment, which the node recomputes from the live row (§12.3).
 * `actionCommitment` says what the owner approves, on this chain. §8.3 defines it for each role.
 * `recentPcashBlockHash` names the snapshot of chain state that the proof reads (§8.4).
 * `eventEntry` identifies the actual event application and its claim (§8.6). Both rules of a sponsored transfer approve the same entry.
+
+An asset's mint rule and transfer rule return statements of the same shape, with a mint context or a transfer context in place of the authorization commitment (§11.6, §11.8).
 
 The kernel computes the same four values from the account and entry it authenticated, the private value it built, the role it proves, and the network's chain ID, and requires the application's `return_data` to equal them under the pinned databus link (§16). The chain ID is not a separate field: it enters through the action commitment (§8.3).
 
@@ -751,14 +757,14 @@ actionCommitment = poseidon(actionDomain, pcashChainId, privateValueCommitment, 
 | `actionDomain` | Role | `extraData` | Defined in |
 |---|---|---|---|
 | `TRANSFER_ACTION_DOMAIN` | the account of a transfer | `0` | §11.4 |
-| `ASSET_CREATION_ACTION_DOMAIN` | the account of an asset creation | the created asset's `assetId` | §11.6 |
+| `MINT_ACTION_DOMAIN` | the account of a mint | the minted asset's `assetId` | §11.6 |
 | `SPONSORED_TRANSFER_ACTION_DOMAIN` | the contract account of a sponsored transfer | `0` | §11.7 |
 | `CONTRACT_FEE_SPONSORSHIP_ACTION_DOMAIN` | the user account that pays a contract’s fee in a sponsored transfer | the contract’s address | §11.7 |
 | `ACCOUNT_UPDATE_ACTION_DOMAIN` | the account of a user-account update, together with its fee | `accountUpdateCommitment` | §12.3 |
 
-`extraData` binds what a rule approves to a value that the kernel derives or checks, or that consensus supplies: the asset ID the kernel derives from the asset definition, the address of the contract account it authenticates in a sponsored transfer, or the account update commitment the kernel computes. The rule's approval and the kernel's value therefore meet directly in the action commitment. An asset ID would otherwise meet the kernel's only through the asset output bodies, which a rule that treats the private value as opaque never opens.
+`extraData` binds what a rule approves to a value that the kernel derives or checks, or that consensus supplies: the asset ID the kernel derives from the asset definition, the address of the authenticated contract account whose fee a sponsor pays, or the account update commitment the kernel computes. The rule's approval and the kernel's value therefore meet directly in the action commitment. An asset ID would otherwise meet the kernel's only through the asset output bodies, which a rule that treats the private value as opaque never opens.
 
-Distinct action domains keep an approval in one role from becoming authority in another: a sponsorship cannot be replayed as a transfer or for another contract, and the contract side of a sponsored transfer cannot be replayed through the transfer kernel (§11.7). Each distinct approval has its own domain: two kernels share one only when the approval means the same thing to the signer and the rule's checks do not depend on which kernel runs. The sponsorship domain authorizes the user’s bounded fee contribution to the named contract action (§11.7).
+Distinct action domains keep an approval in one role from becoming authority in another: a sponsorship cannot be replayed as a transfer or for another contract, and the contract side of a sponsored transfer cannot be replayed through the transfer kernel (§11.7). Each distinct approval has its own domain: two kernels share one only when the approval means the same thing to the signer and the rule's checks do not depend on which kernel runs. The restricted transfer and restricted sponsored-transfer kernels therefore supply the transfer and sponsored-transfer actions: each enforces its unrestricted counterpart's relation plus the asset's transfer rule, and the asset's class fixes which of the two can move it (§11.3, §11.8). The sponsorship domain authorizes the user’s bounded fee contribution to the named contract action (§11.7). An asset's mint rule returns the mint action that the minting account's rule approves, as a transfer rule returns its owner's action; the mint rule's first statement word, a mint context rather than an authorization commitment, keeps the two approvals apart (§11.6).
 
 The chain ID is an operand of every action commitment, so an approval on one PCASH chain is not an approval on another. A rule that computes its action commitment cannot leave the chain out, and a universal rule that approves any action commitment never handles the chain ID at all. The private-value and account-update commitment formulas add no chain ID operand; a signed user attachment already contains a signature bound to its network (§12.1). `recentPcashBlockHash` is not an operand (§8.4). `eventEntry` is also separate: an event application may prove a claim about the action without a circular commitment.
 
@@ -779,22 +785,22 @@ Every authorized action uses the same entry mechanism: the protocol kernel prove
 
 Rules are permissionless. Anyone may write and install any application. A weak or trivial application cannot bypass the protocol kernel, which enforces the ledger, asset, or account-update invariants outside the application. Account membership authenticates installed authority, except in an all-padding transfer (§11.4), which spends no existing value, and in an account update, whose rule set the node authenticates against the live row (§12.3). Permissionless rules may intentionally use broader reusable approvals. Installed applications may be arbitrarily inexpensive; the protocol does not impose the reference wallet's ECDSA cost on every action. All-padding actions still execute the ordinary recursive application and transfer-kernel stack, whether or not the supplied account exists.
 
-PCASH imposes no configuration schema, salt requirement, signing convention, or replay formula on an account rule, beyond binding the chain ID in what it signs (§8.2). The reference implementation's rules, their configuration, and the EIP-712 messages they sign are described with the [reference account rules](../circuits/README.md#reference-rules-rules).
+PCASH imposes no configuration schema, salt requirement, signing convention, or replay formula on an account rule, beyond binding the chain ID in what it signs (§8.2). The reference implementation's rules, their configuration, and the EIP-712 messages they sign are described with the [reference account rules](../circuits/README.md#account-rules).
 
 ### 8.6 Transaction events
 
 Every proof-bearing transaction exposes one `eventsCommitment` after the base private-value statement. Its private opening contains a field salt and an event entry. The prover SHOULD choose a fresh cryptographically random salt for each transaction to hide equal entries; the circuit constrains the commitment, not the entropy of its opening.
 
-An event application returns `[actionCommitment, recentPcashBlockHash, event]`. The kernel requires the first two fields to equal the typed action and anchor it derives. The action is the ordinary transfer, asset-creation, or account-update action for that kernel; in a sponsored transfer it is the primary contract's sponsored-transfer action. Any MegaApp circuit with this statement may serve as an event application. Account authorization comes only from installed rules, so the event slot needs no account authentication and grants no authority to change the ledger transition.
+An event application returns `[actionCommitment, recentPcashBlockHash, event]`. The kernel requires the first two fields to equal the typed action and anchor it derives. The action is the ordinary transfer, mint, or account-update action for that kernel; in a sponsored transfer, restricted or not, it is the primary contract's sponsored-transfer action. Any MegaApp circuit with this statement may serve as an event application. Account authorization comes only from installed rules, so the event slot needs no account authentication and grants no authority to change the ledger transition.
 
 ```text
 eventEntry = poseidon(EVENT_ENTRY_DOMAIN, applicationVkHash, event)
 eventsCommitment = poseidon(EVENT_DOMAIN, eventEntry, salt)
 ```
 
-The application VK is authenticated by CHONK and included in the entry because an event's credibility depends on the code that proved it. Every authorizing rule returns the actual entry as its fourth statement word (§8.2). PCASH has no receive-side authorization step, so a rule that enforces an event policy does so when its holder spends.
+The application VK is authenticated by CHONK and included in the entry because an event's credibility depends on the code that proved it. Every authorizing rule returns the actual entry as its fourth statement word (§8.2). PCASH has no receive-side authorization step, so a rule that enforces conditions on events does so when its holder spends.
 
-Consensus neither interprets event contents nor gives `event = 0` special status. Every event application follows the same relation and contributes its VK-bound entry. Consumers choose which application identities and claims they accept. Every proof-bearing transaction has exactly one event application; changing that count requires a protocol change.
+Consensus neither interprets event contents nor gives `event = 0` special status. Every event application follows the same relation and contributes its VK-bound entry. Consumers choose which application identities and claims they accept. Every proof-bearing transaction has exactly one event application; changing that count requires a protocol change. An asset's mint rule and transfer rule are separate applications that receive the event entry in their statements (§11.6, §11.8).
 
 ## 9. Deriving Blocks from Ethereum
 
@@ -1082,7 +1088,7 @@ A block hash passes only while it belongs to the current parent-linked header ch
 
 ## 11. Private-Value Transactions (`txType 0x00`)
 
-A private-value transaction spends notes and creates notes. It moves native PCASH, one standard non-native asset, or both, in one shared relation. Every private-value transaction has the same public shape for its profile: a fixed number of input slots, each publishing one nullifier, and a fixed number of output slots, each publishing one note-body commitment and one data item. The proof shows privately that the real slots obey the ledger rules and that the owning account's rule approved the exact transaction.
+A private-value transaction spends notes and creates notes. It moves native PCASH, one non-native asset, or both, in one shared relation. Every private-value transaction has the same public shape for its profile: a fixed number of input slots, each publishing one nullifier, and a fixed number of output slots, each publishing one note-body commitment and one data item. The proof shows privately that the real slots obey the ledger rules and that the owning account's rule approved the exact transaction.
 
 This section first defines what nodes see and check (§11.1–11.2), then the relation the proof establishes (§11.3–11.8).
 
@@ -1188,19 +1194,19 @@ An attachment grants no spending, sponsorship, or installed-rule authority: thos
 
 ### 11.3 Slot classes, markers, and the private-value commitment
 
-**Slot classes.** Every slot has a private class. Classes `0..2` are shared by inputs and outputs and name the value the slot holds: `DUMMY = 0` (padding), `NATIVE = 1`, `ASSET = 2`. `ASSET_CREATION = 3` and `APPLICATION = 4` are input-only **marker** classes: they carry no note, and exist only to publish a one-time marker in the spent set. The classes are private fields of the private-value commitment.
+**Slot classes.** Every slot has a private class. Classes `0..2` are shared by inputs and outputs and name the value the slot holds: `DUMMY = 0` (padding), `NATIVE = 1`, `ASSET = 2`. `MINT = 3` and `APPLICATION = 4` are input-only **marker** classes: they carry no note, and exist only to publish a one-time marker in the spent set. The classes are private fields of the private-value commitment.
 
 An input slot that holds no note still publishes a nonzero nullifier. The three kinds of non-note input differ in who defines their nullifier and what it is scoped to:
 
 | Class | Nullifier defined by | Scoped to |
 |---|---|---|
 | `DUMMY` | the protocol kernel, from one fresh per-action seed | nothing |
-| `ASSET_CREATION` | the fixed-supply relation (§11.6) | the asset |
+| `MINT` | the mint kernel, from replay IDs the mint's approvals fix (§11.6) | the asset |
 | `APPLICATION` | the selected account rule (§8.2) | (account, entry) |
 
 Slot requirements:
 
-* A dummy, asset-creation, or application input has zero input commitment. A native or asset input's input commitment is the output commitment of the note it opens (§4.3), which includes its output index.
+* A dummy, mint, or application input has zero input commitment. A native or asset input's input commitment is the output commitment of the note it opens (§4.3), which includes its output index.
 * A native or asset input spends a note of positive amount, and a native or asset output has a positive 128-bit amount. A dummy output has asset ID zero and amount zero.
 * Every real note output carries an opaque owner commitment, which may be any field element (§4.4). Nothing compares it with the transaction's `issuanceOwnerCommitment`: an output that reuses that commitment is still a separate note under its own indexed output commitment, but anyone can link it to the public payout result (§7.3), so wallets keep the two independent (§13). Every dummy output carries the owner commitment of address `0` under its private dummy secret (§4.4).
 * Every input nullifier is nonzero; the node checks that (§11.2).
@@ -1221,15 +1227,17 @@ privateValueCommitment = poseidon(
     ..., outputSlotClass_(N_OUT-1), outputBodyCommitment_(N_OUT-1))
 ```
 
-The commitment binds the selected profile, every slot in order, and the private `assetBurnAmount`, without binding transient tree roots or the chain ID. The action commitment adds the chain ID (§8.3), so an unchanged action can be re-proved against a newer recent block (§10.6). A signed creation attachment separately commits its own recent block and deadline; refreshing that attachment changes the action and requires renewed authorization. The profile fixes the number of operands, so each slot's position and class are bound: an output cannot be moved, and a slot cannot be reinterpreted, without changing the authorized action. Require `0 <= assetBurnAmount < 2^131`.
+The commitment binds the selected profile, every slot in order, and the private `assetBurnAmount`, without binding transient tree roots or the chain ID. The action commitment adds the chain ID (§8.3), so an unchanged action can be re-proved against a newer recent block (§10.6). A signed creation attachment separately commits its own recent block and deadline; refreshing that attachment changes the action and requires renewed authorization. The profile fixes the number of operands, so each slot's position and class are bound: an output cannot be moved, and a slot cannot be reinterpreted, without changing the authorized action. Require `0 <= assetBurnAmount < 2^133`, so that a full profile L input set, 32 notes each below `2^128`, can be burned at once.
 
-**Selecting the relation.** The asset ID is not a transaction field. The transfer and sponsored-transfer kernels take it as a private witness, and the asset-creation kernel derives it from the asset definition (§11.6). It is the note namespace of every `ASSET` input and output, and every kernel requires it to be nonzero for each `ASSET` slot it opens or constructs. When no slot is `ASSET`, the transfer kernel's asset-ID witness is unused. An `APPLICATION` marker carries no asset value and does not select the asset path. The slot classes then admit exactly these asset shapes:
+**Selecting the relation.** The asset ID is not a transaction field. The transfer and sponsored-transfer kernels take it as a private witness, their restricted variants derive it from the asset's core commitment and transfer rule (§11.8), and the mint kernel derives it from the asset definition and the mint rule it folds (§11.6). It is the note namespace of every `ASSET` input and output, and every kernel requires it to be nonzero for each `ASSET` slot it opens or constructs. When no slot is `ASSET`, the transfer kernel's asset-ID witness is unused. An `APPLICATION` marker carries no asset value and does not select the asset path. An asset whose definition carries a transfer rule is **restricted**, and its ID lies in `[2^252, 2^253)`; every other nonzero asset is **unrestricted**, and its ID is below `2^252` (§11.6). The slot classes and the asset's class then admit exactly these asset shapes:
 
-* One or more `ASSET` inputs and no `ASSET_CREATION` marker take the transfer kernel (§11.4) or the two-account sponsored-transfer kernel (§11.7). Both kernels reject every `ASSET_CREATION` input, and the sponsored-transfer kernel requires at least one `ASSET` input.
-* No `ASSET` input and exactly one `ASSET_CREATION` marker take the asset-creation kernel (§11.6). It requires `assetBurnAmount = 0` and asset outputs that sum to the initial supply. Every real output amount is positive, so a positive supply has at least one `ASSET` output and a zero supply has none.
+* One or more `ASSET` inputs and no `MINT` marker take the transfer kernel (§11.4) or the two-account sponsored-transfer kernel (§11.7) for an unrestricted asset, and the restricted transfer or restricted sponsored-transfer kernel for a restricted one (§11.8). The four transfer kernels reject `MINT` inputs, and all of them except the transfer kernel require at least one `ASSET` input.
+* No `ASSET` input and one or more `MINT` markers take the mint kernel (§11.6). It requires `assetBurnAmount = 0` and folds the asset's mint rule, which decides how many markers and asset outputs a mint may carry.
 * Every other asset shape fails. With no `ASSET` input and no marker, only the transfer kernel can accept, and its asset conservation `0 = sum(asset outputs) + assetBurnAmount` forces no `ASSET` output and `assetBurnAmount = 0`, because every real output amount is positive and the sum stays far below the field modulus.
 
-The slot grammar determines the relation in every case but one. Slot classes name namespaces, not owners, so they cannot express whether a second account funds the fee. A transfer and a sponsored transfer therefore use different private protocol kernels, both accepted by the same hiding kernel. The sponsored-transfer kernel's two authenticated accounts have different kinds and are therefore different accounts (§11.7), so a one-account action cannot gratuitously take that path.
+The class is in the asset ID so that a kernel knows whether a transfer rule applies without opening the definition. Otherwise every transfer of every asset would need its definition, or a restricted asset could skip its rule by moving through an unrestricted kernel. The transfer and sponsored-transfer kernels require the action's asset ID below `2^252`, which the unused zero witness of an action without an asset passes, and the restricted kernels require it in `[2^252, 2^253)`. An unrestricted transfer pays one range check for this and opens no definition.
+
+The slot grammar and the asset's class determine the relation in every case but one. Slot classes name namespaces, not owners, so they cannot express whether a second account funds the fee. A transfer and a sponsored transfer therefore use different private protocol kernels, both accepted by the same hiding kernel. Each sponsored kernel's two authenticated accounts have different kinds and are therefore different accounts (§11.7), so a one-account action cannot gratuitously take that path.
 
 **Padding inputs.** The protocol kernel derives every dummy input's nullifier as `poseidon(DUMMY_NULLIFIER_DOMAIN, dummyInputSeed, inputIndex)` from one private seed per action (§4.4). A dummy input is shape noise, not application replay protection: its value is slot-indexed and fresh per action, which is the exact opposite of what a marker requires.
 
@@ -1243,9 +1251,9 @@ applicationNullifier = poseidon(
 
 The authenticated account's address and the exact selected account-rule entry supply the scope. One account exists per address, so the address scopes markers as uniquely and as permanently as the account itself. `replayId` is defined entirely by that rule and is never interpreted by any fixed relation. Scoping to the entry rather than to the account alone means a sibling entry cannot consume another entry's markers. Because markers are scoped to one entry, two installed entries never share replay state. An application whose S and L variants must share replay state MUST therefore be installed as one entry whose VK accepts both profiles; its S opening excludes the canonically zero trailing capacity. Separately installed note-funded entries need no shared replay state, because the real-note nullifiers they consume already prevent double spending.
 
-The operand list is closed and normative. It binds no slot index, no input note commitment, no output, no fee, no timestamp, no recent root, no chain ID, and no proof randomness. If it bound any of them, a party could reshape the transaction (spend different inventory, move the marker to another slot, change the fee) and derive a fresh marker for the same fact. Independence from slot and transaction shape is what makes the value one-shot at all. No PCASH nullifier binds the chain ID. A marker that must be unguessable, or must differ across chains, carries a secret inside `replayId`, as `noteSecret` and the asset secret do elsewhere.
+The operand list is closed and normative. It binds no slot index, no input note commitment, no output, no fee, no timestamp, no recent root, no chain ID, and no proof randomness. If it bound any of them, a party could reshape the transaction (spend different inventory, move the marker to another slot, change the fee) and derive a fresh marker for the same fact. Independence from slot and transaction shape is what makes the value one-shot at all. No PCASH nullifier binds the chain ID. A marker that must be unguessable, or must differ across chains, carries a secret inside `replayId`, as `noteSecret` does in a note nullifier.
 
-The transfer kernel (§11.4), the sponsored-transfer kernel (§11.7), and the asset-creation kernel (§11.6) enforce markers by authenticating both the account and the selected entry against the same transaction; the sponsored-transfer kernel scopes every marker to its primary account, and the asset-creation kernel to the creating account. Each kernel:
+Every type `0x00` kernel enforces markers by authenticating both the account and the selected entry against the same transaction; a sponsored kernel scopes every application marker to its primary account, and the mint kernel to the minting account. Each kernel:
 
 * takes a private `replayId` for each `APPLICATION` slot and requires that slot's nullifier to equal the value above; replay witnesses in other slots are unused. Any field element, zero included, is a valid `replayId`: the slot's class, not its value, makes it a marker;
 * relies on the selected application to derive its own canonical `replayId` independently and assert the same equality against the same nullifier, so the two agree only if the replay identities are equal. The application receives `selectedEntryCommitment` privately and does not re-derive its own entry, which would be a self-reference with no fixed point.
@@ -1256,9 +1264,9 @@ There is no protocol cap on the number of `APPLICATION` slots; an application ca
 
 ### 11.4 The transfer kernel
 
-The transfer kernel proves the ordinary one-account spend: one account owns every real input, and one of its installed rules authorizes the complete transaction. It handles native payments, asset transfers and burns, and actions that spend nothing.
+The transfer kernel proves the ordinary one-account spend: one account owns every real input, and one of its installed rules authorizes the complete transaction. It handles native payments, transfers and burns of unrestricted assets, and actions that spend nothing. It requires its asset-ID witness below `2^252` (§11.3). A restricted asset moves through the restricted transfer kernel instead, which is this kernel's relation with the asset's transfer rule folded beside the owner's rule and without the all-padding exemption below (§11.8).
 
-A transfer contains no `ASSET_CREATION` input. It MAY contain `NATIVE` inputs, `ASSET` inputs, or both, and it MAY contain `APPLICATION` markers, whose nullifiers the transfer kernel enforces (§11.3). Markers require historical account membership even when the action spends no real note.
+A transfer contains no `MINT` input. It MAY contain `NATIVE` inputs, `ASSET` inputs, or both, and it MAY contain `APPLICATION` markers, whose nullifiers the transfer kernel enforces (§11.3). Markers require historical account membership even when the action spends no real note.
 
 **With real inputs.** All real inputs belong to one authenticated `USER` or `CONTRACT` account. A `NATIVE` input uses `assetId = 0`, and an `ASSET` input uses the action's nonzero asset ID. A native-only action additionally has no `ASSET` output and `assetBurnAmount = 0`. The kernel:
 
@@ -1283,104 +1291,136 @@ The kernel still opens the supplied account and rule set, binds the exact applic
 allInputsDummy OR reconstructedAccountRoot == historicalAccountRoot
 ```
 
-`allInputsDummy` is derived in constrained code from every private input class being exactly `DUMMY`; `APPLICATION` and `ASSET_CREATION` never qualify. The supplied account fields and rule set on this path therefore do not represent authenticated installed-account authority.
+`allInputsDummy` is derived in constrained code from every private input class being exactly `DUMMY`; `APPLICATION` and `MINT` never qualify. The supplied account fields and rule set on this path therefore do not represent authenticated installed-account authority.
 
 Dummy nullifiers remain globally single-spend (§11.2, §6.4), so an accepted proof cannot earn issuance twice. Registration itself earns no issuance. A registration and an all-padding action may be published in one batch with independent outcomes; the action is valid regardless of the registration's position or success, including when no registration is published. A creation attachment couples registration and the action under §11.2. Spending a recovered reward later requires normal historical account and note membership.
 
-Both cases use the same transfer kernel and VK within their profile, followed by the ordinary hiding kernel. The sponsored-transfer and asset-creation kernels require unconditional account membership; the account-update kernel relies on the node's check of the live row (§12.3). The folded stack is `selected application → event application → transfer kernel → hiding kernel`. An action with a zero open fee remains valid when ordinary conservation holds.
+Both cases use the same transfer kernel and VK within their profile, followed by the ordinary hiding kernel. Every other type `0x00` kernel requires unconditional account membership; the account-update kernel relies on the node's check of the live row (§12.3). The folded stack is `selected application → event application → transfer kernel → hiding kernel`. An action with a zero open fee remains valid when ordinary conservation holds.
 
 ### 11.5 Protocol kernels
 
-The protocol kernels own ledger structure: exact slot classification, note-body construction, dummy padding, the private-value commitment, timestamp and amount bounds, note membership, namespace isolation, conservation, burn, and fees. The asset-creation kernel also owns asset identity and one-shot supply (§11.6). An asset creator supplies no circuit or executable logic.
+The protocol kernels own ledger structure: exact slot classification, note-body construction, dummy padding, the private-value commitment, timestamp and amount bounds, note membership, namespace isolation, conservation, burn, and fees. The mint kernel also owns asset identity and enforces an asset's mint rule (§11.6), and the restricted kernels enforce its transfer rule (§11.8). An asset's only executable logic is these two rules: its mint rule, an application the mint kernel folds, and its optional transfer rule, an application the restricted kernels fold.
 
-A type `0x00` proof privately selects one of three kernels, each compiled for S and L:
+A type `0x00` proof privately selects one of five kernels, each compiled for S and L:
 
-* the **transfer** kernel (§11.4): one account owns every real input;
-* the **sponsored-transfer** kernel (§11.7): a contract account's asset action with a distinct user account paying the native fee;
-* the **asset-creation** kernel with optional native funding (§11.6): creates a new asset's supply.
+* the **transfer** kernel (§11.4): one account owns every real input, of native PCASH or an unrestricted asset;
+* the **sponsored-transfer** kernel (§11.7): a contract account's action on an unrestricted asset, with a distinct user account paying the native fee;
+* the **restricted transfer** and **restricted sponsored-transfer** kernels (§11.8): the same two relations for a restricted asset, each also folding the asset's transfer rule;
+* the **mint** kernel (§11.6): one account approves and funds a mint that the asset's mint rule allows.
 
-The hiding kernel accepts exactly these three kernel VKs. The selected kernel and application identities are private.
+Each profile's hiding kernel accepts exactly that profile's five kernel VKs. Every kernel returns the same statement for its profile and the proof has one size, so nothing public distinguishes them. The selected kernel and application identities are private.
 
 Every kernel that spends notes authenticates the relevant owner account, authenticates each selected installed entry, and links each application. For every real input slot it proves exact note membership, owner binding, amount range, asset namespace, and canonical nullifier. Application identity, account identity, note secrets, nullifier-key material, account openings, and amounts remain private inside the folded proof.
 
-Real-input witnesses cover every `ASSET` and `NATIVE` slot exactly once; the protocol kernel separately owns marker and dummy slots. One transaction may contain only one nonzero asset ID. All positive fees and native burns are funded by native notes. Contract-owned native inputs take the transfer kernel; the sponsored-transfer kernel does not reinterpret them as a user contribution. Native and asset actions with a zero open fee remain consensus-valid, and so do actions with a zero burn while the protocol fee is waived.
+Real-input witnesses cover every `ASSET` and `NATIVE` slot exactly once; the protocol kernel separately owns marker and dummy slots. One transaction may contain only one nonzero asset ID. All positive fees and native burns are funded by native notes. Contract-owned native inputs take the transfer, restricted transfer, or mint kernel; the sponsored kernels do not reinterpret them as a user contribution. Native and asset actions with a zero open fee remain consensus-valid, and so do actions with a zero burn while the protocol fee is waived.
 
 `assetBurnAmount` is a field of the private value: it changes the private-value commitment and is therefore available to any installed application that opens the private value, but it is not a public proof input. `nativeBurnAmount` is both: a public input that the node checks against the protocol fee, and a field of the private value that every application opening it can constrain.
 
-### 11.6 Standard fungible assets
+### 11.6 Assets
 
-Every nonzero asset is an instance of one semantic protocol law, the standard fungible asset: a fixed supply created once, then only transferred, split, merged, or burned. An asset's identity is a commitment to its immutable definition:
+Every nonzero asset follows one protocol law: its notes are minted only in transactions its definition's mint rule approves, then only transferred, split, merged, or burned, and, when the definition carries a transfer rule, they move only in transactions that rule approves. An asset's identity is the hash of its immutable definition:
 
 ```text
-assetSecretCommitment = poseidon(
-    ASSET_SECRET_COMMITMENT_DOMAIN, assetSecret)
+mintRuleCommitment = poseidon(ASSET_MINT_RULE_DOMAIN, sVkHash, lVkHash, configurationCommitment)
 
-assetId = poseidon(
-    ASSET_ID_DOMAIN,
-    metadataCommitment, initialSupply, assetSecretCommitment)
+transferRuleCommitment =
+    0                                                                                 // no transfer rule
+    poseidon(ASSET_TRANSFER_RULE_DOMAIN, sVkHash, lVkHash, configurationCommitment)   // transfer rule
+
+coreCommitment = poseidon(ASSET_CORE_DOMAIN, instanceSalt, metadataCommitment, mintRuleCommitment)
+assetId        = poseidon(ASSET_ID_DOMAIN, coreCommitment, transferRuleCommitment)
 ```
 
-* `assetSecret` and `metadataCommitment` may be any field elements and `initialSupply` any value in the range below, zero included. A zero metadata commitment is one more opaque value, and a zero supply creates the asset and its creation marker but no note.
-* `initialSupply <= 5 × (2^128 - 1)`, and the selected creation shape is valid only when its asset output slots can represent that supply.
-* There is no asset registry, transition VK, executable asset configuration, mutable supply object, public supply counter, or public asset-ID field.
+* `instanceSalt` and `metadataCommitment` may be any field elements. A zero metadata commitment is one more opaque value.
+* Every asset has a mint rule; a transfer rule is optional. Each rule is a pair of MegaApp VK hashes (§8.1), `sVkHash` and `lVkHash` for profiles S and L, and a `configurationCommitment` that is opaque to the protocol: the rule interprets it, as an account rule does its own (§5.2). A rule names one VK per profile so that a rule that opens the private value need not make profile S transactions pay for an L-sized circuit; a rule that never opens it, or that accepts the larger opening in S, may name the same VK for both. A zero hash leaves its profile unsupported: no VK hashes to zero, so no proof in that profile can fold the rule. The two rule commitments hash under different domains, so the same fields never name both.
+* There is no asset registry, mutable supply object, public supply counter, or public asset-ID field.
 
-**Asset definition.** The canonical definition opening of one standard asset is `standardFungibleAssetDefinition = (metadataCommitment, initialSupply, assetSecretCommitment)`, from which anyone recomputes `assetId`. It contains the asset-secret commitment rather than the secret, and grants no authority to create or spend. Wallets and applications MAY retain it privately to authenticate metadata, prove the immutable original supply, or establish lineage to a successor asset under Appendix A. Consensus never requires it to be public, and a successor application MAY identify a source asset by `assetId` alone.
+**Classes.** An asset is valid only in the class its transfer rule implies: `0 < assetId < 2^252` when `transferRuleCommitment = 0`, the unrestricted class, and `2^252 <= assetId < 2^253` otherwise, the restricted class (§11.3). The creator searches `instanceSalt` until the ID lands in its class, about three tries, since each class covers about a third of the field; anyone else recomputes the hash and checks the range. A kernel checks the restricted class as one range check of `assetId − 2^252` to 252 bits, under which a value below `2^252` wraps to one far too large to pass. Searching the salt keeps the asset ID the plain hash of its definition, at the cost of a few hashes to its creator. Each class holds about `2^252` values, so collision resistance within a class is about `2^126`.
 
-**Transfer and burn.** A nonzero asset is ordinary notes under its own namespace with a second conservation equation, so transfer and burn take the transfer kernel (§11.4) alongside native PCASH: it authenticates the account, opens every real input in either namespace, links the selected application, and enforces both conservation equations itself. There is no separate asset-transfer relation, and no definition opening is needed on transfer. The transfer kernel requires one to `I` asset inputs when the action carries an asset, no `ASSET_CREATION` marker, and zero to `O` asset outputs. It range-checks each note amount to 128 bits and enforces:
+**Asset definition.** The canonical definition opening of one asset is its `instanceSalt`, `metadataCommitment`, mint-rule opening (`sVkHash`, `lVkHash`, and `configurationCommitment`), and transfer-rule opening (none, or `sVkHash`, `lVkHash`, and `configurationCommitment`), from which anyone recomputes `assetId`. It grants no authority to mint or spend: a mint rule that authorizes by a secret holds only a commitment to it in its configuration. Wallets and applications MAY retain it privately to authenticate metadata, to show how an asset is minted and what its transfer rule is, or to establish lineage to a successor asset under Appendix A. Consensus never requires it to be public, and a successor application MAY identify a source asset by `assetId` alone. Moving an unrestricted asset needs none of the opening; moving a restricted asset needs `coreCommitment` and the transfer-rule opening; minting needs the mint-rule opening, `instanceSalt`, `metadataCommitment`, and `transferRuleCommitment`.
+
+A definition never changes: its asset ID fixes both rules' VK hashes and configuration commitments. A rule that must follow changing facts reads them through its recent block (§8.4), for example from an Ethereum contract's logs, under its fixed configuration. A mint rule may also leave each mint to one account it names, whose own rules can change (§12.3).
+
+**Mint markers.** Every mint publishes at least one marker in a `MINT` slot (§11.3):
+
+```text
+mintMarker = poseidon(MINT_MARKER_DOMAIN, assetId, replayId)
+```
+
+The kernel takes a private `replayId` for each `MINT` slot and does not interpret it. The mint action binds every nullifier of the private value (§8.3), so the mint rule and the minting account's rule, which both approve that action, fix the markers: a rule derives its own canonical replay IDs and opens the private value to require their markers, or approves the exact action that carries them. Every mint carries a marker so that a mint meant to happen once lands once: its approvals fix one replay ID for it, such as one per deposit or one for an entire fixed supply, so every retry or re-proof of that mint derives the same marker, whatever else changes between attempts, and the spent set accepts it once.
+
+Mint markers are scoped to the asset, not to an account and entry as `APPLICATION` markers are: a mint that must happen once must happen once whichever account submits it, and its replay state must survive changes to any account's rules and keys. Mints of one asset in S and L share them.
+
+**The mint kernel.** Minting has its own kernel, because it derives the asset identity from the definition and folds the asset's mint rule, which no transfer does:
+
+```text
+mint:
+    minting account's selected rule → mint rule → event application
+    → mint kernel → hiding kernel
+```
+
+The mint kernel requires no `ASSET` input and `assetBurnAmount = 0`. It:
+
+1. authenticates the minting `USER` or `CONTRACT` account and its selected rule entry against the recent account-state root;
+2. takes `instanceSalt`, `metadataCommitment`, the mint rule's `configurationCommitment` and its VK hash for the other profile, and `transferRuleCommitment` as witnesses, takes its own profile's VK hash from the mint rule it folds, derives `mintRuleCommitment` and `assetId` from them, and requires the class that `transferRuleCommitment` implies;
+3. constructs every asset output under `assetId`;
+4. derives every `MINT` marker (above) and requires at least one;
+5. accepts optional `NATIVE` inputs owned by the minting account and enforces `sum(native inputs) = sum(native outputs) + openFeeAmount + nativeBurnAmount`;
+6. enforces the minting account's `APPLICATION` markers exactly as the transfer kernel does (§11.3);
+7. supplies the mint action commitment (`MINT_ACTION_DOMAIN`, `extraData = assetId`, §8.3) and requires the selected rule's statement to name it (§8.2);
+8. requires the mint rule's statement to equal:
+
+   ```text
+   [mintContext, actionCommitment, recentPcashBlockHash, eventEntry]
+
+   mintContext = poseidon(ASSET_MINT_POLICY_DOMAIN, assetId, configurationCommitment,
+                          uint160(accountAddress), validUntilTimestamp)
+   ```
+
+`configurationCommitment` is the mint rule's, `accountAddress` is the authenticated minting account's, and `actionCommitment` is the mint action of step 7. `recentPcashBlockHash` and `eventEntry` are the transaction's (§8.2, §8.6). The kernel computes every field, so a mint rule cannot substitute another asset, configuration, account, deadline, action, recent block, or event. Deriving the asset ID from the mint rule's own VK hash binds the rule to the definition: a rule whose hash is not the definition's derives another asset.
+
+The minting account's rule and the mint rule approve the same mint action, which binds the complete private value, every marker and output included, so neither approval can be reused under another replay ID or for other outputs. The extra data binds the asset ID both approve to the one the kernel derives (§8.3). `validUntilTimestamp` is in the mint context so that a rule that needs only the account, its configuration, the recent block, and the deadline never opens the private value and can serve both profiles with one VK.
+
+The kernel bounds neither the amount minted nor the outputs; the mint rule does. A mint rule that leaves asset outputs unconstrained lets whoever satisfies it mint any amount, unless it names an account whose own rule bounds them. Supply policies differ, such as one issue of a fixed supply, an issuer's discretion, or one mint per Ethereum deposit, and a kernel that encoded them would need a branch for each and a protocol change for the next one. With the policy in the rule, one kernel serves every asset, and a holder learns how its asset is minted from the definition.
+
+The minting account approves the mint and funds it. The mint rule decides whether it matters which account that is: it may require one configured account, whose own rules then decide each mint, or accept any account, so that whoever holds what the rule requires, such as a voucher or a secret, submits the mint and pays its fee from its own notes. No account needs a balance for other parties' mints, so the mint kernel has no sponsored variant. A mint with no native input is valid when its open fee, native outputs, and native burn are all zero; its zero burn passes the fee check only while the protocol fee is waived (§14.5). It still authenticates an account and spends at least one marker.
+
+A transfer rule does not run on a mint: the mint's two approvals already fix every minted output.
+
+PCASH imposes no configuration schema or replay formula on a mint rule. The reference implementation's standard mint rules, a fixed supply minted once under a secret, minting at one configured account's discretion, and minting once per deposit to one Ethereum vault, are described with the [reference rules](../circuits/README.md#standard-mint-and-transfer-rules).
+
+**Transfer and burn.** A nonzero asset is ordinary notes under its own namespace with a second conservation equation, so transfer and burn take the same kernels as native PCASH: the transfer (§11.4) and sponsored-transfer (§11.7) kernels for an unrestricted asset, and their restricted variants (§11.8) for a restricted one. Each authenticates its accounts, opens every real input in either namespace, links the selected applications, and enforces both conservation equations itself. There is no separate asset-transfer relation, and a transfer of an unrestricted asset opens no definition. A transfer kernel requires one to `I` asset inputs when the action carries an asset, no `MINT` marker, and zero to `O` asset outputs. It range-checks each note amount to 128 bits and enforces:
 
 ```text
 sum(asset inputs)  = sum(asset outputs)  + transaction.assetBurnAmount
 sum(native inputs) = sum(native outputs) + openFeeAmount + nativeBurnAmount
 ```
 
-Conservation intermediates are bounded by the compiled slot capacities and each note's 128-bit amount: for L, each sum of notes is below `2^133` and a native output sum plus the fee and the burn is below `2^134`. The private-value commitment relation bounds `assetBurnAmount` below `2^131`. Asset sums also cannot exceed the fixed initial supply (§11.8), because the node rejects duplicate and spent nullifiers. All these quantities are strictly below the field modulus, so both equalities have their integer meanings. `assetBurnAmount` is not a separate relation witness: the kernel opens the value already bound by `privateValueCommitment`.
+Conservation intermediates are bounded by the compiled slot capacities and each note's 128-bit amount: for L, each sum of notes is below `2^133`, and each output sum plus the burn and fee it carries is below `2^134`. The private-value commitment relation bounds `assetBurnAmount` below `2^133`. Note size and slot counts bound these sums, not an asset's supply, which the protocol does not track. All these quantities are strictly below the field modulus, so both equalities have their integer meanings. `assetBurnAmount` is not a separate relation witness: the kernel opens the value already bound by `privateValueCommitment`.
 
 An asset is burned privately, through `assetBurnAmount`. Native PCASH is burned publicly, through `nativeBurnAmount`, which is also how it pays the protocol fee (§14.5); there is no private native burn. Because the burn is part of the statement a result commits (§7.3), an application can prove that a successful transaction burned at least a given amount.
 
-The transfer kernel proves that every real asset and native input belongs to its one authenticated account. Each real input must have a valid note opening; note witnesses in marker and dummy slots are unused. Inputs owned by different accounts fail in the transfer kernel and are admitted only by §11.7, which authenticates a second account for the single purpose of funding the fee. One account owns every real input to an asset-bearing transfer, and one selected installed rule authorizes its complete contribution against the exact action commitment. The rule may enforce commercial terms such as price, required PCASH recipients, royalties, redemption conditions, schedules, reserve proofs, or successor custody.
-
-**Asset creation.** Asset creation has its own kernel, because it derives the asset identity from its definition, fixes the initial supply, and consumes a one-shot marker, none of which an ordinary spend does:
-
-```text
-asset creation with optional native funding:
-    installed account authorization → event application
-    → asset-creation kernel → hiding kernel
-```
-
-The asset-creation kernel requires no asset input, exactly one `ASSET_CREATION` marker, and `assetBurnAmount = 0`. It:
-
-1. opens the asset definition and derives `assetSecretCommitment` from `assetSecret`;
-2. derives `assetId`, and opens every asset output under it;
-3. publishes the creation marker in the marker slot:
-
-   ```text
-   creationMarker = poseidon(ASSET_CREATION_MARKER_DOMAIN, assetId, assetSecret)
-   ```
-
-4. requires the sum of asset outputs to equal `initialSupply` exactly;
-5. supplies the asset-creation action commitment for that `assetId` (§8.3).
-
-The marker is scoped to the asset, not to the authorizing account and installed entry, because an asset's creation must be one-shot whoever creates it. The secret may be any field element. It authorizes the initial allocation and blinds the public marker, and through its commitment it makes each asset ID unique, so identical metadata and supply under different secrets are different assets. `assetId` fixes the secret, so every reshaped creation of the same asset derives the same marker and the global spent set accepts at most one. Creation makes the whole supply in one transaction, so this one marker per asset ID is the only uniqueness check an asset needs. Reusing a secret on an identical definition yields the same asset ID and marker, which only makes the creator's second creation fail. Because the secret is the asset's only creation authority (below), anyone who knows or guesses it and the definition can create the asset first; a creating wallet SHOULD draw a fresh random secret for each asset. Ordinary transfer, split, merge, and burn use real-note nullifiers and no creation marker. No later mint path exists.
-
-The asset-creation kernel also enforces the creating account's `APPLICATION` markers exactly as the transfer kernel does (§11.3). The creation marker stops only a second creation of the same asset, and another asset secret defines another asset. An application marker lets an installed rule allow at most one asset creation per fact, such as one asset per voucher or per L1 event, for that account and entry, given the rule's canonical `replayId`.
-
-Every asset creation folds one installed authorization application from an existing `USER` or `CONTRACT` account, whose account and exact rule VK are authenticated against the selected recent state. That application approves the asset-creation action (`ASSET_CREATION_ACTION_DOMAIN`, `extraData = assetId`, §8.3) of the exact asset-creation transaction, including its account's native funding and its issuance route. The extra data binds the asset ID the application approves to the one the kernel derives (§8.3). It does not decide who may create the asset: the asset secret is the only asset-specific authority, so whoever holds it can create the asset, with any allocation, from any account whose installed rule approves the transaction. The asset-creation kernel accepts optional native note funding owned by this same account and enforces `sum(native inputs) = sum(native outputs) + openFeeAmount + nativeBurnAmount`. With no native inputs, positive native outputs, fees, and burns are impossible.
+The transfer and restricted transfer kernels prove that every real asset and native input belongs to their one authenticated account. Each real input must have a valid note opening; note witnesses in marker and dummy slots are unused. Inputs owned by different accounts fail in those kernels and are admitted only by the sponsored kernels (§11.7), which authenticate a second account for the single purpose of funding the fee. One account owns every real input to an asset-bearing transfer, and one selected installed rule authorizes its complete contribution against the exact action commitment. The rule may enforce commercial terms such as price, required PCASH recipients, royalties, redemption conditions, schedules, reserve proofs, or successor custody.
 
 ### 11.7 Sponsored transfer
 
-In a transfer (§11.4) every real input belongs to the single authorizing account, so an action spending a contract's asset inventory must also be funded by the contract, not by the party who initiated it. This relation admits a second account in exactly one role: a user account supplies native PCASH for the open fee, the native burn, and one exact private relay output of a named contract account's asset action, and receives its own native change.
+In a transfer (§11.4) every real input belongs to the single authorizing account, so a contract's asset action must also be funded by the contract, not by the party who initiated it. The sponsored-transfer kernel and its restricted variant admit a second account in exactly one role: a user account supplies native PCASH for the open fee, the native burn, and one exact private native output of a named contract account's action, and receives its own native change.
 
-The relation:
+The sponsored-transfer relation:
 
 * authenticates two accounts and their selected installed rules under one account-state root, and requires the primary account's kind to be `CONTRACT` and the fee payer's kind to be `USER`. That root holds one account per address, so accounts of different kinds have different addresses;
 * partitions inputs by slot class: `ASSET` inputs and every `APPLICATION` marker belong to the primary account, and `NATIVE` inputs belong to the fee payer. At least one `NATIVE` input is required;
 * enforces `sum(asset inputs) = sum(asset outputs) + assetBurnAmount` and `sum(native inputs) = openFeeAmount + privateRelayAmount + nativeChangeAmount + nativeBurnAmount`;
-* permits at most one ordinary private native relay output and one native change output. Change must open to the fee payer's address `sponsorAddress`, as `poseidon(OWNER_COMMITMENT_DOMAIN, uint160(sponsorAddress), changeSecret)` for a private `changeSecret`. Any field element is accepted as that secret; choosing one with entropy is the payer's job. The sponsor's rule authorizes the exact relay amount and owner commitment through the private-value commitment;
-* admits no other native payment, no asset contribution from the fee payer, and no native input owned by the primary account. Payouts of the asset to third parties remain governed by the primary contract account's rule. An `ASSET_CREATION` marker is rejected.
+* permits at most two native outputs: one ordinary private relay output and one change output. The relay output may pay any owner commitment, a relayer's or a seller's; the sponsor's rule authorizes its exact amount and owner commitment through the private-value commitment. Change must open to the fee payer's address `sponsorAddress`, as `poseidon(OWNER_COMMITMENT_DOMAIN, uint160(sponsorAddress), changeSecret)` for a private `changeSecret`. Any field element is accepted as that secret; choosing one with entropy is the payer's job;
+* admits no other native payment, no asset contribution from the fee payer, and no native input owned by the primary account. Payouts of the asset to third parties remain governed by the primary contract account's rule. A `MINT` marker is rejected.
 
-The fee payer contributes no asset, owns no marker, and can lose at most `openFeeAmount + privateRelayAmount + nativeBurnAmount`. Exchange and every other multi-party settlement use application contracts and sequential actions rather than multi-owner type `0x00` proofs, because those require parties to contribute value to each other rather than only to the open fee and selected relay payment.
+The fee payer contributes no asset, owns no marker, and can lose at most `openFeeAmount + privateRelayAmount + nativeBurnAmount`.
 
-The two installed applications return their role-separated rule statements privately. The sponsored-transfer kernel authenticates both exact MegaApp VK hashes, links both rules and the event application, enforces the complete type `0x00` relation, and returns the same `I + O + 11`-field statement for the selected profile as the transfer and asset-creation kernels. The second account has no public identifier, transaction mode bit, or dedicated public input.
+**What settles in one transaction.** The relay output is the sponsor's only private payment. A user can therefore buy from a contract in one transaction: the contract's function releases the asset only when the private value pays the seller it names, the sponsor's relay output is that payment, and posting is paid by the open fee or the user posts the transaction itself. A mint rule can set the same condition on a mint, which the buyer's own account approves and funds (§11.6). The reverse does not settle in one transaction: a contract paying PCASH for a user's asset would need a native input of the primary contract and an asset input of the fee payer, and the sponsored kernels admit neither. Nor can two user accounts exchange in one transaction: a proof has one prover, who cannot spend two private parties' notes.
+
+The two installed applications return their role-separated rule statements privately. Each sponsored kernel authenticates both exact MegaApp VK hashes, links both rules and the event application, enforces the complete type `0x00` relation, and returns the same `I + O + 11`-field statement for the selected profile as every other type `0x00` kernel. The second account has no public identifier, transaction mode bit, or dedicated public input.
+
+The sponsored-transfer kernel moves only unrestricted assets: it requires the action's asset ID below `2^252` (§11.3). The restricted sponsored-transfer kernel enforces this same relation for a restricted asset and folds the asset's transfer rule after both rules, naming the primary contract, never the fee payer, as the owner whose transfer the rule approves (§11.8).
 
 **Role-separated action commitments.** The two rules approve the same private value in different roles (§8.3):
 
@@ -1393,22 +1433,60 @@ sponsorActionCommitment = poseidon(
     primaryContractAddress)
 ```
 
-The kernel requires the primary application to return `[authorizationCommitment(primaryContractAddress, primaryConfigurationCommitment), primaryActionCommitment, recentPcashBlockHash, eventEntry]` and the sponsor's application to return `[authorizationCommitment(sponsorAddress, sponsorConfigurationCommitment), sponsorActionCommitment, recentPcashBlockHash, eventEntry]` (§8.2). `primaryContractAddress` and `sponsorAddress` are the authenticated accounts' addresses, so a sponsorship approves paying only for the contract its rule names.
+Each kernel requires the primary application to return `[authorizationCommitment(primaryContractAddress, primaryConfigurationCommitment), primaryActionCommitment, recentPcashBlockHash, eventEntry]` and the sponsor's application to return `[authorizationCommitment(sponsorAddress, sponsorConfigurationCommitment), sponsorActionCommitment, recentPcashBlockHash, eventEntry]` (§8.2). `primaryContractAddress` and `sponsorAddress` are the authenticated accounts' addresses, so a sponsorship approves paying only for the contract its rule names. Both kernels supply the same two actions (§8.3).
 
 The separation is necessary. A primary rule might omit native constraints because this relation controls all native value. Replayed through the transfer kernel, where the primary account itself owns the native inputs, that rule would permit exactly the redirection this relation forbids. Separate domains make the two authorizations non-interchangeable: a transfer authorization cannot become a primary one, a primary authorization cannot spend the sponsor's notes, and sponsorship is never authority over application state or over another contract account.
 
-### 11.8 Nonzero-asset provenance invariant
+### 11.8 Restricted transfer kernels
 
-Every reachable nonzero-asset note descends from exactly one valid standard asset creation. The rules above prove this by induction:
+A restricted asset moves only through the restricted transfer and restricted sponsored-transfer kernels. Each is its unrestricted counterpart's relation, the transfer (§11.4) or sponsored-transfer (§11.7) relation, plus one more folded application: the asset's transfer rule, the application its definition names for the transaction's profile (§11.6).
+
+```text
+restricted transfer:
+    owner's selected rule → transfer rule → event application
+    → restricted transfer kernel → hiding kernel
+
+restricted sponsored transfer:
+    primary contract's rule → fee payer's rule → transfer rule → event application
+    → restricted sponsored-transfer kernel → hiding kernel
+```
+
+Beyond its counterpart's relation, a restricted kernel:
+
+1. takes `coreCommitment`, `configurationCommitment`, and the other profile's VK hash as witnesses, takes its own profile's VK hash from the transfer rule it folds, derives `transferRuleCommitment` and `assetId` from them, and requires the restricted class;
+2. requires at least one real `ASSET` input, so its account membership is unconditional: no all-padding action takes a restricted kernel;
+3. requires the transfer rule's statement to equal:
+
+   ```text
+   [transferContext, actionCommitment, recentPcashBlockHash, eventEntry]
+
+   transferContext = poseidon(ASSET_POLICY_DOMAIN, assetId, configurationCommitment,
+                              uint160(ownerAddress), validUntilTimestamp)
+   ```
+
+`ownerAddress` is the authenticated owner of the asset inputs: the one account of a restricted transfer, or the primary contract of a restricted sponsored transfer, never its fee payer. `actionCommitment` is that owner's action: the transfer action, or the primary contract's sponsored-transfer action (§8.3). `recentPcashBlockHash` and `eventEntry` are the transaction's (§8.2, §8.6). The kernel computes every field, so a transfer rule cannot substitute another asset, configuration, owner, deadline, action, recent block, or event. Deriving the asset ID from the transfer rule's own VK hash binds the rule to the definition: a rule whose hash is not the definition's derives another asset ID, under which the inputs do not open.
+
+The action commitment binds the complete private value, so a rule may check recipients, amounts, burns, and fees by opening it, as an account rule does (§8.2). `validUntilTimestamp` is also in the transfer context so that a rule that needs only the owner, its configuration, the recent block, and the deadline never opens the private value and can serve both profiles with one VK. The rule takes the asset ID from the context rather than from its configuration, which the asset ID hashes over and so cannot contain.
+
+The transfer rule has its own application rather than sharing the event's: an event is a claim the sender attaches for its counterparties, and a transfer rule is a constraint the issuer imposes. With one application for both, a holder could not attach an event its counterparty requires to a transfer of a restricted asset. The transfer rule receives the event entry, so it may require a particular event or pass the entry through.
+
+A burn is a transfer, so a restricted asset's rule governs its burns too. The cost is one more folded application on every transfer of a restricted asset; a transfer of an unrestricted asset pays only the class range check (§11.3).
+
+PCASH imposes no configuration schema on a transfer rule. The reference implementation's standard transfer rule, which refuses a transfer from an address on a deny list its issuer publishes through an Ethereum contract, is described with the [reference rules](../circuits/README.md#standard-mint-and-transfer-rules).
+
+### 11.9 Nonzero-asset provenance invariant
+
+Every reachable nonzero-asset note descends from a mint of its asset that its definition's mint rule approved, and restricted value moves only through kernels that verify its transfer rule. The rules above prove this by induction:
 
 * Genesis and every canonical reconstruction begin with no nonzero-asset note.
-* Standard asset creation is the only relation that may create a nonzero-asset output without consuming a nonzero-asset input, and it authenticates the complete definition and derived asset ID.
-* Every transfer or sponsored transfer with a nonzero asset requires at least one real asset input and constructs every asset output using exactly that input's asset ID.
-* Account creation, account update, and every relation other than asset creation cannot create nonzero-asset value without consuming it.
+* The mint kernel is the only relation that may create a nonzero-asset output without consuming a nonzero-asset input. It derives the asset ID from the definition with the VK hash of the mint rule it folds, requires the class the definition's transfer rule implies, and requires that rule's statement over the asset, its configuration, the minting account, and the exact mint action.
+* Every transfer kernel with a nonzero asset requires at least one real asset input and constructs every asset output using exactly that input's asset ID.
+* The transfer and sponsored-transfer kernels accept only asset IDs below `2^252`. The restricted kernels accept only asset IDs in `[2^252, 2^253)`, which they derive from the transfer rule they fold. A definition's class follows from its transfer rule, so a restricted asset's notes open only in kernels that verify that rule.
+* Account creation, account update, and every relation other than the mint kernel cannot create nonzero-asset value without consuming it.
 
-Checkpoint restore, restart, reorg replay, and fresh reconstruction MUST reproduce outputs through canonical transaction execution; they MUST NOT admit independent output-tree contents that bypass this invariant. Conformance testing MUST attempt nonzero-asset creation through every non-asset relation and require it to be rejected.
+Checkpoint restore, restart, reorg replay, and fresh reconstruction MUST reproduce outputs through canonical transaction execution; they MUST NOT admit independent output-tree contents that bypass this invariant. Conformance testing MUST attempt nonzero-asset creation through every relation other than the mint kernel, and restricted-asset movement through every unrestricted kernel, and require both to be rejected.
 
-The standard law fixes fungible transfer and burn semantics. The creator has no later mint, freeze, pause, clawback, blacklist, transfer-tax, receiver-hook, or administrative-spend path. Controlled distribution is ordinary contract custody: asset creation may create notes owned by a contract, and later movement of those notes must satisfy one installed rule capable of authorizing the contract's complete contribution. Contract conditions apply only while the contract owns the notes.
+The asset law fixes fungible transfer and burn semantics. A mint rule may allow new units, and a transfer rule may refuse transfers; neither can move or erase a holder's notes. There is no clawback, receiver-hook, or administrative-spend path. Controlled distribution is ordinary contract custody: a mint may create notes owned by a contract, and later movement of those notes must satisfy one installed rule capable of authorizing the contract's complete contribution. Contract conditions apply only while the contract owns the notes.
 
 ## 12. Account Transactions
 
@@ -1644,7 +1722,7 @@ A nonzero issuance commitment requires `openFeeAmount = 0`, and a positive open 
 
 The open fee and issuance settle into separate native notes (§14.3). A selected relayer is paid from an ordinary output and may separately receive issuance through the designated commitment on an eligible action. Self-publication uses a zero open fee and no relay-payment output, and an eligible action may designate the wallet's own one-time issuance commitment.
 
-**Who pays.** A user-account update spends the updated account's own notes (§12.3). Standalone contract creation pays no PCASH and requires a zero base fee (§12.4); an attached creation shares the carrying value transaction’s fee and outcome. Subsequent contract actions may pay from contract-owned native notes without any user initiator. The two-account sponsorship relation (§11.7) bounds the sponsor's contribution to the open fee, the native burn, one exact ordinary relay output, and the sponsor's change, without granting authority over the primary account's value.
+**Who pays.** A user-account update spends the updated account's own notes (§12.3). Standalone contract creation pays no PCASH and requires a zero base fee (§12.4); an attached creation shares the carrying value transaction’s fee and outcome. Subsequent contract actions may pay from contract-owned native notes without any user initiator. The two-account sponsored transfer (§11.7) bounds the sponsor's contribution to the open fee, the native burn, one exact ordinary relay output, and the sponsor's change, without granting authority over the primary account's value.
 
 ## 14. Native Issuance and Block Settlement
 
@@ -1877,8 +1955,8 @@ These pins fix the proof system used in consensus verification (§8.1). Every ot
 
 | Transaction | Protocol kernels | Hiding-kernel VK | Posted proof bytes |
 |---|---|---|---:|
-| `0x00`, profile S | transfer, sponsored transfer, and asset creation (§11.5) | `private_value_hiding_kernel` | 22,432 |
-| `0x00`, profile L | the same three, compiled for L | `private_value_large_hiding_kernel` | 22,432 |
+| `0x00`, profile S | transfer, sponsored transfer, restricted transfer, restricted sponsored transfer, and mint (§11.5) | `private_value_hiding_kernel` | 22,432 |
+| `0x00`, profile L | the same five, compiled for L | `private_value_large_hiding_kernel` | 22,432 |
 | `0x03` | user-account update (§12.3) | `user_account_update_hiding_kernel` | 22,432 |
 
 The posted proof body length excludes the statement words, includes the 28 accumulator words (§8.1), and is a framing rule: a private-value section carries exactly this many proof bytes with no length prefix, so the length fixes where the output data begins (§10.3).
@@ -1892,8 +1970,8 @@ A hiding-kernel VK is 119 field elements (§8.1). Its pin is the SHA-256 of thos
 | Barretenberg release | `6.0.0` |
 | BN254 `[x]_2` element compiled into the verifier, SHA-256 | `0x01797bfc4de5a96f0e516a9ea4537d18786dc30cb991aca4274c95822b69c32f` |
 | Grumpkin SRS, first 65,536 points, SHA-256 | `0x64236c9455e75aeea77a94587ea607eed2e978d2609a421d66bf10bb9698b8fd` |
-| `private_value_hiding_kernel` VK, SHA-256 | `0xc328f85d91f5f2349ea4109b9175300aa1de537541d2279e2a62622cbb2d9c98` |
-| `private_value_large_hiding_kernel` VK, SHA-256 | `0xbece75427dac00c15d3c78a034fe3dbcebf6fd5cfc55b0d0b835b015cd54d4ef` |
+| `private_value_hiding_kernel` VK, SHA-256 | `0x70b3e5cb229ccd1d71e74876cf198b31c628c65f22fb42f8a93e328aa645b8c5` |
+| `private_value_large_hiding_kernel` VK, SHA-256 | `0x8b9d9902760360cdaf5169f36c7622e1b86f0159586bfc6c7893d5fe8d29e375` |
 | `user_account_update_hiding_kernel` VK, SHA-256 | `0x489a50a33b7834d0b0458befd00092e408c908d0cacc8b074838eb50041627ca` |
 
 ## 17. Conformance Vectors
@@ -1906,7 +1984,7 @@ The protocol conformance vectors, published with the reference implementation, a
 * `merkle_vectors.json`: the empty ladder and roots, plus worked least-significant-bit-first membership examples for §2.4.
 * `blob_codec.json`: blob counts and per-blob SHA-256 digests of canonical blob encodings at boundary payload lengths, for §9.2.
 * `issuance.json`: exact curve, lag, and settlement transitions, exponent quantization boundaries, rounding boundaries, saturation, terminal state, and dust (§14).
-* `protocol_vectors.json`: chain-neutral note and dummy nullifiers; the private-value commitment; standard asset identity, creation, and transfer; authorization commitments; the action commitment of each action domain; the account update commitment and its complete unified account-state-commitment operands; account state commitments without a receive key and with the digest of an exact receive key; the output-data hash of an exact item, the hash of an exact arena, and the delivery commitment over them; reference output-note-secret derivation; designated-issuance and poster recovery; the nullifier tree; account-rule entries; the genesis parent hash; Ethereum and PCASH history leaves and trees, with an Ethereum block hash above `p`; carrier context hashes of an Inbox sender and of carrier events with contexts on both sides of the eight-chunk minimum; a transaction ID; transaction statements, transaction and payout result leaves, and the transaction-results root; typed StateRoot and header openings; the block hash; and contract-address derivation.
+* `protocol_vectors.json`: chain-neutral note and dummy nullifiers; the private-value commitment; a mint-rule commitment, the identity of an unrestricted and of a restricted asset under it, a mint marker, a mint context, a transfer context, and an asset transfer; authorization commitments; the action commitment of each action domain; the account update commitment and its complete unified account-state-commitment operands; account state commitments without a receive key and with the digest of an exact receive key; the output-data hash of an exact item, the hash of an exact arena, and the delivery commitment over them; reference output-note-secret derivation; designated-issuance and poster recovery; the nullifier tree; account-rule entries; the genesis parent hash; Ethereum and PCASH history leaves and trees, with an Ethereum block hash above `p`; carrier context hashes of an Inbox sender and of carrier events with contexts on both sides of the eight-chunk minimum; a transaction ID; transaction statements, transaction and payout result leaves, and the transaction-results root; typed StateRoot and header openings; the block hash; and contract-address derivation.
 * `account_sections/`: attached contract creation and user-account update wire examples, with twenty- and twenty-one-word statements respectively. Both include the derived delivery commitment and zero issuance; the attached creation commits its tagged body, while the update supplies a zero attachment commitment and appends its update commitment. Proofs and delivery data are placeholders for decoding and statement reconstruction.
 
 JSON is only a transport and display container; no commitment consumes JSON bytes. `genesisHash` is derived from canonical block `0` and binds the network configuration (§7.7). Example-rule and reference-implementation vectors are documented with their respective components and are not protocol conformance vectors.
@@ -1939,9 +2017,9 @@ legacyNativeDebit       <= nativeIssuanceEnvelope_H
 
 A release MAY temporarily quarantine predecessor-native value, but MUST NOT describe canonical native continuity as completed unless it provides a deterministic, permissionless, trustless predecessor-native claim path. That path MAY reveal the amount charged to the capacity; it MUST NOT require disclosure of the source commitment, source account, claimant, recipient, or unrelated balances. Admitted value is ordinary native PCASH: its later validity MUST NOT depend on which predecessor claim funded it, and it is not subject to a provenance clawback. The envelope provides containment, not restitution. Indistinguishable counterfeit claims may exhaust it before legitimate claims. Incident-specific rules MAY prioritize claims established by independently trustworthy facts, such as membership below a defect boundary, but every admitted amount still counts against the capacity.
 
-**Standard non-native assets.** A nonzero `assetId` is an immutable identity. A successor MUST NOT assign it different semantics, supply, metadata, or ownership history, and MUST NOT recognize predecessor value under an existing nonzero `assetId`; such notes MAY remain quarantined under their original identifier, and migration to a fresh asset is the only continuation path. Any party MAY create a fresh standard asset with a bounded inventory owned by an immutable contract account whose installed application releases that inventory against predecessor-note claims. That application defines its own eligibility criteria, including a basis earlier than `H` and the exclusion of later outputs and their descendants. Its fixed supply bounds its payouts under any criteria, it requires no reset, and it MAY exist within a generation. Each predecessor claim MUST be accepted at most once per such account, and recognizing it grants the predecessor asset no authority over the successor asset. Consensus does not choose which candidate, if any, carries a predecessor asset's identity.
+**Non-native assets.** A nonzero `assetId` is an immutable identity. A successor MUST NOT assign it different semantics, mint rule, transfer rule, metadata, or ownership history, and MUST NOT recognize predecessor value under an existing nonzero `assetId`; such notes MAY remain quarantined under their original identifier, and migration to a fresh asset is the only continuation path. Any party MAY create a fresh asset whose mint rule mints a fixed supply once, as a bounded inventory owned by an immutable contract account whose installed application releases that inventory against predecessor-note claims. That application defines its own eligibility criteria, including a basis earlier than `H` and the exclusion of later outputs and their descendants. Its fixed supply bounds its payouts under any criteria, as a mint rule without a supply bound could not, whatever mint rule the predecessor asset had. It requires no reset, and it MAY exist within a generation. Each predecessor claim MUST be accepted at most once per such account, and recognizing it grants the predecessor asset no authority over the successor asset. Consensus does not choose which candidate, if any, carries a predecessor asset's identity.
 
-**This protocol.** This protocol needs no generation field, inherited-value counter, asset registry, migration transaction, or state leaf to satisfy this criterion. Indexed note commitments and canonical nullifiers (§4.3), typed terminal state (§6.5), exact retained transaction bytes (§7.8), permanent transaction-type meanings (§3.2), the gross issuance counter (§6.5, §14), and the immutable standard-asset definition (§11.6) supply every predecessor fact above without accepting a predecessor proof.
+**This protocol.** This protocol needs no generation field, inherited-value counter, asset registry, migration transaction, or state leaf to satisfy this criterion. Indexed note commitments and canonical nullifiers (§4.3), typed terminal state (§6.5), exact retained transaction bytes (§7.8), permanent transaction-type meanings (§3.2), the gross issuance counter (§6.5, §14), and the immutable asset definition (§11.6) supply every predecessor fact above without accepting a predecessor proof.
 
 ## Appendix B. Reference Conventions
 
@@ -2107,12 +2185,24 @@ Records are ordered lexicographically by their identifier bytes, so standard rec
 | Type | Data | Regions |
 |---|---|---|
 | 1 — memo | UTF-8 text | recipient, sender |
-| 2 — asset definition | the definition opening of §11.6 with its metadata: `1 (1) ‖ initialSupply (17) ‖ assetSecretCommitment (32) ‖ nameLength (1) ‖ name ‖ symbolLength (1) ‖ symbol ‖ decimals (1) ‖ contentDigest (32)` | recipient, sender |
+| 2 — asset definition | the definition opening of §11.6 with its metadata and rule configurations, `assetDefinition` below | recipient, sender |
 | 3 — claimed sender | a 20-byte address, unauthenticated | recipient, sender |
 | 4 — sent envelopes | per envelope: `slotAndFlags (1) ‖ ss (32) ‖ recipientAddress (20)` | sender |
 | 5 — sent openings | per output: `slotAndFlags (1) ‖ recipientAddress (20) ‖ assetId (32) ‖ amount (16) ‖ noteSecret (32)` | sender |
 | 6 — direct-send openings | per opening: `version (1) ‖ chainId (4) ‖ contentHash (32) ‖ slot (1) ‖ owner (20) ‖ amount (16) ‖ noteSecret (32)` | sender |
 | application ID | opaque | recipient, sender, public |
+
+```text
+assetDefinition = 1 (1) ‖ instanceSalt (32) ‖ mintRule ‖ transferRule ‖
+                  nameLength (1) ‖ name ‖ symbolLength (1) ‖ symbol ‖ decimals (1) ‖ contentDigest (32)
+mintRule        = rule
+transferRule    = 0 (1)
+                | 1 (1) ‖ rule
+rule            = sVkHash (32) ‖ lVkHash (32) ‖ configurationCommitment (32) ‖
+                  configurationLength (1) ‖ configuration
+```
+
+An asset definition recomputes its asset ID, so a holder can check its metadata, mint rule, and transfer rule against the asset ID alone and can prove a restricted asset's transfers (§11.6). Each `configuration` is its rule's own opening of its configuration commitment, at most 64 bytes, which a wallet interprets only for a rule it recognizes; it holds no mint authority, so a mint rule that authorizes by a secret carries only the secret's commitment there.
 
 In a sent-envelope entry, the low seven bits of `slotAndFlags` encode the slot and the high bit marks records-only recovery: its records are recovered but its note is excluded from paid-output history. In a sent-opening entry, the high bit marks a direct send. The decoded slot must be below the selected profile’s output count. Every envelope carrying explicitly addressed records has a sent-envelope entry, including reused relay-fee and change envelopes, except a direct send's, whose flagged sent opening derives its key. Entries in sent-envelope and sent-opening records are in strictly ascending slot order, ignoring the flag bit; direct-send openings are in strictly ascending byte order. A standard type outside its region's column invalidates the region, and any standard type invalidates the public segment. A recipient's records are those of its region: a record sent to several recipients is copied into each of their regions, so no recipient learns that another received it. An unavailable record never invalidates a note: the envelope alone delivers the opening. A delivered asset definition is associated with a note only if it derives that note's asset ID; transaction data remains independent of note metadata. Recovery records are wallet-managed and cannot be supplied as application records.
 

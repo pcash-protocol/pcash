@@ -1,14 +1,13 @@
 import { Link, Route, Routes } from "react-router-dom";
 import { resolveDocumentHref } from "./documentLinks.ts";
 import { DocumentPage } from "./DocumentPage.tsx";
-import { LearnPage } from "./LearnPage.tsx";
 import { Metadata } from "../Metadata.tsx";
-import { publicDocuments } from "./publicDocuments.ts";
+import { DOCS_PATH, publicDocuments } from "./publicDocuments.ts";
 import { documentSource } from "./sources.ts";
 import { routeById } from "../routeManifest.ts";
 import styles from "./DocsRoute.module.css";
 
-const learnRoute = routeById("learn");
+const docsRoute = routeById("docs");
 
 const documents = publicDocuments.map(({ id, file, contentsDepth }) => ({
   route: routeById(id),
@@ -19,8 +18,7 @@ const documents = publicDocuments.map(({ id, file, contentsDepth }) => ({
 
 export default function DocsRoute() {
   return <Routes>
-    <Route index element={<LearnPage />} />
-    {documents.map(({ route, source, contentsDepth, resolveHref }) => <Route key={route.id} path={route.path.slice(learnRoute.path.length + 1)} element={<DocumentPage route={route} source={source} contentsDepth={contentsDepth} resolveHref={resolveHref} />} />)}
-    <Route path="*" element={<section className={styles.notFound}><Metadata title="Documentation page not found" description="The requested PCASH documentation page does not exist." /><h1>Documentation page not found.</h1><Link to={learnRoute.path}>Browse the explanations</Link></section>} />
+    {documents.map(({ route, source, contentsDepth, resolveHref }) => <Route key={route.id} path={route.path.slice(DOCS_PATH.length + 1)} element={<DocumentPage route={route} source={source} contentsDepth={contentsDepth} resolveHref={resolveHref} />} />)}
+    <Route path="*" element={<section className={styles.notFound}><Metadata title="Documentation page not found" description="The requested PCASH documentation page does not exist." /><h1>Documentation page not found.</h1><Link to={docsRoute.path}>See all docs</Link></section>} />
   </Routes>;
 }

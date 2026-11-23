@@ -40,7 +40,7 @@ export async function resolveHashMatches(reader: ExplorerReader, hash: string): 
   if (summary !== undefined) {
     found.push({
       label: "Transaction",
-      detail: `${formatKind(summary.kind)} · ${outcomeLabel(summary.outcome)}`,
+      detail: `${formatKind(summary.kind, summary.accountCreation)} · ${outcomeLabel(summary.outcome)}`,
       path: transactionPath(hash),
     });
   }

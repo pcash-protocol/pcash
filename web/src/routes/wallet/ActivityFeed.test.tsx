@@ -44,7 +44,7 @@ vi.mock("@pcash/marketplace/app", async (original) => ({
   publicationIdentity: (publication: { terms: { id: string } }) => publication.terms.id,
   publicationContractAddress: () => `0x${"cc".repeat(20)}`,
 }));
-vi.mock("../../names/useEthereumName.ts", () => ({ useEthereumNameResolver: () => undefined, useEthereumName: () => undefined, useNameAddress: () => ({ state: "unresolved" }) }));
+vi.mock("../../names/useEthereumName.ts", () => ({ useEthereumNameResolver: () => undefined, useCurrentNameResolver: () => () => undefined, useEthereumName: () => undefined, useNameAddress: () => ({ state: "unresolved" }) }));
 vi.mock("../../lib/useNativeActivity.ts", () => ({ useNativeActivity: () => ({ activity: state.activity, failed: false, checking: false }) }));
 vi.mock("../../components/NetworkContext.tsx", () => ({ useNetwork: () => ({ network: { l1ChainId: 1, pcashChainId: 1, genesisHash: "0xgenesis" } }) }));
 vi.mock("../../lib/usePendingTransactionState.ts", () => ({ usePendingTransactionState: (contentHash: string | undefined) => ({ data: contentHash === undefined || state.observed[contentHash] === undefined ? undefined : { state: state.observed[contentHash] } }) }));
@@ -182,7 +182,7 @@ describe("activity feed", () => {
   it("shows a memo and a claimed sender on a line under the row's title", () => {
     withState({ activity: { state: "ready", pcashHash: "head", pcashNumber: 9n, entries: [
       { transactionId: `0x${"cd".repeat(32)}`, direction: "received", amount: 2n * PCASH, blockNumber: 8n, blockHash: "0xpaid", timestamp: 90n, commitments: [], payout: null,
-        messages: [{ memo: new TextEncoder().encode("Thanks"), sender: BigInt(`0x${"56".repeat(20)}`) }] },
+        messages: [{ amount: 2n * PCASH, memo: new TextEncoder().encode("Thanks"), sender: BigInt(`0x${"56".repeat(20)}`) }] },
     ] }, payments: [payment({ memo: "Lunch", includeSender: true })] }, () => {
       const markup = html();
       expect(markup).toMatch(/<\/span><small[^>]*><span>“Lunch”<\/span><\/small>/);

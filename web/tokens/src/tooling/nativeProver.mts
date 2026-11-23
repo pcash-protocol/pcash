@@ -2,7 +2,7 @@
 // CHONK stack for Node hosts, tests, and end-to-end scenarios.
 
 import { createReleaseChonkCircuitResolver, nativeChonkBackend } from "@pcash/sdk/node";
-import { proveTransferTransactionChonk, proveSponsoredTransferChonk } from "@pcash/sdk/prover";
+import { proveRestrictedTransferChonk, proveSponsoredTransferChonk, proveTransferTransactionChonk } from "@pcash/sdk/prover";
 import type { AssetActionBuild } from "@pcash/sdk/builders";
 import type { AssetProver } from "@pcash/sdk/browser-prover/requests";
 import { PRIVATE_VALUE_PROFILES } from "@pcash/sdk/constants";
@@ -14,7 +14,7 @@ function packageOf(circuitUrl: string): string {
   return match[1]!;
 }
 
-/** Proves S template actions, unsponsored or sponsored, from the active circuit bundle. */
+/** Proves S template actions, unsponsored, restricted, or sponsored, from the active circuit bundle. */
 export function nativeTokensProver(options: { threads?: number } = {}): AssetProver {
   const backend = nativeChonkBackend(options.threads);
   const resolve = createReleaseChonkCircuitResolver({ backend });
@@ -30,12 +30,22 @@ export function nativeTokensProver(options: { threads?: number } = {}): AssetPro
           resolve,
           backend,
         });
+      } else if (args.operation === "restricted-transfer") {
+        result = await proveRestrictedTransferChonk({
+          // The restricted-transfer stack reads only the shape, the statement, and the kernel witness.
+          build: { ...statement, buildRestrictedKernelWitnessMap: args.buildKernelWitnessMap } as unknown as AssetActionBuild,
+          authorization: { packageName: packageOf(args.authorization.circuitUrl), witnessMap: args.authorization.witnessMap },
+          policy: { packageName: packageOf(args.policy.circuitUrl), witnessMap: args.policy.witnessMap },
+          resolve,
+          backend,
+        });
       } else if (args.operation === "sponsored-transfer") {
         result = await proveSponsoredTransferChonk({
           // The sponsored-transfer stack reads only the shape and the statement.
           build: statement as AssetActionBuild,
           primary: { packageName: packageOf(args.primary.circuitUrl), witnessMap: args.primary.witnessMap },
           feePayer: { packageName: packageOf(args.feePayer.circuitUrl), witnessMap: args.feePayer.witnessMap },
+          ...(args.policy === undefined ? {} : { policy: { packageName: packageOf(args.policy.circuitUrl), witnessMap: args.policy.witnessMap } }),
           buildKernelWitnessMap: args.buildKernelWitnessMap,
           resolve,
           backend,

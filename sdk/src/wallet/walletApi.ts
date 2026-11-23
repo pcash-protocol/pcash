@@ -14,6 +14,7 @@ export {
   type WalletBulkRecoveryChunk,
   type WalletBulkRecoveryRecipient,
   type WalletClientOptions,
+  type WalletDepositMintIntent,
   type WalletDirectSend,
   type WalletExecutionContext,
   type WalletNoteFilter,
@@ -60,6 +61,7 @@ export {
 } from "./actions/walletRuntime.ts";
 export type { AssetActionSubmissionResult } from "./actions/assetActionClient.ts";
 export type { AssetSendOutput } from "./actions/assetTransferClient.ts";
+export type { WalletDeposit } from "./actions/depositMintClient.ts";
 export type { BulkJobRecoveryIntent, BulkJobStep } from "./actions/bulkJobClient.ts";
 export {
   controlsSystemPayout,
@@ -75,6 +77,11 @@ export {
   type DirectSendFunding,
   type WalletReceivedDirectSend,
 } from "./directSends.ts";
+export {
+  inspectPaymentDisclosure,
+  type DisclosedPayment,
+  type PaymentDisclosure,
+} from "./paymentDisclosure.ts";
 export {
   isWalletSyncConflict,
   retryWhileSyncConflict,
@@ -128,6 +135,7 @@ export type {
   WalletProfileWithReceiveKeys,
 } from "@pcash/sdk/protocol";
 export type { PendingUserAccountCreation } from "./noteStore.ts";
+export { unopenableRuleReason } from "./noteStore.ts";
 export {
   assertPcashProfileMatchesAccount,
   assertPcashProfileMatchesAccountIdentity,

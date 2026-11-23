@@ -17,7 +17,7 @@ vi.mock("@pcash/sdk/browser-prover", () => ({
   normalizeProverThreads: () => 8,
   PROTOCOL_CIRCUIT_PROFILES: {
     "/prover/private_value_transfer_kernel.json": { srsPoints: 2 ** 18 },
-    "/prover/account_rule_asset_creation_ecdsa.json": { srsPoints: 2 ** 19 },
+    "/prover/account_rule_mint_ecdsa.json": { srsPoints: 2 ** 19 },
   },
   resolveBrowserProverAssetSource: () => ({ assetSetId: "test", baseUrl: "https://assets.invalid/" }),
 }));
@@ -64,19 +64,28 @@ describe("browser wallet provers", () => {
     expect(fake.destroy).toHaveBeenCalledOnce();
   });
 
-  it("upgrades the worker only when asset creation needs a larger SRS", async () => {
+  it("upgrades the worker only when a mint needs a larger SRS", async () => {
     fake.proveTransfer.mockResolvedValue({ proof: Uint8Array.of(2), publicInputs: [] });
     fake.proveAssetAction.mockResolvedValue({ proof: Uint8Array.of(3), publicInputs: [] });
     const provers = createBrowserWalletProvers({ node: { rpcUrl: "https://node.invalid/rpc" }, proverAssets: null });
     await provers.privateValue.proveAndEncode(build);
-    const creation = {
+    const mint = {
       ...build,
-      buildAssetCreationKernelWitnessMap: () => ({}),
+      buildMintKernelWitnessMap: () => ({}),
     } as unknown as Parameters<typeof provers.assetCreation.proveAndEncode>[0];
-    await provers.assetCreation.proveAndEncode(creation, {});
+    const mintRule = { packageName: "mint_rule_fixed_supply", witnessMap: { secret: "0x1" } };
+    await provers.assetCreation.proveAndEncode(mint, {}, mintRule);
     await provers.privateValue.proveAndEncode(build);
     expect(fake.createSession.mock.calls.map(([profile]) => profile.srsPoints)).toEqual([2 ** 18, 2 ** 19]);
     expect(fake.destroy).toHaveBeenCalledOnce();
+    expect(fake.proveAssetAction.mock.calls[0]![0]).toMatchObject({
+      operation: "mint",
+      authorization: { circuitUrl: "/prover/account_rule_mint_ecdsa.json" },
+      mintRule: { circuitUrl: "/prover/mint_rule_fixed_supply.json", witnessMap: mintRule.witnessMap },
+    });
+    await expect(provers.assetCreation.proveAndEncode(mint, {}, { packageName: "mint_rule_custom", witnessMap: {} }))
+      .rejects.toThrow(/native proving/);
+    expect(fake.proveAssetAction).toHaveBeenCalledOnce();
     provers.destroy();
   });
 

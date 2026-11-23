@@ -1,4 +1,4 @@
-# PCASH: Private Money Ethereum Can Program
+# PCASH: Programmable Private Money Secured by Ethereum
 
 # Abstract
 
@@ -27,7 +27,7 @@ Ethereum has shown how much people build when money is programmable. PCASH bring
 
 A few things PCASH makes possible:
 
-* **Private dollars.** A dollar stablecoin whose holders can be paid, pay suppliers, and save without publishing their balances or payment history. The issuer releases units as dollars arrive, redeems them later, and can refuse stolen funds at redemption, wherever they have moved, by requiring a proof of where redeemed units came from ([Building on PCASH](guides/building-on-pcash.md#recipe-6-private-dollars)).
+* **Private dollars.** A dollar stablecoin whose holders can be paid, pay suppliers, and save without publishing their balances or payment history. Units are minted as dollars arrive, and the issuer redeems them later and can freeze an address so that stolen funds cannot move from it ([Private Dollars](guides/private-dollars.md)).
 * **A market for PCASH and ETH.** Buyers and sellers trade directly through PCASH escrow contracts, with no custodian ([Trading PCASH for ETH](#trading-pcash-for-eth)). The reference marketplace works this way.
 * **Ethereum apps that move private money.** An auction, a vote, or a deposit contract on Ethereum can decide when PCASH held in a PCASH contract is released.
 * **Money with a verified history.** A PCASH contract can release funds only when they carry a private certificate that they come from approved sources, without anyone learning who sent them.
@@ -76,13 +76,13 @@ The state every node keeps forever has a price of its own. While use stays below
 
 ## Assets Anyone Can Create
 
-Anyone with a PCASH account can create a private asset with its own name and a fixed supply, such as a private dollar or a token, and people hold and send it with the same privacy as PCASH. The network cannot even see which asset moved, so the holders of every asset share one crowd. No one can mint more of an asset, freeze it, or take it back, and the same rules and PCASH contracts that govern PCASH govern it. An issuer that redeems an asset decides what it redeems, which is how a private dollar can stop stolen funds ([What You Can Build](#what-you-can-build)). While the protocol fee is waived, holders of an asset need no PCASH: they can publish their own transactions paying only Ethereum gas, or pay a relayer privately in the asset itself. Once the fee applies, each transaction burns a little PCASH, so an asset holder needs some to send ([The Protocol Fee](#the-protocol-fee)).
+Anyone with a PCASH account can create a private asset with its own name, such as a private dollar or a token, and people hold and send it with the same privacy as PCASH. The network cannot even see which asset moved, so the holders of every asset share one crowd. An asset carries a rule for minting, such as a fixed supply that no one can add to, one account that can mint more, or one mint per deposit to an Ethereum contract, and it can carry a rule that every transfer must satisfy, such as a private dollar's deny list ([What You Can Build](#what-you-can-build)). These terms are fixed when the asset is created, so every holder can check them, and no one can take back an asset someone holds. The same rules and PCASH contracts that govern PCASH govern it. A private dollar is minted from deposits on Ethereum: a deposit shows who paid and how much, but not who receives the dollars, and from then on they move in the same crowd as every other PCASH payment. While the protocol fee is waived, holders of an asset need no PCASH: they can publish their own transactions paying only Ethereum gas, or pay a relayer privately in the asset itself. Once the fee applies, each transaction burns a little PCASH, so an asset holder needs some to send ([The Protocol Fee](#the-protocol-fee)).
 
 ## Rules Each Account Chooses
 
 Each PCASH account sets its own security. Its rules can require a signature from an Ethereum key or a hardware wallet, a passkey, two of three keys, a recovery key held by someone else, or any combination, and the owner can switch from one to another without moving any funds.
 
-Wallet software prepares payments, but only the owner's key or device approves them. Anyone can write a new kind of rule and use it without asking anyone: a rule is any condition that can be proved. As on Ethereum, what can be built is limited by what someone can write, not by a list of features. A flawed rule can hurt only the accounts that choose it: no rule can create money or spend someone else's.
+Wallet software prepares payments, but only the owner's key or device approves them. Anyone can write a new kind of rule and use it without asking anyone: a rule is any condition that can be proved. As on Ethereum, what can be built is limited by what someone can write, not by a list of features. A flawed account rule can hurt only the accounts that choose it, and a flawed asset rule only that asset's holders: no rule can create PCASH or spend anyone else's money.
 
 <figure data-diagram="account-authority"><figcaption><p>An account commits a set of rules. The selected rule decides whether to approve, and the protocol still enforces every ledger rule.</p></figcaption></figure>
 
@@ -120,9 +120,9 @@ Getting ZEC with ETH goes through an exchange, a swap service, or a bridge's val
 
 ## No One Can Censor or Change It
 
-No one runs PCASH. There is no operator, administrator, sequencer, or upgrade key, and no Ethereum contract holds anyone's funds.
+No one runs PCASH. There is no operator, administrator, sequencer, or upgrade key, and no Ethereum contract holds anyone's PCASH.
 
-No one can stop a valid transaction. Anyone can publish one directly to Ethereum, every time. Relayers add convenience and privacy, but if one refuses, you can use another or publish yourself. The rules give no one special powers, so the only possible censor is Ethereum itself.
+No one can stop a valid transaction. Anyone can publish one directly to Ethereum, every time. Relayers add convenience and privacy, but if one refuses, you can use another or publish yourself. The protocol gives no one special powers, so the only possible censor is Ethereum itself. An asset's issuer has only the powers its definition names, such as a private dollar's freeze, fixed when the asset is created and visible to every holder.
 
 No one can change the rules. Each version is fixed, and new rules apply only when people choose to run new software, as with Ethereum itself. There is no upgrade key to steal or capture, and fixing a bug never means moving everyone to a new Ethereum contract and splitting their crowd ([How Can PCASH Fix a Bug Without an Upgrade Key?](#how-can-pcash-fix-a-bug-without-an-upgrade-key)).
 
@@ -197,7 +197,8 @@ A payment hides who paid whom, how much, which asset, and every balance. The mai
 * the PCASH it burns;
 * any Ethereum contract it was sent through;
 * the amount of each public fee payout and issuance payout, with its owner hidden;
-* total issuance, and each block's issuance, public fees, and base fee.
+* total issuance, and each block's issuance, public fees, and base fee;
+* for an asset backed by Ethereum deposits, such as a private dollar, each deposit's depositor and amount, each payout, and the addresses its issuer has frozen, on Ethereum.
 
 Surrounding information can tie a transaction to someone. Publishing from your own Ethereum address exposes the publisher, a marketplace purchase is linked to the buyer's ETH payment, and knowledge about a rarely held asset can narrow its possible users. A relayer may publish for many unrelated people, so the publisher is not necessarily the owner. Wallet, RPC, and network information can reveal activity that the public ledger hides.
 
@@ -207,6 +208,7 @@ Surrounding information can tie a transaction to someone. Publishing from your o
 
 * the soundness of PCASH's zero-knowledge proofs and the cryptography under them: CHONK proofs over the BN254 curve, their universal setup, and the Poseidon2 hash function
 * when buying PCASH with ETH, an honest PCASH node to check the listing before paying; running your own means trusting no one else
+* for an asset someone issued, the rules its definition names, and for a backed asset such as a private dollar, its issuer's reserves and its use of freezes and pauses
 
 **Users do not rely on:**
 

@@ -16,8 +16,6 @@ import {
 import { selectedRelayQuoteTypedData, SELECTED_RELAY_QUOTE_TYPE } from "../src/eip712/selectedRelayQuote.ts";
 import {
   assetBurnTypedData,
-  assetCreationEip712Type,
-  assetCreationTypedData,
   assetPaymentTypedData,
   ASSET_BURN_EIP712_TYPE,
   ASSET_PAYMENT_EIP712_TYPE,
@@ -25,8 +23,10 @@ import {
   batchTransferTypedData,
   CONTRACT_FEE_SPONSORSHIP_EIP712_TYPE,
   contractFeeSponsorshipTypedData,
-  type AssetCreationMessage,
+  mintEip712Type,
+  mintTypedData,
   type BatchTransferMessage,
+  type MintMessage,
 } from "../src/rules/semanticRules.ts";
 import { PAYMENT_EIP712_TYPE, paymentTypedData } from "../src/rules/readableRules.ts";
 import { DOMAIN_TYPE, USER_ACCOUNT_CREATION_TYPE, USER_ACCOUNT_UPDATE_TYPE } from "../src/constants/networkProfile.ts";
@@ -194,17 +194,14 @@ describe.each(NETWORKS.map((network) => [network.pcashChainId, network] as const
       expectPinned(typedData, batchTransferEip712Type(shape), network);
     });
 
-    it.each(SHAPES)("asset creation, shape $shape", ({ shape, outputs: count }) => {
-      const message: AssetCreationMessage = {
+    it.each(SHAPES)("mint, shape $shape", ({ shape, outputs: count }) => {
+      const message: MintMessage = {
         ...trailing(network),
         assetId: P - 1n,
-        metadataCommitment: 3n,
-        initialSupply: 100n,
-        assetSecretCommitment: 4n,
         outputs: outputs(count),
       };
-      const typedData = assetCreationTypedData(network, message, shape);
-      expectPinned(typedData, assetCreationEip712Type(shape), network);
+      const typedData = mintTypedData(network, message, shape);
+      expectPinned(typedData, mintEip712Type(shape), network);
     });
 
     it("key derivation", () => {

@@ -35,7 +35,7 @@ export function supplyStatus(quote: IssuanceQuoteResult, now: number): string {
   const gap = referenceSupply(quote.supplyCap, now - anchor) - pcashNumber(quote.issuedSoFar);
   const lag = lagSeconds(quote.lagQ);
   if (Math.abs(lag) < 3_600) return "Issuance is on the target schedule.";
-  return `${lag > 0 ? "Behind" : "Ahead of"} the target by ${pcashLabel(Math.abs(gap))}: the target reached today's supply ${days(lag)} ${lag > 0 ? "ago" : "from now"}.`;
+  return `${lag > 0 ? "Behind" : "Ahead of"} the target by ${pcashLabel(Math.abs(gap))}: the target reached today’s supply ${days(lag)} ${lag > 0 ? "ago" : "from now"}.`;
 }
 
 export function SupplyChart({ quote, history }: { quote: IssuanceQuoteResult; history: IssuanceHistory | undefined }) {

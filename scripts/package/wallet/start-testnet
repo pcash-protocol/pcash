@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+export PCASH_CIRCUIT_BUNDLE="$root/circuits"
+export PCASH_TOOL_ROOT="$root/prover"
+export PCASH_WALLET_DATA_DIR="${PCASH_WALLET_DATA_DIR:-$HOME/.pcash/wallet-testnet}"
+
+if [ "$#" -gt 0 ]; then
+    if [ "$#" -eq 1 ] && [ "$1" = "--help" ]; then
+        exec "$root/bin/node" "$root/wallet/dist/service/bin-server.js" --help
+    fi
+    printf '%s\n' 'usage: ./start-testnet [--help]; set PCASH_WALLET_* variables to configure the service' >&2
+    exit 2
+fi
+
+exec "$root/bin/node" "$root/wallet/dist/service/bin-server.js" serve \
+    --prover wasm --network-privacy tor --rpc-url https://rpc.testnet.pcash.net/rpc

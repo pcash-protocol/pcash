@@ -21,14 +21,13 @@ import {
   UserCheckIcon,
 } from "../../components/icons.tsx";
 import { NativeActivityNotice } from "../../components/NativeActivityNotice.tsx";
-import { useNetwork } from "../../components/NetworkContext.tsx";
 import { RelativeTime } from "../../components/RelativeTime.tsx";
 import { Tooltip } from "../../components/Tooltip.tsx";
 import { ConfirmInWallet, useConfirmInWallet } from "../../components/WalletSubmissionLock.tsx";
 import { CopyButton } from "../../components/CopyButton.tsx";
 import { useEthereumNetwork } from "../../lib/EthereumProvider.tsx";
 import { marketplaceStoreName, openMarketplaceStore } from "../../lib/MarketplaceStore.ts";
-import { networkInstanceKey } from "../../lib/networks.ts";
+import { chainInstanceKey } from "../../lib/networks.ts";
 import { usePostPending } from "../../lib/postPending.ts";
 import { querySession } from "../../lib/querySession.ts";
 import { useTokenActivity, walletTokenActivityKey } from "../../lib/tokenActivity.ts";
@@ -77,10 +76,11 @@ export function postingLabel(progress: { current: number; total: number } | unde
 
 /** Marketplace records this browser keeps, read again whenever the wallet moves to a new state. */
 function useLocalOffers(trigger: unknown): StoredOffer[] {
-  const { network } = useNetwork();
-  const scope = networkInstanceKey(network);
+  const { status } = useWallet();
+  const scope = status === undefined ? undefined : chainInstanceKey(status);
   const [offers, setOffers] = useState<StoredOffer[]>([]);
   useEffect(() => {
+    if (scope === undefined) return;
     let cancelled = false;
     void openMarketplaceStore(marketplaceStoreName(scope)).then(async (store) => {
       try {

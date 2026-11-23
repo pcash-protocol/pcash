@@ -67,10 +67,10 @@ describe.each([0, 1] as const)("ordinary all-dummy transfer profile %s", (shape)
     (witness.replay_ids as string[])[0] = "1";
     await expect(execute(witness)).rejects.toThrow("account must be in the account state tree");
   });
-  it("does not admit an ASSET_CREATION input", async () => {
+  it("does not admit a MINT input", async () => {
     const witness = allDummyFixture({ shape, registered: true }).build.buildKernelWitnessMap(application);
     choices(witness, "input_slot_classes")[0] = "3";
-    await expect(execute(witness)).rejects.toThrow("transfer input must not be a creation marker");
+    await expect(execute(witness)).rejects.toThrow("transfer input must not be a mint marker");
   });
   it("cannot create a funded output", async () => {
     const witness = structuredClone(map);

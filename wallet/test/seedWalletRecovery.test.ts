@@ -102,6 +102,7 @@ async function expectRecoveredHistory(wallet: Wallet) {
   if (activity.state !== "ready") throw new Error("fixture history is unavailable");
   expect(activity.entries.flatMap((entry) => entry.sent ?? [])).toEqual([{
     recipientAddress: BigInt(BOB), amount: 25n, memo: utf8(MEMO), senderIncluded: false,
+    disclosure: { contentHash: expect.stringMatching(/^0x[0-9a-f]{64}$/), slot: 0, disclosureKey: expect.stringMatching(/^0x[0-9a-f]{64}$/) },
   }]);
   expect(activity.entries.filter((entry) => entry.payout !== null).map((entry) => entry.payout)).toEqual([
     { openFeeAmount: 2n, issuanceAmount: 7n },

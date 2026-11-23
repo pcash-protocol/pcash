@@ -477,7 +477,7 @@ export type DefaultRuleName =
   | "batchTransfer"
   | "accountAdmin"
   | "contractFeeSponsorship"
-  | "assetCreation";
+  | "mint";
 
 const RULE_PROPERTY = {
   payment: "rule",
@@ -486,7 +486,7 @@ const RULE_PROPERTY = {
   batchTransfer: "batchTransferRule",
   accountAdmin: "accountAdminRule",
   contractFeeSponsorship: "contractFeeSponsorshipRule",
-  assetCreation: "assetCreationRule",
+  mint: "mintRule",
 } as const satisfies Record<DefaultRuleName, keyof DefaultUserAccountRuleSet>;
 
 export function defaultEcdsaRuleSet(params: {
@@ -511,7 +511,7 @@ export function defaultEcdsaRuleSet(params: {
   }
   const set = buildAccountRuleSet([...others, ...defaults.entries]);
   const selected = params.shape === PRIVATE_VALUE_PROFILES.L.shapeId
-    ? params.rule === "assetCreation" ? defaults.largeAssetCreationRule
+    ? params.rule === "mint" ? defaults.largeMintRule
       : params.rule === "contractFeeSponsorship" ? defaults.largeContractFeeSponsorshipRule
       : params.rule === "accountAdmin" ? defaults.accountAdminRule
       : defaults.largeBatchTransferRule

@@ -6,7 +6,7 @@
 // fixes every nullifier, including the primary's, so the signature can fund
 // only the one transaction that spends exactly those inputs.
 //
-// The sponsored-transfer kernel enforces the rest — that the sponsor owns every
+// The sponsored-transfer kernels enforce the rest — that the sponsor owns every
 // native input, that the primary owns every asset and application input, and
 // that native value leaves only as the open fee, one relay note, and change to
 // the sponsor. This rule binds what the sponsor saw and requires any native
@@ -195,7 +195,7 @@ mod tests {
         private_value
     }
 
-    // The statement the sponsored-transfer kernel expects from the sponsor for
+    // The statement a sponsored kernel expects from the sponsor for
     // `private_value` and the contract it authenticated.
     fn kernel_statement(
         private_value: TestPrivateValue,

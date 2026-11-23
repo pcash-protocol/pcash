@@ -1,9 +1,17 @@
 import { sameTransactionData, storeTransactionData, restoreTransactionData, resolveTransactionData, type TransactionData } from "@pcash/sdk/delivery";
-import { decodeTransaction, nativeBurnAmount, quoteNativeBurn, type AccountCreationAttachment, type RawPrivateValueTransaction } from "@pcash/sdk/protocol";
+import {
+  decodeTransaction,
+  nativeBurnAmount,
+  ProfileCapacityError,
+  quoteNativeBurn,
+  type AccountCreationAttachment,
+  type RawPrivateValueTransaction,
+} from "@pcash/sdk/protocol";
 import { sameAccountCreation } from "./accountCreation.ts";
-// One S action that pays or burns a standard asset. Asset notes fund the
-// recipients and burn, native notes fund the network fee, and both changes
-// return to the owner with the asset's definition attached.
+// One action that pays or burns an asset, built in profile S, or in L when S
+// cannot hold it. Asset notes fund the recipients and burn, native notes fund
+// the network fee, and both changes return to the owner. An asset with a
+// transfer rule also folds the rule, which the wallet must recognize.
 
 import { PRIVATE_VALUE_PROFILES } from "@pcash/sdk/constants";
 import {
@@ -21,15 +29,19 @@ import { resolveRecipientAddress, resolveRecipientDelivery, parseExtendedCode } 
 import { directSendsToRecord } from "../directSends.ts";
 import { requestPcashAuthorization, type PcashActionSigner, type SelectedRelayQuoteProvider } from "@pcash/sdk/eip712";
 import {
+  isRestrictedAssetId,
   networkConfigFromStatus,
   ownerCommitment,
 } from "@pcash/sdk/protocol";
+import type { DenyLists } from "../denyListSync.ts";
+import { planRestrictedTransfer } from "./restrictedTransfer.ts";
 import { addressHex, fromHex, randomFieldEntropy, U128_LIMIT } from "@pcash/sdk/utils";
 import { assertReceiveKeyOwned, registeredSelfReceiveKey } from "./selfDelivery.ts";
 import type { PcashProfile } from "../externalIdentity.ts";
 import { knownAssetDefinition, selectInputNotes, selectSpendableInputNotes, spendableNotes, type WalletFileData } from "../noteStore.ts";
 import { loadWalletStateOrEmpty, type WalletStateStore } from "../store.ts";
 import {
+  buildInFittingProfile,
   collectAssetActionWitnesses,
   prepareAssetAction,
   submitPendingAssetAction,
@@ -98,6 +110,8 @@ type AssetTransferClientParams<Prepared, Output> = AssetTransferIntent & SettleP
   chainId: bigint;
   prover: AssetActionProver;
   submission: DurableSubmissionAdapter<Prepared, Output>;
+  /** The deny lists of restricted assets; absent, only assets without a transfer rule move. */
+  denyLists?: DenyLists;
 };
 
 /** Owner change in note-sized pieces. */
@@ -170,144 +184,153 @@ export async function runAssetTransferClient<Prepared, Output>(
   const storedData = storeTransactionData(params.data);
   params = { ...params, outputs: structuredClone(params.outputs),
     ...(storedData === undefined ? {} : { data: restoreTransactionData(storedData)! }) };
-  const profile = PRIVATE_VALUE_PROFILES.S;
   const burnAmount = params.burnAmount ?? 0n;
   if (params.assetId === 0n) throw new Error("asset actions require a nonzero assetId; send native PCASH as a payment");
   if (params.outputs.length === 0 && burnAmount === 0n) throw new Error("an asset action requires a recipient or a burn");
   const selected = params.selectedRelayQuote !== undefined;
-  const outputCapacity = profile.outputs - (selected ? 1 : 0);
-  if (params.outputs.length > outputCapacity) {
-    throw new Error(`one asset action pays at most ${outputCapacity} recipients; use a bulk job for more`);
+  const profiles = [PRIVATE_VALUE_PROFILES.S, PRIVATE_VALUE_PROFILES.L].filter((profile) => params.prover.shapes.includes(profile.shapeId));
+  const maximumRecipients = Math.max(...profiles.map((profile) => profile.outputs - (selected ? 1 : 0)));
+  if (params.outputs.length > maximumRecipients) {
+    throw new Error(`one asset action pays at most ${maximumRecipients} recipients; use a bulk job for more`);
   }
   const status = await params.node.status();
   const data = await loadWalletStateOrEmpty(params.store, {
     address: params.wallet.address, network: { chainId: params.chainId, genesisHash: status.genesisHash },
   });
   if (params.retryContentHash !== undefined) return resumeAssetTransfer(params, data, status, burnAmount);
-  const plan = await planPublication({
-    qualifying: true, byteSize: paddedPrivateValueByteSize(profile.shapeId, params.accountCreation),
-    publication: publicationOf(params.submission, params.privateRelayFeeAmount), node: params.node,
-    openFeeAmount: params.openFeeAmount, privateRelayFeeAmount: params.privateRelayFeeAmount,
-    burn: quoteNativeBurn(status.feeExcess, privateValueActionUnits(profile.shapeId, params.accountCreation),
-      params.voluntaryBurnAmount ?? 0n),
-    selectedRelayQuote: params.selectedRelayQuote,
-  });
   const assetDefinition = knownAssetDefinition(data, params.assetId);
+  if (assetDefinition === undefined && isRestrictedAssetId(params.assetId)) {
+    throw new Error("add this asset's definition before sending it: its transfer rule is part of the definition");
+  }
 
-  const fee = plan.openFeeAmount + plan.privateRelayFeeAmount + nativeBurnAmount(plan.burn);
   const assetNeed = params.outputs.reduce((sum, output) => sum + output.amount, burnAmount);
-  const nativeSpendable = fee === 0n ? [] : spendableNotes(data, 0n);
-  const reserve = feeInputReserve(nativeSpendable.map((note) => BigInt(note.amount)), fee, profile.inputs - 1);
-  const assetNotes = selectInputNotes(data, undefined, assetNeed, profile.inputs - reserve, params.assetId);
-  let nativeNotes: typeof assetNotes;
-  try {
-    nativeNotes = fee === 0n ? [] : selectSpendableInputNotes(nativeSpendable, fee, profile.inputs - assetNotes.length);
-  } catch (error) {
-    throw protocolFeeFundingFailure(error, nativeBurnAmount(plan.burn));
-  }
-  const inputNotes = [...assetNotes, ...nativeNotes];
-  const change = [
-    ...changeAmounts(assetNotes.reduce((sum, note) => sum + BigInt(note.amount), 0n) - assetNeed)
-      .map((amount) => ({ assetId: params.assetId, amount })),
-    ...changeAmounts(nativeNotes.reduce((sum, note) => sum + BigInt(note.amount), 0n) - fee)
-      .map((amount) => ({ assetId: 0n, amount })),
-  ];
-  if (params.outputs.length + change.length > outputCapacity) {
-    throw new Error("recipients and change do not fit in one asset action; pay fewer recipients");
-  }
-
-  const authorizationKind: AssetAuthorizationKind = params.outputs.length === 0 ? "asset-burn"
-    : burnAmount === 0n && params.outputs.length === 1 ? "asset-payment" : "batch-transfer";
-  params.onProgress?.("preparing", "reading the registered account…");
-  const witnesses = await collectAssetActionWitnesses({
-    node: params.node, store: params.store, wallet: params.wallet, authorizationKind,
-    inputOpenings: inputNotes.map((note) => ({
-      outputIndex: BigInt(note.leafIndex!), outputCommitment: BigInt(note.commitment!),
-    })),
-  });
-  let selfKey: Uint8Array | undefined;
-  const selfReceiveKey = () => selfKey ??= registeredSelfReceiveKey(witnesses.account, data);
-  const recipients: AssetActionOutput[] = [];
-  for (const [outputIndex, output] of params.outputs.entries()) {
-    if (output.noteSecret !== undefined) {
-      const { recipientAddress } = resolveRecipientAddress(output.to, params.chainId);
-      recipients.push(outOfBandAssetActionOutput({
-        kind: "asset", recipientAddress, noteSecret: output.noteSecret, amount: output.amount,
-      }));
-      continue;
-    }
-    const delivery = await resolveRecipientDelivery(output.to, params.chainId, address =>
-      BigInt(address) === params.wallet.address ? selfReceiveKey() : witnesses.receiveKeyOf(address));
-    if (delivery.recipientAddress === params.wallet.address && delivery.recipientExtendedCode !== undefined) {
-      assertReceiveKeyOwned(data, parseExtendedCode(delivery.recipientExtendedCode).mlKemPublicKey);
-    }
-    recipients.push(openedAssetActionOutput({
-      kind: "asset", pcashChainId: params.chainId, assetId: params.assetId, outputIndex, amount: output.amount,
-      ...(assetDefinition === undefined ? {} : { assetDefinition }),
-      ...(delivery.recipientExtendedCode === undefined
-        ? { recipientAddress: delivery.recipientAddress, recipientMlKemPublicKey: delivery.recipientReceiveKey!, authenticatedRecipient: true as const }
-        : { recipientExtendedCode: delivery.recipientExtendedCode }),
-    }));
-  }
-
-
-  const dummyInputSeed = randomFieldEntropy();
-  const validUntilTimestamp = publicationValidUntil({
-    chainNow: witnesses.status.latestBlockTimestamp, defaultWindow: 1800n,
-    selectedRelayQuote: params.selectedRelayQuote, requested: params.validUntilTimestamp,
-    action: "asset action",
-  });
-  const publication = await fixPublication({
-    maxTransactionBytes: paddedPrivateValueByteSize(profile.shapeId, params.accountCreation),
-    selectedRelayQuote: params.selectedRelayQuote, publication: plan.publication, owner: params.wallet,
-    requestedCommitment: 0n, node: params.node, status: witnesses.status,
-    nullifiers: transactionNullifiers(params.wallet.nkRoot, inputNotes, dummyInputSeed, profile.inputs),
-    shape: profile.shapeId, openFeeAmount: plan.openFeeAmount,
-    privateRelayFeeAmount: plan.privateRelayFeeAmount, validUntilTimestamp,
-  });
-
-  const outputs: AssetActionOutput[] = [
-    ...recipients,
-    ...change.map((item) => ownerChangeAssetActionOutput({
-      kind: item.assetId === 0n ? "native" : "asset", pcashChainId: params.chainId, assetId: item.assetId,
-      amount: item.amount, receiveKey: selfReceiveKey(),
-    })),
-  ];
-  while (outputs.length < outputCapacity) {
-    outputs.push({ kind: "dummy", dummySecret: randomFieldEntropy(), amount: 0n });
-  }
-  let privateRelayOwnerCommitment = 0n;
-  if (selected) {
-    const payment = publication.privateRelayPayment;
-    if (payment === undefined) throw new Error("selected relay quote omitted its private relay payment");
-    const feeOutput = openedAssetActionOutput({
-      kind: "native", pcashChainId: params.chainId, assetId: 0n, outputIndex: profile.outputs - 1,
-      amount: payment.amount, recipientAddress: payment.recipientAddress,
-      recipientMlKemPublicKey: payment.receiveKey, authenticatedRecipient: true,
+  const { plan, change, recipients, witnesses, restricted, publication, build } = await buildInFittingProfile(params.prover.shapes, async (profile) => {
+    const outputCapacity = profile.outputs - (selected ? 1 : 0);
+    const plan = await planPublication({
+      qualifying: true, byteSize: paddedPrivateValueByteSize(profile.shapeId, params.accountCreation),
+      publication: publicationOf(params.submission, params.privateRelayFeeAmount), node: params.node,
+      openFeeAmount: params.openFeeAmount, privateRelayFeeAmount: params.privateRelayFeeAmount,
+      burn: quoteNativeBurn(status.feeExcess, privateValueActionUnits(profile.shapeId, params.accountCreation),
+        params.voluntaryBurnAmount ?? 0n),
+      selectedRelayQuote: params.selectedRelayQuote,
     });
-    if (feeOutput.kind !== "native" || feeOutput.destination.kind !== "opening") throw new Error("selected relay fee has no owner opening");
-    privateRelayOwnerCommitment = ownerCommitment(payment.recipientAddress, feeOutput.destination.noteSecret);
-    outputs.push(feeOutput);
-  }
-  const inputs: AssetActionInput[] = inputNotes.map((note, index) => ({
-    kind: BigInt(note.assetId) === 0n ? "native" : "asset", amount: BigInt(note.amount),
-    noteSecret: BigInt(note.noteSecret), leafIndex: Number(note.leafIndex!), siblings: witnesses.inputSiblings[index]!,
-  }));
-  while (inputs.length < profile.inputs) inputs.push({ kind: "dummy" });
-  const build = buildAssetAction({
-    ...(params.accountCreation === undefined ? {} : { accountCreation: params.accountCreation }),
-    pcashChainId: params.chainId, snapshot: witnesses.snapshot, owner: witnesses.owner, assetId: params.assetId,
-    assetBurnAmount: burnAmount, inputs, outputs, openFeeAmount: plan.openFeeAmount, burn: plan.burn,
-    issuanceOwnerCommitment: publication.issuanceOwnerCommitment,
-    ...(publication.designatedIssuanceOpening === undefined ? {} : { designatedIssuanceOpening: publication.designatedIssuanceOpening }),
-    ...(selected ? { privateRelayPayment: { amount: plan.privateRelayFeeAmount, ownerCommitment: privateRelayOwnerCommitment } } : {}),
-    dummyInputSeed, validUntilTimestamp,
-    ...(assetDefinition === undefined ? {} : { assetDefinition }),
-    data: await resolveTransactionData(params.data, params.chainId, witnesses.receiveKeyOf),
-    sender: {
-      outgoingKey: params.wallet.outgoingKey,
-      directSendOpenings: directSendsToRecord(data, params.wallet.address, inputNotes),
-    },
+    const fee = plan.openFeeAmount + plan.privateRelayFeeAmount + nativeBurnAmount(plan.burn);
+    const nativeSpendable = fee === 0n ? [] : spendableNotes(data, 0n);
+    const reserve = feeInputReserve(nativeSpendable.map((note) => BigInt(note.amount)), fee, profile.inputs - 1);
+    const assetNotes = selectInputNotes(data, undefined, assetNeed, profile.inputs - reserve, params.assetId);
+    let nativeNotes: typeof assetNotes;
+    try {
+      nativeNotes = fee === 0n ? [] : selectSpendableInputNotes(nativeSpendable, fee, profile.inputs - assetNotes.length);
+    } catch (error) {
+      throw protocolFeeFundingFailure(error, nativeBurnAmount(plan.burn));
+    }
+    const inputNotes = [...assetNotes, ...nativeNotes];
+    const change = [
+      ...changeAmounts(assetNotes.reduce((sum, note) => sum + BigInt(note.amount), 0n) - assetNeed)
+        .map((amount) => ({ assetId: params.assetId, amount })),
+      ...changeAmounts(nativeNotes.reduce((sum, note) => sum + BigInt(note.amount), 0n) - fee)
+        .map((amount) => ({ assetId: 0n, amount })),
+    ];
+    if (params.outputs.length + change.length > outputCapacity) {
+      throw new ProfileCapacityError("recipients and change do not fit in one asset action; pay fewer recipients");
+    }
+    const authorizationKind: AssetAuthorizationKind = profile.shapeId === PRIVATE_VALUE_PROFILES.L.shapeId ? "batch-transfer"
+      : params.outputs.length === 0 ? "asset-burn"
+      : burnAmount === 0n && params.outputs.length === 1 ? "asset-payment" : "batch-transfer";
+    params.onProgress?.("preparing", "reading the registered account…");
+    const witnesses = await collectAssetActionWitnesses({
+      node: params.node, store: params.store, wallet: params.wallet, authorizationKind, shape: profile.shapeId,
+      inputOpenings: inputNotes.map((note) => ({
+        outputIndex: BigInt(note.leafIndex!), outputCommitment: BigInt(note.commitment!),
+      })),
+    });
+    let selfKey: Uint8Array | undefined;
+    const selfReceiveKey = () => selfKey ??= registeredSelfReceiveKey(witnesses.account, data);
+    const recipients: AssetActionOutput[] = [];
+    for (const [outputIndex, output] of params.outputs.entries()) {
+      if (output.noteSecret !== undefined) {
+        const { recipientAddress } = resolveRecipientAddress(output.to, params.chainId);
+        recipients.push(outOfBandAssetActionOutput({
+          kind: "asset", recipientAddress, noteSecret: output.noteSecret, amount: output.amount,
+        }));
+        continue;
+      }
+      const delivery = await resolveRecipientDelivery(output.to, params.chainId, address =>
+        BigInt(address) === params.wallet.address ? selfReceiveKey() : witnesses.receiveKeyOf(address));
+      if (delivery.recipientAddress === params.wallet.address && delivery.recipientExtendedCode !== undefined) {
+        assertReceiveKeyOwned(data, parseExtendedCode(delivery.recipientExtendedCode).mlKemPublicKey);
+      }
+      recipients.push(openedAssetActionOutput({
+        kind: "asset", pcashChainId: params.chainId, assetId: params.assetId, outputIndex, amount: output.amount,
+        ...(assetDefinition === undefined ? {} : { assetDefinition }),
+        ...(delivery.recipientExtendedCode === undefined
+          ? { recipientAddress: delivery.recipientAddress, recipientMlKemPublicKey: delivery.recipientReceiveKey!, authenticatedRecipient: true as const }
+          : { recipientExtendedCode: delivery.recipientExtendedCode }),
+      }));
+    }
+
+    const dummyInputSeed = randomFieldEntropy();
+    const validUntilTimestamp = publicationValidUntil({
+      chainNow: witnesses.status.latestBlockTimestamp, defaultWindow: 1800n,
+      selectedRelayQuote: params.selectedRelayQuote, requested: params.validUntilTimestamp,
+      action: "asset action",
+    });
+    const restricted = assetDefinition === undefined ? undefined : await planRestrictedTransfer({
+      definition: assetDefinition, denyLists: params.denyLists, ownerAddress: params.wallet.address,
+      anchor: witnesses.anchor, genesisL1Block: witnesses.status.genesisL1Block,
+      chainNow: witnesses.status.latestBlockTimestamp, validUntilTimestamp,
+    });
+    const publication = await fixPublication({
+      maxTransactionBytes: paddedPrivateValueByteSize(profile.shapeId, params.accountCreation),
+      selectedRelayQuote: params.selectedRelayQuote, publication: plan.publication, owner: params.wallet,
+      requestedCommitment: 0n, node: params.node, status: witnesses.status,
+      nullifiers: transactionNullifiers(params.wallet.nkRoot, inputNotes, dummyInputSeed, profile.inputs),
+      shape: profile.shapeId, openFeeAmount: plan.openFeeAmount,
+      privateRelayFeeAmount: plan.privateRelayFeeAmount, validUntilTimestamp,
+    });
+
+    const outputs: AssetActionOutput[] = [
+      ...recipients,
+      ...change.map((item) => ownerChangeAssetActionOutput({
+        kind: item.assetId === 0n ? "native" : "asset", pcashChainId: params.chainId, assetId: item.assetId,
+        amount: item.amount, receiveKey: selfReceiveKey(),
+      })),
+    ];
+    while (outputs.length < outputCapacity) {
+      outputs.push({ kind: "dummy", dummySecret: randomFieldEntropy(), amount: 0n });
+    }
+    let privateRelayOwnerCommitment = 0n;
+    if (selected) {
+      const payment = publication.privateRelayPayment;
+      if (payment === undefined) throw new Error("selected relay quote omitted its private relay payment");
+      const feeOutput = openedAssetActionOutput({
+        kind: "native", pcashChainId: params.chainId, assetId: 0n, outputIndex: profile.outputs - 1,
+        amount: payment.amount, recipientAddress: payment.recipientAddress,
+        recipientMlKemPublicKey: payment.receiveKey, authenticatedRecipient: true,
+      });
+      if (feeOutput.kind !== "native" || feeOutput.destination.kind !== "opening") throw new Error("selected relay fee has no owner opening");
+      privateRelayOwnerCommitment = ownerCommitment(payment.recipientAddress, feeOutput.destination.noteSecret);
+      outputs.push(feeOutput);
+    }
+    const inputs: AssetActionInput[] = inputNotes.map((note, index) => ({
+      kind: BigInt(note.assetId) === 0n ? "native" : "asset", amount: BigInt(note.amount),
+      noteSecret: BigInt(note.noteSecret), leafIndex: Number(note.leafIndex!), siblings: witnesses.inputSiblings[index]!,
+    }));
+    while (inputs.length < profile.inputs) inputs.push({ kind: "dummy" });
+    const build = buildAssetAction({
+      ...(params.accountCreation === undefined ? {} : { accountCreation: params.accountCreation }),
+      shape: profile.shapeId, pcashChainId: params.chainId, snapshot: witnesses.snapshot, owner: witnesses.owner, assetId: params.assetId,
+      ...(restricted === undefined ? {} : { restricted: restricted.restricted }),
+      assetBurnAmount: burnAmount, inputs, outputs, openFeeAmount: plan.openFeeAmount, burn: plan.burn,
+      issuanceOwnerCommitment: publication.issuanceOwnerCommitment,
+      ...(publication.designatedIssuanceOpening === undefined ? {} : { designatedIssuanceOpening: publication.designatedIssuanceOpening }),
+      ...(selected ? { privateRelayPayment: { amount: plan.privateRelayFeeAmount, ownerCommitment: privateRelayOwnerCommitment } } : {}),
+      dummyInputSeed, validUntilTimestamp,
+      ...(assetDefinition === undefined ? {} : { assetDefinition }),
+      data: await resolveTransactionData(params.data, params.chainId, witnesses.receiveKeyOf),
+      sender: { outgoingKey: params.wallet.outgoingKey, directSendOpenings: directSendsToRecord(data, params.wallet.address, inputNotes) },
+    });
+    return { plan, change, recipients, witnesses, restricted, publication, build };
   });
   const authorization = build.prepareOwnerAuthorization({
     wallet: params.wallet, network: networkConfigFromStatus(witnesses.status),
@@ -316,7 +339,7 @@ export async function runAssetTransferClient<Prepared, Output>(
   params.onProgress?.("proving", "proving the authorized asset action…");
   const entry = await params.prover.proveAndEncode(build, {
     packageName: authorization.authorizationCircuit, witnessMap: signed.witnessMap,
-  });
+  }, restricted?.policy(build, params.wallet.address, "transfer"));
   const preparedAction = prepareAssetAction({
     build, transactionBytes: entry,
     ...(publication.designatedIssuanceOpening === undefined ? {} : { designatedIssuanceOpening: publication.designatedIssuanceOpening }),

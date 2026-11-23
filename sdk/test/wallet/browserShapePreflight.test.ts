@@ -16,7 +16,8 @@ describe("native-only shape preflight", () => {
         proverAssets: null,
       });
       await expect(provers.privateValue.proveAndEncode({ shape: 1 } as NativeTransferBuild)).rejects.toThrow("native proving");
-      await expect(provers.assetCreation.proveAndEncode({ shape: 1 } as AssetActionBuild, {})).rejects.toThrow("native proving");
+      await expect(provers.assetCreation.proveAndEncode({ shape: 1 } as AssetActionBuild, {},
+        { packageName: "mint_rule_fixed_supply", witnessMap: {} })).rejects.toThrow("native proving");
       expect(loadProver).not.toHaveBeenCalled();
       expect(fetch).not.toHaveBeenCalled();
     } finally { fetch.mockRestore(); }

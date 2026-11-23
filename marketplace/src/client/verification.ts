@@ -10,7 +10,9 @@ import {
   type ContractFunction,
   type NetworkConfigLike,
   type PcashNodeClient,
+  type StatusResult,
 } from "@pcash/sdk/browser";
+import type { DenyLists } from "@pcash/sdk/wallet";
 import { createPublicClient, type Address, type Hex } from "viem";
 import { assertPaymentNodeFreshness, MAX_PAYMENT_NODE_LAG_BLOCKS } from "./paymentFreshness.ts";
 import {
@@ -41,6 +43,7 @@ import {
   type VerifiedL2ContractMaterial,
 } from "./verifiedContractMaterial.ts";
 import { claimSnapshotFrom, type ClaimSnapshot } from "./claimFlow.ts";
+import { escrowRestriction } from "./restrictedEscrow.ts";
 
 export type EscrowStatus = "unfunded" | "escrowed" | "spent" | "amount-mismatch" | "opening-invalid" | "unknown";
 
@@ -64,6 +67,8 @@ export interface VerifyPayableOfferOptions extends VerifyOfferOptions {
    * serves every offer paid through the same router; without it, this call checks.
    */
   routerDeployment?: VerifiedPaymentRouterDeployment;
+  /** The deny lists a listing of a token with a transfer rule is checked against; without them such a listing is not payable. */
+  denyLists?: DenyLists;
 }
 
 export interface OfferVerification {
@@ -206,7 +211,7 @@ async function verifyOfferSnapshot(
   node: PcashNodeClient,
   pub: OfferPublication,
   options: VerifyOfferOptions,
-): Promise<OfferVerification & { settlementAccepted: boolean }> {
+): Promise<OfferVerification & { settlementAccepted: boolean; status: StatusResult | null }> {
   let snapshot: Awaited<ReturnType<PcashNodeClient["getWitnessSnapshot"]>> | null = null;
   let statusError: string | null = null;
   const opening = pub.escrow;
@@ -252,6 +257,7 @@ async function verifyOfferSnapshot(
       claimSnapshot: null,
       safeToPay: false,
       settlementAccepted: false,
+      status,
       checks,
     };
   }
@@ -328,6 +334,7 @@ async function verifyOfferSnapshot(
     claimSnapshot,
     safeToPay: false,
     settlementAccepted: settlementAccepted === true,
+    status,
     checks,
   };
 }
@@ -341,7 +348,7 @@ export async function verifyOffer(
   pub: OfferPublication,
   options: VerifyOfferOptions,
 ): Promise<OfferVerification> {
-  const { settlementAccepted: _settlementAccepted, ...verification } = await verifyOfferSnapshot(node, pub, options);
+  const { settlementAccepted: _settlementAccepted, status: _status, ...verification } = await verifyOfferSnapshot(node, pub, options);
   return verification;
 }
 
@@ -351,7 +358,7 @@ export async function verifyOfferForPayment(
   pub: OfferPublication,
   options: VerifyPayableOfferOptions,
 ): Promise<OfferVerification> {
-  const { l1Urls, routerDeployment, ...offerOptions } = options;
+  const { l1Urls, routerDeployment, denyLists, ...offerOptions } = options;
   const l1 = createPublicClient({ transport: l1RpcTransport(l1Urls) });
   // One PCASH snapshot, the router check, and the selected L1 head, with the
   // router's payment record at that head, decide the payment.
@@ -370,7 +377,7 @@ export async function verifyOfferForPayment(
       }).then((recorded) => ({ recorded: BigInt(recorded) !== 0n }), (error: unknown) => ({ error: errorMessage(error) })),
     }), (error: unknown) => ({ error: errorMessage(error) })),
   ]);
-  const { settlementAccepted, ...verification } = snapshot;
+  const { settlementAccepted, status, ...verification } = snapshot;
   const checks = [...verification.checks];
   let nodeFresh = false;
   let routerPaid: boolean | null = null;
@@ -389,6 +396,21 @@ export async function verifyOfferForPayment(
       checks.push(`PCASH payment snapshot is within ${MAX_PAYMENT_NODE_LAG_BLOCKS} blocks of the selected L1 head`);
     } catch (error) {
       checks.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  // A token with a transfer rule leaves the escrow only if the escrow is not
+  // frozen and the list not paused under the snapshot the claim proves from.
+  let releasable = true;
+  if (status !== null && verification.claimSnapshot !== null) {
+    try {
+      await escrowRestriction({
+        definition: publicationAssetDefinition(pub), denyLists, node, escrow: deriveVerifiedL2ContractMaterial(pub).address,
+        anchor: verification.claimSnapshot.account.boundary, genesisL1Block: status.genesisL1Block,
+        validUntilTimestamp: BigInt(pub.terms.deadlineT),
+      });
+    } catch (error) {
+      releasable = false;
+      checks.push(`the escrow cannot release its token: ${errorMessage(error)}`);
     }
   }
   if ("error" in router) {
@@ -413,6 +435,7 @@ export async function verifyOfferForPayment(
     verification.claimSnapshot !== null &&
     nodeFresh &&
     routerPaid === false &&
-    settlementAccepted;
+    settlementAccepted &&
+    releasable;
   return { ...verification, routerConfigVerified: true, feeQuote, routerPaid, safeToPay, checks };
 }

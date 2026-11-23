@@ -7,6 +7,7 @@ import { createChonkCircuitResolver } from "../src/node/chonkMaterial.ts";
 import { eventStatementFromKernel } from "../src/protocol/events.ts";
 import { fm, type WitnessMap } from "../src/protocol/witness.ts";
 import { prepareEventApplication, type ChonkCircuitMaterial } from "../src/prover/stacks.ts";
+import { FIXED_SUPPLY_RULE_CIRCUIT } from "../src/rules/fixedSupply.ts";
 import { assetProfileFixture } from "./assetProfileFixtures.ts";
 import { userAccountUpdateFixture } from "./accountActionFixtures.ts";
 import { proverAssetsDir } from "./circuitBundle.ts";
@@ -18,7 +19,7 @@ const resolve = createChonkCircuitResolver({
 const execute = (circuit: ChonkCircuitMaterial, witness: WitnessMap) =>
   new Noir(circuit.artifact as never).execute(witness as never);
 
-// Both private-value profiles share an asset-creation relation; account actions use S.
+// Both private-value profiles share a mint relation; account actions use S.
 describe.each(["asset S", "asset L", "account update"] as const)("substantive transaction event in %s", (family) => {
   it("accepts the configured entry and rejects a zero or different rule entry", async () => {
     const event = 789n;
@@ -30,11 +31,12 @@ describe.each(["asset S", "asset L", "account update"] as const)("substantive tr
     let authorizationMap: WitnessMap;
     if (family === "asset S" || family === "asset L") {
       const shape = family === "asset S" ? 0 : 1;
-      const fixture = assetProfileFixture({ shape, preparedEvent });
+      const mintRuleVk = await resolve(FIXED_SUPPLY_RULE_CIRCUIT, "app");
+      const fixture = assetProfileFixture({ shape, preparedEvent, mintRuleVkHash: BigInt(mintRuleVk.vkHash) });
       build = fixture.build;
       authorizationName = fixture.prepared.authorizationCircuit;
-      kernelName = shape === 0 ? "private_value_asset_creation_kernel" : "private_value_large_asset_creation_kernel";
-      kernelMap = fixture.build.buildAssetCreationKernelWitnessMap(await resolve(authorizationName, "app"));
+      kernelName = shape === 0 ? "private_value_mint_kernel" : "private_value_large_mint_kernel";
+      kernelMap = fixture.build.buildMintKernelWitnessMap(await resolve(authorizationName, "app"), mintRuleVk);
       authorizationMap = fixture.signed.witnessMap;
     } else {
       const fixture = userAccountUpdateFixture({ preparedEvent });

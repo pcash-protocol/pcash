@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { assetDefinitionAssetId, formatAssetDefinition } from "@pcash/sdk/protocol";
+import { assetDefinitionAssetId, encodeAssetDefinition, findAssetDefinition, formatAssetDefinition } from "@pcash/sdk/protocol";
+import { createAccountMintAsset, createDepositMintAsset, senderDenyListTransferRule } from "@pcash/sdk/rules";
+import { toBase64Url } from "@pcash/sdk/utils";
 import {
   assetIdHex,
   checkDefinition,
@@ -10,6 +12,8 @@ import {
   sha256,
   tokenPath,
   tokenShareLink,
+  tokenTerms,
+  durationText,
 } from "./model.ts";
 import { testDefinition } from "./tokenTestSupport.ts";
 
@@ -40,6 +44,22 @@ describe("token model", () => {
     expect(mismatch).toMatchObject({ state: "mismatch", assetId: assetDefinitionAssetId(other) });
   });
 
+  it("shows a definition of the token whose standard rule configuration does not open as invalid", () => {
+    const metadata = { name: "Pilot USD", symbol: "pUSD", decimals: 6, contentDigest: new Uint8Array(32) };
+    const contractAddress = 0x5fbdb2315678afecb367f032d93f642f64180aa3n;
+    const rule = senderDenyListTransferRule({ contractAddress, listId: new Uint8Array(32).fill(9), maxDelta: 7_200n });
+    const genuine = createAccountMintAsset({ metadata, accountAddress: 0xabcn, transferRule: rule }).definition;
+    // Another list's configuration under the genuine commitment: the token ID does not change.
+    const other = senderDenyListTransferRule({ contractAddress, listId: new Uint8Array(32).fill(10), maxDelta: 7_200n });
+    const corrupted = { ...genuine, transferRule: { ...rule, configuration: other.configuration } };
+    const assetId = assetDefinitionAssetId(genuine);
+    expect(assetDefinitionAssetId(corrupted)).toBe(assetId);
+    expect(checkDefinition(tokenShareLink("https://pcash.example", genuine), assetId).state).toBe("verified");
+    expect(checkDefinition(tokenShareLink("https://pcash.example", corrupted), assetId))
+      .toEqual({ state: "invalid", message: "This definition's rule settings do not match its token ID." });
+    expect(checkDefinition(formatAssetDefinition(corrupted)).state).toBe("invalid");
+  });
+
   it("explains unreadable definitions in plain words", () => {
     expect(checkDefinition("")).toMatchObject({ state: "invalid", message: "Paste a token definition or a token link." });
     expect(checkDefinition("not-a-definition")).toMatchObject({ state: "invalid", message: "This is not a readable token definition." });
@@ -47,8 +67,14 @@ describe("token model", () => {
     const definition = testDefinition();
     const encoded = formatAssetDefinition(definition);
     expect(checkDefinition(encoded.slice(0, -4)).state).toBe("invalid");
-    // Editing any committed field yields a readable definition of some other token.
-    expect(checkDefinition(`${encoded.slice(0, -2)}AA`, assetDefinitionAssetId(definition)).state).toBe("mismatch");
+    // Editing a committed field yields another token's definition, or none when the edited ID leaves its asset class.
+    const bytes = encodeAssetDefinition(definition);
+    const edits = new Set(Array.from({ length: 256 }, (_, value) => value).filter((value) => value !== bytes.at(-1)).map((value) => {
+      const edited = Uint8Array.from(bytes);
+      edited[edited.length - 1] = value;
+      return checkDefinition(toBase64Url(edited), assetDefinitionAssetId(definition)).state;
+    }));
+    expect(edits).toEqual(new Set(["mismatch", "invalid"]));
     expect(definitionFromHash("#wallet")).toBeUndefined();
     expect(definitionFromHash("")).toBeUndefined();
   });
@@ -74,5 +100,30 @@ describe("token model", () => {
       { line: 4, to: `0x${"34".repeat(20)}`, amountText: "7" },
     ]);
     expect(errors).toEqual([{ line: 5, message: "Write the recipient, a comma, then the amount." }]);
+  });
+
+  it("labels mint and transfer rules from the definition, and a mixed rule pair as custom", () => {
+    expect(tokenTerms(testDefinition()).mint).toEqual({ kind: "fixed-supply", supply: 100_000_000n });
+    expect(tokenTerms(testDefinition()).transfers).toEqual({ kind: "unrestricted" });
+    const metadata = { name: "Pilot USD", symbol: "pUSD", decimals: 6, contentDigest: new Uint8Array(32) };
+    const contract = 0x5fbdb2315678afecb367f032d93f642f64180aa3n;
+    const standard = senderDenyListTransferRule({ contractAddress: contract, listId: new Uint8Array(32).fill(9), maxDelta: 7_200n });
+    const define = (rule: typeof standard) => createAccountMintAsset({ metadata, accountAddress: 0xabcn, transferRule: rule }).definition;
+    expect(tokenTerms(define(standard))).toEqual({
+      mint: { kind: "account-mint", account: "0x0000000000000000000000000000000000000abc" },
+      transfers: { kind: "sender-deny-list", contract: "0x5fbdb2315678afecb367f032d93f642f64180aa3", listId: `0x${"09".repeat(32)}`, maxDelta: 7_200n },
+    });
+    expect([durationText(7_200n), durationText(5_400n), durationText(86_400n), durationText(45n)])
+      .toEqual(["2 hours", "90 minutes", "1 day", "45 seconds"]);
+    // The standard S key beside an unknown L key is not the standard rule.
+    expect(tokenTerms(define({ ...standard, lVkHash: standard.lVkHash + 1n })).transfers).toEqual({ kind: "custom" });
+    const accountMint = define(standard).mintRule;
+    expect(tokenTerms(findAssetDefinition({ mintRule: { ...accountMint, lVkHash: accountMint.lVkHash + 1n }, metadata })).mint)
+      .toEqual({ kind: "custom" });
+    const deposit = createDepositMintAsset({ metadata, vault: 0xc1n, transferRule: standard }).definition;
+    expect(tokenTerms(deposit).mint).toEqual({ kind: "deposit-mint", vault: "0x00000000000000000000000000000000000000c1" });
+    // The deposit-mint rule names no L key; a definition that adds one is not the standard rule.
+    expect(tokenTerms(findAssetDefinition({ mintRule: { ...deposit.mintRule, lVkHash: deposit.mintRule.sVkHash }, metadata })).mint)
+      .toEqual({ kind: "custom" });
   });
 });

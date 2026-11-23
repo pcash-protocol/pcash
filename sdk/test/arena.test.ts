@@ -38,8 +38,8 @@ import {
 import { withArenaRandom } from "../src/protocol/arenaRandom.ts";
 import { PRIVATE_VALUE_PROFILES, privateValueProfile, type PrivateValueShape } from "../src/constants/privateValueProfiles.ts";
 import { BN254_SCALAR_MODULUS } from "../src/crypto/field.ts";
-import { deriveStandardFungibleAssetFromEntropy } from "../src/protocol/asset.ts";
-import { assetDefinitionFromCreated, decodeAssetDefinition, encodeAssetDefinition } from "../src/protocol/assetDefinition.ts";
+import { decodeAssetDefinition, encodeAssetDefinition } from "../src/protocol/assetDefinition.ts";
+import { deriveFixedSupplyAsset } from "../src/rules/fixedSupply.ts";
 import { uvarintLength } from "../src/utils/byteCursor.ts";
 import { beBytes, concatBytes, utf8 } from "../src/utils/bytes.ts";
 import { fromHex, toHex } from "../src/utils/hex.ts";
@@ -76,11 +76,11 @@ function seededRandom(seed: string): (length: number) => Uint8Array {
 const zeros = (length: number) => new Uint8Array(length);
 const seeded = <T>(seed: string, build: () => T): T => withArenaRandom(seededRandom(seed), build);
 
-const definition = assetDefinitionFromCreated(deriveStandardFungibleAssetFromEntropy({
-  assetSecret: 0x5678n,
-  initialSupply: 1_000_000n,
+const { definition } = deriveFixedSupplyAsset({
+  secret: 0x5678n,
+  supply: 1_000_000n,
   metadata: { name: "Arena Token", symbol: "ARN", decimals: 6, contentDigest: new Uint8Array(32).fill(0xab) },
-}));
+});
 
 /** A memo that makes a recipient payload, type (1) ‖ uvarint length ‖ memo, exactly `payloadLength` bytes. */
 function memoFor(payloadLength: number): Uint8Array {
@@ -267,8 +267,8 @@ describe("arena geometry", () => {
       expect(() => regionCellsFor(regionCapacity(cells, shape) + 1, shape)).toThrow(/exceeds/);
     }
     expect([48, 49].map((length) => regionCellsFor(length, S))).toEqual([1, 2]);
-    // A 103-byte asset-definition record takes three cells.
-    expect(regionCellsFor(103, S)).toBe(3);
+    // A fixed-supply asset's 232-byte definition record takes five cells.
+    expect(regionCellsFor(232, S)).toBe(5);
     expect([2990, 2991, 3055, 3056].map((length) => regionCellsFor(length, L))).toEqual([47, 48, 48, 49]);
   });
 
@@ -339,8 +339,9 @@ describe("arena record lists", () => {
     // type (1) ‖ uvarint length (1) ‖ data: 2 + 10 and 2 + 20.
     expect(encodeRecords(records).length).toBe(34);
     expect(encodeRecords([]).length).toBe(0);
-    expect(encodeAssetDefinition(definition).length).toBe(99);
-    expect(encodeRecords([assetDefinitionSchema.encode(definition)]).length).toBe(2 + encodeAssetDefinition(definition).length);
+    expect(encodeAssetDefinition(definition).length).toBe(229);
+    // A 229-byte definition takes a two-byte uvarint length.
+    expect(encodeRecords([assetDefinitionSchema.encode(definition)]).length).toBe(3 + encodeAssetDefinition(definition).length);
   });
 
   it("rejects malformed record lists", () => {

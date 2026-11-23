@@ -31,14 +31,14 @@ import {
 import { SparseMerkleTree } from "@pcash/sdk/crypto";
 
 export const TEST_DEFAULT_RULE_SECRETS: DefaultUserRuleSecrets = {
-  assetCreationCommitmentBlinder: 0x121n,
+  mintCommitmentBlinder: 0x121n,
   paymentCommitmentBlinder: 0x102n,
   assetPaymentCommitmentBlinder: 0x104n,
   accountAdminCommitmentBlinder: 0x108n,
   assetBurnCommitmentBlinder: 0x106n,
   batchTransferCommitmentBlinder: 0x10en,
   largeBatchTransferCommitmentBlinder: 0x131n,
-  largeAssetCreationCommitmentBlinder: 0x133n,
+  largeMintCommitmentBlinder: 0x133n,
   largeContractFeeCommitmentBlinder: 0x135n,
   contractFeeCommitmentBlinder: 0x10an,
 };

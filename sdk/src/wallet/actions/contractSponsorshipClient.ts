@@ -44,6 +44,7 @@ import {
   nativeBurnAmount,
   quoteNativeBurn,
   type DesignatedIssuanceOpening,
+  type RestrictedAssetOpening,
 } from "@pcash/sdk/protocol";
 import { ACCOUNT_KIND_USER, PRIVATE_VALUE_PROFILES } from "@pcash/sdk/constants";
 import { addressHex, bytes32Hex, randomFieldEntropy } from "@pcash/sdk/utils";
@@ -116,6 +117,17 @@ export interface SponsoredContractAssetActionPrimary {
     build: AssetActionBuild,
     issuance: { designatedIssuanceOpening?: DesignatedIssuanceOpening },
   ): WitnessMap | Promise<WitnessMap>;
+  /**
+   * For an asset with a transfer rule: the definition's restricted opening
+   * and the rule's application and witness over the finished action, with the
+   * contract as the asset inputs' owner.
+   */
+  restricted?: {
+    opening: RestrictedAssetOpening;
+    /** The latest deadline the rule's publication authorizes; the action's deadline is capped to it. */
+    validUntilCeiling: bigint;
+    policy(build: AssetActionBuild): { circuitUrl: string; witnessMap: WitnessMap; label: string };
+  };
 }
 
 export interface SponsoredContractAssetActionIntent extends DurableSubmissionCallbacks {
@@ -353,9 +365,12 @@ export async function runSponsoredContractAssetActionClient<Prepared, Output>(
     throw new Error("the contract's side uses a slot it did not reserve");
   }
   const chainNow = status.latestBlockTimestamp;
+  const ceiling = primary.restricted?.validUntilCeiling;
+  const capped = ceiling !== undefined && (params.validUntilTimestamp === undefined || ceiling < params.validUntilTimestamp);
   const validUntilTimestamp = publicationValidUntil({
     chainNow, defaultWindow: DEFAULT_VALIDITY_WINDOW, selectedRelayQuote: params.selectedRelayQuote,
-    requested: params.validUntilTimestamp, requestedMode: params.validUntilMode, action: "sponsored contract action",
+    requested: capped ? ceiling : params.validUntilTimestamp,
+    requestedMode: capped ? "ceiling" : params.validUntilMode, action: "sponsored contract action",
   });
   const build = (
     relay: { amount: bigint; recipientAddress: bigint; receiveKey: Uint8Array; noteSecret: bigint } | undefined,
@@ -387,6 +402,7 @@ export async function runSponsoredContractAssetActionClient<Prepared, Output>(
       owner: primary.authorization,
       nativeFeePayer: true,
       assetId: primary.assetId,
+      ...(primary.restricted === undefined ? {} : { restricted: primary.restricted.opening }),
       inputs,
       outputs,
       openFeeAmount: plan.openFeeAmount,
@@ -452,7 +468,8 @@ export async function runSponsoredContractAssetActionClient<Prepared, Output>(
       witnessMap: sponsorWitness,
       label: "contract fee sponsorship rule",
     },
-    buildKernelWitnessMap: (primaryVk, feeVk) => buildSponsoredTransferWitness({
+    ...(primary.restricted === undefined ? {} : { policy: primary.restricted.policy(action) }),
+    buildKernelWitnessMap: (primaryVk, feeVk, policyVk) => buildSponsoredTransferWitness({
       build: action,
       snapshot: roots,
       pcashChainId: params.chainId,
@@ -462,6 +479,7 @@ export async function runSponsoredContractAssetActionClient<Prepared, Output>(
       ...(nativeRelayPayment === undefined ? {} : { nativeRelayPayment }),
       primaryVk,
       feeVk,
+      ...(policyVk === undefined ? {} : { policyVk }),
     }).witnessMap,
     expectedPublicInputs: action.publicInputs,
   });

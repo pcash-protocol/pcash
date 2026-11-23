@@ -17,7 +17,7 @@ export {
 } from "./nativeTransfer.ts";
 export type { ChonkVkArtifacts } from "../protocol/account.ts";
 export type { WitnessMap } from "../protocol/witness.ts";
-export { fieldArrayMap, fm, privateValuePublicInputNames, privateValueMap } from "../protocol/witness.ts";
+export { compositePrivateValueMap, fieldArrayMap, fm, privateValuePublicInputNames, privateValueMap } from "../protocol/witness.ts";
 export * from "./userAccountCreation.ts";
 export * from "./assetOutputs.ts";
 export * from "./assetAction.ts";

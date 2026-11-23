@@ -3,14 +3,15 @@
 // second; the rule's private statement is linked through the databus.
 // Historical account membership is required unless every input is DUMMY.
 // All-dummy actions open a supplied rule set, not installed account authority.
-// Asset creation and sponsored transfer use their own protocol
-// kernels and converge on the same private-value hiding kernel.
+// It moves only assets without a transfer rule; the restricted-transfer kernel
+// moves the others with the same relation.
 
 use crate::authorization::authentication::{AuthorizedAccount, open_account};
 use crate::authorization::statement::{
     assert_rule_statement, RULE_STATEMENT_LENGTH, transfer_action_commitment,
 };
 use crate::events::{EVENT_STATEMENT_LENGTH, events_commitment, verify_event};
+use crate::ledger::asset::assert_unrestricted_asset_id;
 use crate::ledger::opening::{open_transfer_inputs, open_value_state};
 use crate::ledger::private_value::{
     PrivateValue, PrivateValueChoices, SLOT_CLASS_DUMMY, transaction_statement,
@@ -22,7 +23,19 @@ use crate::primitives::params::{BLOCK_HEADER_TREE_DEPTH, STATE_TREE_DEPTH};
 use crate::primitives::types::InputNoteWitness;
 use crate::recursion::{AppVerificationKey, verify_first_app};
 
-pub fn transfer<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
+// A one-account action: its private value, its transfer action, the owner's
+// authorization commitment and address, and the total of its asset inputs.
+pub struct OneAccountAction<let N_IN: u32, let N_OUT: u32, let SHAPE: u32> {
+    pub private_value: PrivateValue<N_IN, N_OUT, SHAPE>,
+    pub action: Field,
+    pub authorization: Field,
+    pub owner_address: Field,
+    pub asset_amount: Field,
+}
+
+// The relation both one-account kernels share. `exempt_all_dummy` waives
+// account membership for an action whose every input is DUMMY.
+pub fn one_account_action<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
     pcash_chain_id: Field,
     recent_pcash_block_hash: Field,
     choices: PrivateValueChoices<N_IN, N_OUT>,
@@ -31,7 +44,6 @@ pub fn transfer<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
     output_amounts: [Field; N_OUT],
     asset_id: Field,
     dummy_input_seed: Field,
-    // Rule-defined replay identity per APPLICATION slot; ignored otherwise.
     replay_ids: [Field; N_IN],
     block_header_state_siblings: [Field; BLOCK_HEADER_TREE_DEPTH],
     output_root: Field,
@@ -39,15 +51,11 @@ pub fn transfer<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
     account_state_root: Field,
     state_account_siblings: [Field; STATE_TREE_DEPTH],
     account: AuthorizedAccount,
-    // Bound by account membership unless every input is DUMMY.
     account_kind: Field,
     owner_inputs: [InputNoteWitness; N_IN],
-    rule_statement: [Field; RULE_STATEMENT_LENGTH],
-    authorization_vk: AppVerificationKey,
-    event_statement: [Field; EVENT_STATEMENT_LENGTH],
-    event_application_vk: AppVerificationKey,
-    event_salt: Field,
-) -> [Field; N_IN + N_OUT + 11] {
+    authorization_vk_hash: Field,
+    exempt_all_dummy: bool,
+) -> OneAccountAction<N_IN, N_OUT, SHAPE> {
     open_value_state(
         recent_pcash_block_hash,
         block_header_state_siblings,
@@ -57,8 +65,8 @@ pub fn transfer<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
         state_account_siblings,
     );
 
-    let (account_root, opening) = open_account(account, account_kind, authorization_vk.hash);
-    let mut all_inputs_dummy = true;
+    let (account_root, opening) = open_account(account, account_kind, authorization_vk_hash);
+    let mut all_inputs_dummy = exempt_all_dummy;
     for i in 0..N_IN {
         all_inputs_dummy &= choices.input_slot_classes[i] == SLOT_CLASS_DUMMY;
     }
@@ -102,18 +110,75 @@ pub fn transfer<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
 
     let (private_value, commitment): (PrivateValue<N_IN, N_OUT, SHAPE>, Field) =
         build_private_value(choices, inputs.input_commitments, inputs.nullifiers, bodies);
-    let action = transfer_action_commitment(pcash_chain_id, commitment);
+    OneAccountAction {
+        private_value,
+        action: transfer_action_commitment(pcash_chain_id, commitment),
+        authorization: opening.authorization,
+        owner_address: opening.address,
+        asset_amount: inputs.asset_amount,
+    }
+}
+
+pub fn transfer<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
+    pcash_chain_id: Field,
+    recent_pcash_block_hash: Field,
+    choices: PrivateValueChoices<N_IN, N_OUT>,
+    output_owner_commitments: [Field; N_OUT],
+    output_dummy_secrets: [Field; N_OUT],
+    output_amounts: [Field; N_OUT],
+    asset_id: Field,
+    dummy_input_seed: Field,
+    // Rule-defined replay identity per APPLICATION slot; ignored otherwise.
+    replay_ids: [Field; N_IN],
+    block_header_state_siblings: [Field; BLOCK_HEADER_TREE_DEPTH],
+    output_root: Field,
+    state_output_siblings: [Field; STATE_TREE_DEPTH],
+    account_state_root: Field,
+    state_account_siblings: [Field; STATE_TREE_DEPTH],
+    account: AuthorizedAccount,
+    // Bound by account membership unless every input is DUMMY.
+    account_kind: Field,
+    owner_inputs: [InputNoteWitness; N_IN],
+    rule_statement: [Field; RULE_STATEMENT_LENGTH],
+    authorization_vk: AppVerificationKey,
+    event_statement: [Field; EVENT_STATEMENT_LENGTH],
+    event_application_vk: AppVerificationKey,
+    event_salt: Field,
+) -> [Field; N_IN + N_OUT + 11] {
+    // An action with no asset slot leaves the witness unused; zero passes.
+    assert_unrestricted_asset_id(asset_id);
+    let action: OneAccountAction<N_IN, N_OUT, SHAPE> = one_account_action(
+        pcash_chain_id,
+        recent_pcash_block_hash,
+        choices,
+        output_owner_commitments,
+        output_dummy_secrets,
+        output_amounts,
+        asset_id,
+        dummy_input_seed,
+        replay_ids,
+        block_header_state_siblings,
+        output_root,
+        state_output_siblings,
+        account_state_root,
+        state_account_siblings,
+        account,
+        account_kind,
+        owner_inputs,
+        authorization_vk.hash,
+        true,
+    );
     verify_first_app(authorization_vk);
     let entry = verify_event(
         event_statement,
         event_application_vk,
-        action,
+        action.action,
         recent_pcash_block_hash,
     );
     assert_rule_statement(
         rule_statement,
-        opening.authorization,
-        action,
+        action.authorization,
+        action.action,
         recent_pcash_block_hash,
         entry,
     );
@@ -121,7 +186,7 @@ pub fn transfer<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
     transaction_statement(
         pcash_chain_id,
         recent_pcash_block_hash,
-        private_value,
+        action.private_value,
         events_commitment(entry, event_salt),
     )
 }

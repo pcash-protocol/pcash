@@ -7,8 +7,10 @@ import {
   submitPreparedAssetAction,
 } from "../../src/wallet/actions/assetActionClient.ts";
 import { buildAssetAction, outOfBandAssetActionOutput, type AssetActionBuild } from "@pcash/sdk/builders";
+import type { MintRuleApplication } from "@pcash/sdk/prover";
 import { DurablePreBroadcastError, type DurableSubmissionAdapter } from "../../src/wallet/actions/durableSubmission.ts";
 import { runAssetCreationClient } from "../../src/wallet/actions/assetCreationClient.ts";
+import { runAccountMintClient } from "../../src/wallet/actions/mintClient.ts";
 import { synchronizeWalletInventory } from "../../src/wallet/actions/scan.ts";
 import { privateKeyPcashActionSigner } from "@pcash/sdk/eip712";
 import {
@@ -25,10 +27,9 @@ import { deliveredOutput, senderRegionOf } from "./deliveryHelpers.ts";
 import type { PcashNodeClient, StatusResult } from "@pcash/sdk/clients";
 import {
   assetDefinitionSchema,
-  assetSecretCommitment,
   sizeClassFiller,
   SlotClass,
-  standardFungibleAssetId,
+  findAssetDescriptor,
   encodePrivateValueTransaction,
   WIRE_PROOF_BYTES,
   controlledIssuanceOpening,
@@ -37,9 +38,17 @@ import {
   decodePayload,
   decryptEnvelope,
   generateMlKemKeyPair,
+  type AssetDefinition,
   type MlKemKeyPair,
 } from "@pcash/sdk/protocol";
-import { defaultUserAccountRuleSet } from "@pcash/sdk/rules";
+import {
+  ACCOUNT_MINT_RULE_CIRCUIT,
+  createAccountMintAsset,
+  defaultUserAccountRuleSet,
+  FIXED_SUPPLY_RULE_CIRCUIT,
+  fixedSupplyMintRule,
+  fixedSupplySecretCommitment,
+} from "@pcash/sdk/rules";
 import * as referenceRules from "@pcash/sdk/rules";
 import { derivePcashProfileFromPrivateKey } from "../../src/wallet/externalIdentity.ts";
 import { assetActionInputResources } from "../../src/wallet/reservations.ts";
@@ -55,15 +64,10 @@ const creatorSecret = 0x1234n;
 const totalSupply = 1_000n;
 const recipientAddress = 0x1234n;
 const recipientNoteSecret = 0x10n;
-const descriptorFields = {
+const descriptor = findAssetDescriptor({
   metadataCommitment: 0x9999n,
-  initialSupply: totalSupply,
-  assetSecretCommitment: assetSecretCommitment(creatorSecret),
-};
-const descriptor = {
-  assetId: standardFungibleAssetId(descriptorFields),
-  ...descriptorFields,
-};
+  mintRule: fixedSupplyMintRule({ supply: totalSupply, secretCommitment: fixedSupplySecretCommitment(creatorSecret) }),
+}, 0n);
 
 function fixture(nativeAmount = 0n, openFeeAmount = 0n) {
   const build = buildAssetAction({
@@ -81,10 +85,9 @@ function fixture(nativeAmount = 0n, openFeeAmount = 0n) {
       accountStateRoot: 4n,
       accountStateRootStateSiblings: [0n, 0n, 0n, 0n],
     },
-    assetDescriptor: descriptor,
-    assetSecret: creatorSecret,
+    mint: { descriptor },
     inputs: [
-      { kind: "creation-marker" },
+      { kind: "mint-marker", replayId: creatorSecret },
       nativeAmount === 0n ? { kind: "dummy" } : { kind: "native", amount: nativeAmount, noteSecret: 99n, leafIndex: 0, siblings: Array(40).fill(0n) },
       { kind: "dummy" },
       { kind: "dummy" },
@@ -142,7 +145,7 @@ const profileChain = (accountRuleSetCommitment: bigint, receiveKey?: Uint8Array 
 describe("asset action durable preparation", () => {
   it.each([
     ["asset-payment", "assetPaymentRule"], ["asset-burn", "assetBurnRule"],
-    ["batch-transfer", "batchTransferRule"], ["asset-creation", "assetCreationRule"],
+    ["batch-transfer", "batchTransferRule"], ["mint", "mintRule"],
   ] as const)("selects the %s installed rule before building", async (authorizationKind, property) => {
     const rules = defaultUserAccountRuleSet({ wallet: profile, network: fixtureNetwork, secrets: profile.defaultUserRuleSecrets });
     const status = testStatus({ pcashChainId: Number(fixtureNetwork.pcashChainId), genesisHash: fixtureGenesisHash, l1ChainId: fixtureNetwork.l1ChainId, inboxAddress: fixtureNetwork.inboxAddress });
@@ -384,8 +387,8 @@ describe("asset creation publication", () => {
   }
   const create = (node: PcashNodeClient, store: ReturnType<typeof memoryWalletStateStore>, submission: DurableSubmissionAdapter<string, string>, proofs: string[], builds: AssetActionBuild[] = []) => runAssetCreationClient({
     node, store, wallet: profile, signer: privateKeyPcashActionSigner(privateKey), chainId: fixtureNetwork.pcashChainId,
-    metadata: { name: "Asset", symbol: "AST", decimals: 0, contentDigest: new Uint8Array(32) }, initialSupply: 10n,
-    prover: { proveAndEncode: async (build) => {
+    metadata: { name: "Asset", symbol: "AST", decimals: 0, contentDigest: new Uint8Array(32) }, supply: 10n,
+    prover: { shapes: [0], proveAndEncode: async (build) => {
       proofs.push("proof");
       builds.push(build);
       return encodePrivateValueTransaction({ publicInputs: build.publicInputs, proof: new Uint8Array(WIRE_PROOF_BYTES), outputData: build.outputData, arena: build.arena });
@@ -434,10 +437,11 @@ describe("asset creation publication", () => {
     expect(store.snapshot()?.mempoolOutbox).toBeUndefined();
   });
 
-  it("journals the definition and asset secret before broadcast and records the definition in the sender region only", async () => {
+  it("journals the definition and asset secret before broadcast and delivers the definition with the minted output and in the sender region", async () => {
     const store = walletStore();
     let journaled: WalletFileData["assets"];
     let built: AssetActionBuild | undefined;
+    let mintRule: MintRuleApplication | undefined;
     const submission: DurableSubmissionAdapter<string, string> = {
       mode: "mempool",
       preflight: async () => "prepared",
@@ -445,9 +449,10 @@ describe("asset creation publication", () => {
     };
     const result = await runAssetCreationClient({
       node: creationNode(), store, wallet: profile, signer: privateKeyPcashActionSigner(privateKey), chainId: fixtureNetwork.pcashChainId,
-      metadata: { name: "Asset", symbol: "AST", decimals: 0, contentDigest: new Uint8Array(32).fill(5) }, initialSupply: 10n,
-      prover: { proveAndEncode: async (build) => {
+      metadata: { name: "Asset", symbol: "AST", decimals: 0, contentDigest: new Uint8Array(32).fill(5) }, supply: 10n,
+      prover: { shapes: [0], proveAndEncode: async (build, _authorization, application) => {
         built = build;
+        mintRule = application;
         return encodePrivateValueTransaction({ publicInputs: build.publicInputs, proof: new Uint8Array(WIRE_PROOF_BYTES), outputData: build.outputData, arena: build.arena });
       } },
       submission, settlePollMaxAttempts: 1, settlePollIntervalMs: 0,
@@ -457,11 +462,20 @@ describe("asset creation publication", () => {
     expect(journaled).toHaveLength(1);
     expect(BigInt(journaled![0]!.assetId)).toBe(result.assetId);
     expect(storedAssetDefinition(journaled![0]!)).toEqual(result.definition);
-    expect(assetSecretCommitment(BigInt(journaled![0]!.assetSecret!))).toBe(result.definition.assetSecretCommitment);
+    const secret = BigInt(journaled![0]!.assetSecret!);
+    expect(result.definition.mintRule).toEqual(fixedSupplyMintRule({ supply: 10n, secretCommitment: fixedSupplySecretCommitment(secret) }));
+    // The journaled secret is the one the fixed-supply rule proves.
+    expect(mintRule!.packageName).toBe(FIXED_SUPPLY_RULE_CIRCUIT);
+    expect(mintRule!.witnessMap.secret).toBe(fieldToHex(secret));
+    // The mint rule declares every minted unit, so the creator's supply is an opened output with its own region.
     const delivered = deliveredOutput(built!, fixtureNetwork.pcashChainId, profile.mlKemSecretKey, 0)!;
     expect(delivered.note.amount).toBe(10n);
-    expect(delivered.note).not.toHaveProperty("anchor");
-    expect(recordValue(senderRegionOf(built!, fixtureNetwork.pcashChainId, profile.outgoingKey)?.records, assetDefinitionSchema)).toEqual(result.definition);
+    expect(delivered.note.anchor).toBeDefined();
+    expect(recordValue(delivered.records, assetDefinitionSchema)).toEqual(result.definition);
+    const sender = senderRegionOf(built!, fixtureNetwork.pcashChainId, profile.outgoingKey)!;
+    expect(recordValue(sender.records, assetDefinitionSchema)).toEqual(result.definition);
+    // The supply returns to the creator, so the sender region records no payment.
+    expect(sender.sentEnvelopes).toEqual([]);
   });
 
   it("restores a creation's definition from its sender region into an empty asset store", async () => {
@@ -494,10 +508,10 @@ describe("asset creation publication", () => {
     const proofs: string[] = [];
     const first = await create(creationNode(), store, adapter("mempool", []), proofs);
     const metadata = { name: "Asset", symbol: "AST", decimals: 0, contentDigest: new Uint8Array(32) };
-    const reprove = (node: PcashNodeClient, overrides: { initialSupply?: bigint } = {}) => runAssetCreationClient({
+    const reprove = (node: PcashNodeClient, overrides: { supply?: bigint } = {}) => runAssetCreationClient({
       node, store, wallet: profile, signer: privateKeyPcashActionSigner(privateKey), chainId: fixtureNetwork.pcashChainId,
-      metadata, initialSupply: overrides.initialSupply ?? 10n, assetId: first.assetId,
-      prover: { proveAndEncode: async (build) => {
+      metadata, supply: overrides.supply ?? 10n, assetId: first.assetId,
+      prover: { shapes: [0], proveAndEncode: async (build) => {
         proofs.push("reproof");
         return encodePrivateValueTransaction({ publicInputs: build.publicInputs, proof: new Uint8Array(WIRE_PROOF_BYTES), outputData: build.outputData, arena: build.arena });
       } },
@@ -511,7 +525,7 @@ describe("asset creation publication", () => {
       removePendingNotesForTransaction(data!, first.contentHash);
       return { data: data!, value: undefined };
     });
-    await expect(reprove(creationNode(), { initialSupply: 11n })).rejects.toThrow(/differs from the reviewed terms/);
+    await expect(reprove(creationNode(), { supply: 11n })).rejects.toThrow(/differs from the reviewed terms/);
     const markerNode = (spent: boolean) => Object.assign(creationNode(), {
       getWitnessSnapshot: async (query: { nullifiers: string[] }) =>
         ({ status, nullifiers: { statuses: query.nullifiers.map((nullifier) => ({ nullifier, spent })) } }),
@@ -535,8 +549,8 @@ describe("asset creation publication", () => {
     const metadata = { name: "Asset", symbol: "AST", decimals: 0, contentDigest: new Uint8Array(32) };
     const retry = {
       node, store, wallet: profile, signer: privateKeyPcashActionSigner(privateKey), chainId: fixtureNetwork.pcashChainId,
-      metadata, initialSupply: 10n, retryContentHash: first.contentHash,
-      prover: { proveAndEncode: async () => { throw new Error("retry must not prove again"); } },
+      metadata, supply: 10n, retryContentHash: first.contentHash,
+      prover: { shapes: [0] as const, proveAndEncode: async () => { throw new Error("retry must not prove again"); } },
       submission: adapter("mempool", []), settlePollMaxAttempts: 1, settlePollIntervalMs: 0,
     };
     const resumed = await runAssetCreationClient(retry);
@@ -546,11 +560,49 @@ describe("asset creation publication", () => {
     expect(store.snapshot()?.pendingAssetActions?.[0]?.transactionHex).toBe(first.transactionHex);
     await expect(runAssetCreationClient({ ...retry, metadata: { ...metadata, symbol: "NEW" } }))
       .rejects.toThrow(/differs from the reviewed terms/);
-    await expect(runAssetCreationClient({ ...retry, initialSupply: 11n }))
+    await expect(runAssetCreationClient({ ...retry, supply: 11n }))
       .rejects.toThrow(/differs from the reviewed terms/);
     await expect(runAssetCreationClient({ ...retry, openFeeAmount: 1n }))
       .rejects.toThrow(/differs from the reviewed terms/);
     await expect(runAssetCreationClient({ ...retry, submission: adapter("l1", []) }))
       .rejects.toThrow(/another publication mode/);
+  });
+  const mintNode = () => Object.assign(creationNode(), {
+    getWitnessSnapshot: async (query: { nullifiers: string[] }) =>
+      ({ status, nullifiers: { statuses: query.nullifiers.map((nullifier) => ({ nullifier, spent: false })) } }),
+  });
+  const accountMint = (definition: AssetDefinition, builds: AssetActionBuild[], mintRules: MintRuleApplication[]) => runAccountMintClient({
+    node: mintNode(), store: walletStore(), wallet: profile, signer: privateKeyPcashActionSigner(privateKey), chainId: fixtureNetwork.pcashChainId,
+    definition,
+    outputs: [1n, 2n, 3n, 4n, 5n].map((amount) => ({ to: addressHex(profile.address), amount })),
+    replayIds: [0x77n],
+    prover: { shapes: [0, 1], proveAndEncode: async (build, _authorization, mintRule) => {
+      builds.push(build);
+      mintRules.push(mintRule);
+      return build.encodeTransaction(new Uint8Array(WIRE_PROOF_BYTES));
+    } },
+    submission: adapter("mempool", []), settlePollMaxAttempts: 1, settlePollIntervalMs: 0,
+  });
+  const mintMetadata = { name: "Minted", symbol: "MNT", decimals: 0, contentDigest: new Uint8Array(32) };
+
+  it("mints an account-mint asset to five recipients with no fee under the account-mint rule", async () => {
+    const created = createAccountMintAsset({ metadata: mintMetadata, accountAddress: profile.address });
+    const builds: AssetActionBuild[] = [];
+    const mintRules: MintRuleApplication[] = [];
+    const result = await accountMint(created.definition, builds, mintRules);
+    expect(result.assetId).toBe(created.descriptor.assetId);
+    expect(builds[0]!.shape).toBe(0);
+    expect(builds[0]!.outputData.map((outputData) =>
+      decodePayload(decryptEnvelope(profile.mlKemSecretKey, outputData)!, { chainId: fixtureNetwork.pcashChainId }).amount))
+      .toEqual([1n, 2n, 3n, 4n, 5n]);
+    expect(mintRules.map((mintRule) => mintRule.packageName)).toEqual([ACCOUNT_MINT_RULE_CIRCUIT]);
+    expect(mintRules[0]!.witnessMap.account_address).toBe(fieldToHex(profile.address));
+  });
+
+  it("refuses to mint an account-mint asset whose configured account is another wallet's", async () => {
+    const created = createAccountMintAsset({ metadata: mintMetadata, accountAddress: profile.address + 1n });
+    const builds: AssetActionBuild[] = [];
+    await expect(accountMint(created.definition, builds, [])).rejects.toThrow("this wallet is not the asset's minting account");
+    expect(builds).toEqual([]);
   });
 });

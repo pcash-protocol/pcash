@@ -6,7 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EthereumName, ReverseNameResult } from "@pcash/sdk/names";
 
-const rpc = vi.hoisted(() => ({ reverseAddress: vi.fn(), resolveName: vi.fn(), getAvatar: vi.fn() }));
+const rpc = vi.hoisted(() => ({ reverseAddress: vi.fn(), resolveName: vi.fn(), getAvatar: vi.fn(), readAddress: vi.fn() }));
 import { EthereumAddress } from "./EthereumAddress.tsx";
 import { AddressDisplay, AddressLink, Hash } from "../routes/explorer/ui.tsx";
 import { NameResolutionContext, useEthereumIdentity, useNameAddress } from "../names/useEthereumName.ts";

@@ -4,24 +4,24 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { appRoutes } from "./App.tsx";
 import { RouteError } from "./routes/RouteError.tsx";
-import { footerNavigation, primaryNavigation, routeById } from "./routes/routeManifest.ts";
+import { legalNavigation, primaryNavigation, referenceNavigation, routeById } from "./routes/routeManifest.ts";
 
 function render(pathname: string) {
   return renderToStaticMarkup(<RouterProvider router={createMemoryRouter(appRoutes(), { initialEntries: [pathname] })} />);
 }
 
 describe("application shell", () => {
-  it("puts the products, then the reference material, in the header", () => {
-    expect(primaryNavigation.map((route) => route.primaryLabel))
-      .toEqual(["Marketplace", "Tokens", "Explorer", "Get PCASH", "Messages", "Learn", "Developers"]);
+  it("puts what a visitor does, then what they look up, in the header", () => {
+    expect(primaryNavigation.map((route) => route.primaryLabel)).toEqual(["Try PCASH", "Marketplace"]);
+    expect(referenceNavigation.map((route) => route.primaryLabel)).toEqual(["Explorer", "Docs"]);
   });
 
-  it("links Tokens from the footer beside the other products", () => {
-    expect(footerNavigation.map((route) => route.id)).toContain("tokens");
+  it("ends the footer with the legal pages", () => {
+    expect(legalNavigation.map((route) => route.primaryLabel)).toEqual(["Terms", "Privacy"]);
   });
 
   it("renders the shared chrome on a public route", () => {
-    const html = render(routeById("developers").path);
+    const html = render(routeById("docs").path);
     expect(html).toContain('aria-label="Primary navigation"');
     expect(html).toContain('href="/marketplace"');
     expect(html).not.toContain("Not found");
@@ -31,11 +31,14 @@ describe("application shell", () => {
     const pages = appRoutes()[0]?.children?.[0];
     expect(pages?.path).toBeUndefined();
     expect((pages?.errorElement as ReactElement).type).toBe(RouteError);
-    expect(pages?.children?.map((route) => route.path)).toContain(`${routeById("marketplace").path}/*`);
-    expect(pages?.children?.map((route) => route.path)).toContain(routeById("tokens").path);
+    // Try PCASH's pages sit in a pathless layout inside the same error boundary.
+    const paths = pages?.children?.flatMap((route) => [route.path, ...route.children?.map((child) => child.path) ?? []]);
+    expect(paths).toContain(`${routeById("marketplace").path}/*`);
+    expect(paths).toContain(routeById("tokens").path);
+    expect(paths).toContain(routeById("account").path);
   });
 
-  it.each([["marketplace"], ["get"], ["explorer"], ["tokens"], ["token-new"], ["claim"], ["messages"]])("resolves the %s route rather than the catch-all", (id) => {
+  it.each([["marketplace"], ["get"], ["get-earn"], ["account"], ["explorer"], ["tokens"], ["token-new"], ["claim"], ["board"]])("resolves the %s route rather than the catch-all", (id) => {
     const html = render(routeById(id).path);
     expect(html).not.toContain("Not found");
   });
@@ -71,7 +74,6 @@ describe("application shell", () => {
     "/pending",
     "/issuance",
     "/mine",
-    "/account",
     "/bob",
     "/explorer/blocks",
     `/explorer/transaction/0x${"ab".repeat(32)}`,

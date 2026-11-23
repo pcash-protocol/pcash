@@ -93,11 +93,11 @@ describe("default user account", () => {
       rules.assetBurnRule,
       rules.batchTransferRule,
       rules.largeBatchTransferRule,
-      rules.largeAssetCreationRule,
+      rules.largeMintRule,
       rules.largeContractFeeSponsorshipRule,
       rules.accountAdminRule,
       rules.contractFeeSponsorshipRule,
-      rules.assetCreationRule,
+      rules.mintRule,
     ];
     expect(allRules.map((rule) => rule.entryIndex).sort((a, b) => a - b))
       .toEqual([...DEFAULT_RULE_ENTRY_INDICES]);

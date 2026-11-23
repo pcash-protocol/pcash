@@ -338,7 +338,7 @@ mod tests {
         );
     }
 
-    #[test(should_fail_with = "input slot class must be dummy, native, asset, asset creation, or application")]
+    #[test(should_fail_with = "input slot class must be dummy, native, asset, mint, or application")]
     fn test_rejects_invalid_input_class() {
         let (mut choices, secrets) = all_dummy::<S_INPUTS, S_OUTPUTS>();
         choices.input_slot_classes[0] = 99;

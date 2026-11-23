@@ -122,6 +122,14 @@ function publicCells(length: number): number {
   return length === 0 ? 0 : Math.ceil((PUBLIC_HEADER_BYTES + length) / ARENA_CELL_BYTES);
 }
 
+/** A section's outputs, inputs or records do not fit its profile; a larger profile may hold them. */
+export class ProfileCapacityError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ProfileCapacityError";
+  }
+}
+
 export interface ArenaPlan {
   /** Cells of each entry of `regions`, in order. */
   cellsPerRegion: number[];
@@ -562,7 +570,7 @@ export function writeArena(prepared: ArenaWritePlan): BuiltArena {
   const { input, allocation: plan, senderPayload, publicPayload, recipients } = prepared;
   const { shape, sender } = input;
   const frame = arenaFrame(shape, input.context);
-  if (!plan.fits) throw new Error(`arena regions need ${plan.usedCells} cells; the ${privateValueProfile(shape).name} arena has ${plan.totalCells}`);
+  if (!plan.fits) throw new ProfileCapacityError(`arena regions need ${plan.usedCells} cells; the ${privateValueProfile(shape).name} arena has ${plan.totalCells}`);
 
   const salt = arenaRandom(ARENA_SALT_BYTES);
   const arena = new Uint8Array(frame.arenaBytes);

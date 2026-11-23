@@ -7,7 +7,7 @@ import { isProverAvailable, nativeChonkBackend } from "../src/node/nativeProver.
 import { proveChonkStack } from "../src/prover/chonk.ts";
 import { prepareEventApplication, sponsoredTransferStack, transferTransactionStack, type ChonkCircuitResolver, type ChonkStack } from "../src/prover/stacks.ts";
 import { privateValueProfile } from "../src/constants/privateValueProfiles.ts";
-import { sharedAssetClaimFixture } from "./sharedAssetClaimFixtures.ts";
+import { sharedAssetClaimFixture } from "@pcash/test-support/shared-asset-claim-fixtures";
 import { fm, privateValueMap } from "../src/protocol/witness.ts";
 import { privateValueProfileFixture } from "./privateValueProfileFixtures.ts";
 import { proverAssetsDir } from "./circuitBundle.ts";

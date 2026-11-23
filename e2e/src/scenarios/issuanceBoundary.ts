@@ -12,7 +12,7 @@ export async function runIssuanceBoundaryScenario(fixture: ScenarioFixture): Pro
   const accepted = async (action: { contentHash: string }, label: string) => fixture.waitForAcceptedAcrossNodes(action.contentHash, label);
   const createAsset = (name: string) => s.createAsset({
     metadata: { name, symbol: "PART", decimals: 0, contentDigest: new Uint8Array(32) },
-    initialSupply: 1n,
+    supply: 1n,
     submission: selfPublished,
   });
   await accepted(await s.updateAccount({ submission: selfPublished }), "issuance-preparation-account");

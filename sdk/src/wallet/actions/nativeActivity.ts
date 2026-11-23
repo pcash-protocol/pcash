@@ -2,14 +2,19 @@ import type { WalletProfile } from "@pcash/sdk/protocol";
 import { bytes32Hex, fromHex } from "@pcash/sdk/utils";
 import { noteNullifier } from "./publication.ts";
 import type { StoredSentOutput, WalletFileData, WalletNote } from "../noteStore.ts";
+import type { PaymentDisclosure } from "../paymentDisclosure.ts";
 import type { WalletStateStore } from "../store.ts";
 
-/** What the sender of one received note wrote into it. Unauthenticated: any sender can write anything. */
+/** One received note: what its sender wrote into it, which is unauthenticated, and its receipt. */
 export interface WalletReceivedMessage {
+  /** The amount of the note that carried the message. */
+  amount: bigint;
   /** Empty when the sender wrote no memo. */
   memo: Uint8Array;
   /** Address the sender wrote as its own, or null. */
   sender: bigint | null;
+  /** Opens this note's output alone for someone else. */
+  disclosure?: PaymentDisclosure;
 }
 
 /** One output this wallet paid, reopened through the sender region it wrote. */
@@ -19,6 +24,8 @@ export interface WalletSentOutput {
   /** Empty when the payment carried no memo. */
   memo: Uint8Array;
   senderIncluded: boolean;
+  /** Opens this output alone for someone else; absent for an output whose bytes the builder supplied. */
+  disclosure?: PaymentDisclosure;
 }
 
 /** System payout this wallet collected in one entry: explicit fees and issuance, from its own recovered system notes. */
@@ -41,7 +48,7 @@ export interface WalletNativeActivityEntry {
   payout: WalletSystemPayoutActivity | null;
   /** Commitments of the notes the entry created for this wallet; unlike transactionId, they survive re-inclusion after a reorg. */
   commitments: string[];
-  /** Memos and sender addresses on this entry's received notes; absent when none carried either. */
+  /** Memos, sender addresses and receipts of this entry's received notes; absent when none has any. */
   messages?: WalletReceivedMessage[];
   /** What this transaction paid, when this wallet wrote a sender region for it. */
   sent?: WalletSentOutput[];
@@ -103,6 +110,9 @@ function sentOutputsByTransaction(outputs: readonly StoredSentOutput[]): Map<str
       amount: BigInt(output.amount),
       memo: output.memo === undefined ? new Uint8Array(0) : fromHex(output.memo),
       senderIncluded: output.senderIncluded,
+      ...(output.disclosureKey === undefined
+        ? {}
+        : { disclosure: { contentHash: output.contentHash, slot: output.slot, disclosureKey: output.disclosureKey } }),
     });
     byTransaction.set(output.transactionId, list);
   }
@@ -147,9 +157,11 @@ export class NativeActivityReader {
     const flows: Contribution[] = notes.map((note) => ({
       transactionId: note.cursor!.transactionId, blockNumber: BigInt(note.cursor!.blockNumber), blockHash: note.cursor!.blockHash,
       timestamp: BigInt(note.cursor!.blockTimestamp), amount: BigInt(note.amount), commitments: [note.commitment!],
-      ...(note.memo === undefined && note.sender === undefined ? {} : { message: {
+      ...(note.memo === undefined && note.sender === undefined && note.disclosure === undefined ? {} : { message: {
+        amount: BigInt(note.amount),
         memo: note.memo === undefined ? new Uint8Array(0) : fromHex(note.memo),
         sender: note.sender === undefined ? null : BigInt(note.sender),
+        ...(note.disclosure === undefined ? {} : { disclosure: note.disclosure }),
       } }),
       ...(note.cursor!.payout === null ? {} : { payout: {
         openFeeAmount: note.cursor!.payout.component === "openFee" ? BigInt(note.amount) : 0n,

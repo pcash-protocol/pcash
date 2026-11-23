@@ -3,6 +3,7 @@ import { contractCreationScenario } from "./contractCreation.ts";
 import { largeScenarios } from "./large.ts";
 import { marketplaceClaimScenario } from "./marketplace.ts";
 import { protocolScenarios } from "./protocol.ts";
+import { restrictedScenarios } from "./restricted.ts";
 import type { PerformanceScenario } from "./common.ts";
 
 export type {
@@ -15,5 +16,5 @@ export type {
 
 /** One scenario per distinct circuit stack worth measuring. */
 export function performanceScenarios(): PerformanceScenario[] {
-  return [...lineageScenarios(), ...protocolScenarios(), marketplaceClaimScenario, contractCreationScenario(), ...largeScenarios()];
+  return [...lineageScenarios(), ...protocolScenarios(), ...restrictedScenarios(), marketplaceClaimScenario, contractCreationScenario(), ...largeScenarios()];
 }

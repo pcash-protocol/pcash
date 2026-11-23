@@ -62,9 +62,10 @@ export class IndexedDbTokensStore implements TokensStore {
   }
 }
 
-export function openTokensStore(name = "pcash-web-tokens"): Promise<IndexedDbTokensStore> {
+/** One database per chain the node reports. */
+export function openTokensStore(scope: string): Promise<IndexedDbTokensStore> {
   return new Promise((resolve, reject) => {
-    const opening = indexedDB.open(name, DATABASE_VERSION);
+    const opening = indexedDB.open(`pcash-web-tokens:${scope}`, DATABASE_VERSION);
     opening.onupgradeneeded = () => {
       const database = opening.result;
       if (!database.objectStoreNames.contains(RECORDS_STORE)) database.createObjectStore(RECORDS_STORE, { keyPath: "key" });

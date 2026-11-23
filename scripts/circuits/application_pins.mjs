@@ -1,7 +1,8 @@
-// The application pins: the Mega VK hash of every account rule and external
-// application in the circuit catalog. Rules are pinned in the SDK; each
-// external owner's applications are pinned in that owner's module, and its
-// callable contract functions are also pinned in contract manifests.
+// The application pins: the Mega VK hash of every protocol and external
+// application in the circuit catalog. Protocol account rules and event
+// applications are pinned in the SDK; each external owner's applications are
+// pinned in that owner's module, and its callable contract functions are also
+// pinned in contract manifests.
 import { readFileSync } from "node:fs";
 import { join, posix } from "node:path";
 import { generatedHeader } from "../generated_files.mjs";
@@ -23,13 +24,11 @@ function applicationPinModules(catalog) {
   return Map.groupBy(externalApplications(catalog), (circuit) => `${circuit.ownerRoot}/src/applicationPins.ts`);
 }
 
-/** The pin constant's name: rules by what they authorize, external applications by package. */
+/** The pin constant's name: protocol rules by what they authorize, other applications by package. */
 export function applicationPinName(circuit) {
-  if (circuit.packageName === "no_op_event_application") return "NO_OP_EVENT_APPLICATION_VK_HASH";
-  if (circuit.owner === "protocol") {
-    return `${circuit.packageName.replace(/^account_rule_/, "").replace(/_ecdsa$/, "").toUpperCase()}_RULE_VK_HASH`;
-  }
-  return `${circuit.packageName.toUpperCase()}_APPLICATION_VK_HASH`;
+  const rule = circuit.owner === "protocol" && circuit.packageName.match(/^(?:account|transfer|mint)_rule_(.+?)(?:_ecdsa)?$/);
+  if (rule) return `${rule[1].toUpperCase()}_RULE_VK_HASH`;
+  return `${circuit.packageName.replace(/_application$/, "").toUpperCase()}_APPLICATION_VK_HASH`;
 }
 
 function pinModule(circuits, manifest, hashes) {
@@ -39,13 +38,14 @@ function pinModule(circuits, manifest, hashes) {
 }
 
 /**
- * The SDK's rule pin module. `hashes` maps package name to 0x-prefixed VK hash.
- * The no-op event-application identity is an SDK default, not a consensus pin.
+ * The SDK's pin module for protocol account rules and event applications.
+ * `hashes` maps package name to 0x-prefixed VK hash. The no-op
+ * event-application identity is an SDK default, not a consensus pin.
  */
 export function rulePinsSource(catalog, hashes) {
-  const rules = catalog.filter((circuit) => circuit.owner === "protocol" && circuit.role === "application"
+  const applications = catalog.filter((circuit) => circuit.owner === "protocol" && circuit.role === "application"
     && circuit.pin === undefined);
-  return pinModule(rules, "circuits/manifest.json", hashes);
+  return pinModule(applications, "circuits/manifest.json", hashes);
 }
 
 /** Every file the application pins are written to. */

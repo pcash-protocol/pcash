@@ -16,9 +16,11 @@ export type PerformanceScenarioId =
   | "lineageControl"
   | "lineageEvent"
   | "notesNative"
-  | "asset-creation"
+  | "fixed-supply-mint"
   | "ordinaryAssetTransfer"
   | "userAssetTransfer"
+  | "restricted-transfer"
+  | "restricted-sponsored-transfer"
   | "marketplaceClaim"
   | "contractCreation"
   | "largeAssetBatchTransfer"
@@ -88,11 +90,11 @@ export const nativeRuleSecrets = {
   assetBurnCommitmentBlinder: 0x206n,
   batchTransferCommitmentBlinder: 0x208n,
   largeBatchTransferCommitmentBlinder: 0x131n,
-  largeAssetCreationCommitmentBlinder: 0x133n,
+  largeMintCommitmentBlinder: 0x133n,
   largeContractFeeCommitmentBlinder: 0x135n,
   accountAdminCommitmentBlinder: 0x20an,
   contractFeeCommitmentBlinder: 0x20cn,
-  assetCreationCommitmentBlinder: 0x20en,
+  mintCommitmentBlinder: 0x20en,
 };
 
 export function authorizationAccount(params: {

@@ -9,7 +9,7 @@ use pcash_protocol::generated::private_value_profiles::{
 };
 use pcash_protocol::ledger::note::{application_nullifier, note_body_commitment, owner_commitment};
 use pcash_protocol::ledger::private_value::{
-    SLOT_CLASS_APPLICATION, SLOT_CLASS_ASSET, SLOT_CLASS_ASSET_CREATION, SLOT_CLASS_NATIVE,
+    SLOT_CLASS_APPLICATION, SLOT_CLASS_ASSET, SLOT_CLASS_MINT, SLOT_CLASS_NATIVE,
 };
 use pcash_protocol::primitives::hash::pcash_hash;
 use pcash_protocol::primitives::range::{assert_address, assert_amount, assert_asset_aggregate};
@@ -99,8 +99,8 @@ fn main(
     for i in 0..MAX_INPUTS {
         if i < inputs {
             assert(
-                private_value.input_slot_classes[i] != SLOT_CLASS_ASSET_CREATION,
-                "input slot must not be a creation marker",
+                private_value.input_slot_classes[i] != SLOT_CLASS_MINT,
+                "input slot must not be a mint marker",
             );
             if private_value.input_slot_classes[i] == SLOT_CLASS_APPLICATION {
                 assert(

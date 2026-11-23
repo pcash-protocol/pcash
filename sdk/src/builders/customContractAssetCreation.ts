@@ -10,15 +10,9 @@ import {
 import type { FieldNumberish } from "../crypto/field.ts";
 import { toField } from "../crypto/field.ts";
 import { rootFromIndex } from "../crypto/merkle.ts";
-import {
-  createStandardFungibleAsset,
-  fungibleMetadataCommitment,
-  verifyAssetDescriptor,
-  type CreatedStandardFungibleAsset,
-  type FungibleMetadata,
-  type StandardFungibleAssetDescriptor
-} from "../protocol/asset.ts";
-import { assetDefinitionFromCreated } from "../protocol/assetDefinition.ts";
+import type { FungibleMetadata } from "../protocol/asset.ts";
+import { assetDefinitionDescriptor, type AssetDefinition } from "../protocol/assetDefinition.ts";
+import { createFixedSupplyAsset, type CreatedFixedSupplyAsset } from "../rules/fixedSupply.ts";
 import { verifyBlockHeaderPath, verifyStatePath } from "../protocol/block.ts";
 import {
   verifyContract,
@@ -57,9 +51,9 @@ export interface ContractInventoryOpening {
 }
 
 export interface FixedSupplyCreationMaterial {
-  descriptor: StandardFungibleAssetDescriptor;
-  assetSecret: bigint;
-  metadata: FungibleMetadata;
+  definition: AssetDefinition;
+  /** The fixed-supply secret that keys the asset's one mint marker. */
+  secret: bigint;
   inventoryOpenings: readonly ContractInventoryOpening[];
 }
 
@@ -118,7 +112,7 @@ export interface BuildFixedSupplyCreationToCustomContractParams {
   shape?: PrivateValueShape;
   pcashChainId: FieldNumberish;
   snapshot: AssetSnapshot;
-  asset: CreatedStandardFungibleAsset;
+  asset: CreatedFixedSupplyAsset;
   contract: CustomDistributionContract;
   inventory: readonly { noteSecret: FieldNumberish; amount: bigint; memo?: Uint8Array }[];
   owner: AssetAccountAuthorization;
@@ -161,11 +155,8 @@ export async function buildFixedSupplyCreationToCustomContract(
   }
   const shape = params.shape ?? PRIVATE_VALUE_PROFILES.S.shapeId;
   const profile = privateValueProfile(shape);
-  verifyAssetDescriptor(params.asset.descriptor);
-  if (fungibleMetadataCommitment(params.asset.metadata)
-    !== toField(params.asset.descriptor.metadataCommitment)) {
-    throw new Error("asset metadata opening does not match the descriptor");
-  }
+  const assetDefinition = params.asset.definition;
+  const descriptor = assetDefinitionDescriptor(assetDefinition);
   if (params.inventory.length < 1 || params.inventory.length > profile.outputs) {
     throw new Error(`contract inventory must contain 1..${profile.outputs} asset notes`);
   }
@@ -184,7 +175,6 @@ export async function buildFixedSupplyCreationToCustomContract(
   if (paddingCount < 0) throw new Error(`contract inventory and native outputs exceed ${profile.outputs} slots`);
   requireLength(params.dummySecrets, paddingCount, "distribution dummy secrets");
   const contract = verifyDistributionContract(params.snapshot, params.contract);
-  const assetDefinition = assetDefinitionFromCreated(params.asset);
   const outputs: AssetActionOutput[] = [
     ...params.inventory.map((inventory, outputIndex) => params.contract.body.mlKemPublicKey === undefined
       ? outOfBandAssetActionOutput({
@@ -196,7 +186,7 @@ export async function buildFixedSupplyCreationToCustomContract(
       : openedAssetActionOutput({
         kind: "asset",
         pcashChainId: params.pcashChainId,
-        assetId: params.asset.descriptor.assetId,
+        assetId: descriptor.assetId,
         outputIndex,
         recipientAddress: contract.address,
         recipientMlKemPublicKey: params.contract.body.mlKemPublicKey,
@@ -217,10 +207,10 @@ export async function buildFixedSupplyCreationToCustomContract(
     shape,
     pcashChainId: params.pcashChainId,
     snapshot: params.snapshot,
-    assetDescriptor: params.asset.descriptor,
-    assetSecret: params.asset.assetSecret,
+    mint: { descriptor },
     inputs: [
-      { kind: "creation-marker" },
+      // The fixed-supply rule keys the asset's one mint marker by its secret.
+      { kind: "mint-marker", replayId: params.asset.secret },
       ...nativeInputs.map((input) => ({ kind: "native" as const, ...input })),
       ...Array.from({ length: profile.inputs - 1 - nativeInputs.length }, () => ({ kind: "dummy" as const })),
     ],
@@ -246,20 +236,8 @@ export async function buildFixedSupplyCreationToCustomContract(
     outputIndex,
   }));
   await params.persistCreationMaterial({
-    descriptor: {
-      assetId: build.assetId,
-      metadataCommitment: toField(params.asset.descriptor.metadataCommitment, "metadataCommitment"),
-      initialSupply: toField(params.asset.descriptor.initialSupply, "initialSupply"),
-      assetSecretCommitment: toField(
-        params.asset.descriptor.assetSecretCommitment,
-        "assetSecretCommitment",
-      ),
-    },
-    assetSecret: toField(params.asset.assetSecret, "assetSecret"),
-    metadata: {
-      ...params.asset.metadata,
-      contentDigest: Uint8Array.from(params.asset.metadata.contentDigest),
-    },
+    definition: assetDefinition,
+    secret: toField(params.asset.secret, "secret"),
     inventoryOpenings: openings,
   });
   return build;
@@ -270,16 +248,16 @@ export type CreateFixedSupplyCreationToCustomContractParams = Omit<
   "asset"
 > & {
   metadata: FungibleMetadata;
-  initialSupply: FieldNumberish;
+  supply: bigint;
 };
 
 /** Generate fresh asset authority, persist it, and return one custom-contract asset creation. */
 export async function createFixedSupplyCreationToCustomContract(
   params: CreateFixedSupplyCreationToCustomContractParams,
-): Promise<{ asset: CreatedStandardFungibleAsset; build: AssetActionBuild }> {
-  const asset = createStandardFungibleAsset({
+): Promise<{ asset: CreatedFixedSupplyAsset; build: AssetActionBuild }> {
+  const asset = createFixedSupplyAsset({
     metadata: params.metadata,
-    initialSupply: params.initialSupply,
+    supply: params.supply,
   });
   const build = await buildFixedSupplyCreationToCustomContract({ ...params, asset });
   return { asset, build };

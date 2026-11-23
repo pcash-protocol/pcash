@@ -1,0 +1,134 @@
+.page {
+  margin: -54px calc(50% - 50vw) -80px;
+  min-height: calc(100vh - 72px);
+  color: var(--color-text);
+  background: var(--color-canvas);
+}
+
+.hero {
+  padding: clamp(56px, 7vw, 104px) max(6vw, calc((100vw - 1240px) / 2)) clamp(40px, 5vw, 72px);
+  border-bottom: 1px solid var(--color-border);
+  background: radial-gradient(ellipse at 85% 30%, var(--color-accent-soft), transparent 55%), var(--color-canvas);
+}
+
+.hero h1 {
+  color: var(--color-text);
+  font-size: clamp(48px, 6vw, 86px);
+  line-height: 1;
+  letter-spacing: -.03em;
+}
+
+.hero p {
+  max-width: 650px;
+  margin: 24px 0 0;
+  color: var(--color-text-muted);
+  font-size: clamp(18px, 2vw, 22px);
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.section {
+  display: grid;
+  grid-template-columns: minmax(220px, .42fr) minmax(0, 1fr);
+  gap: clamp(40px, 8vw, 110px);
+  padding: 72px max(6vw, calc((100vw - 1240px) / 2));
+  border-bottom: 1px solid var(--color-border);
+}
+
+.section:last-child {
+  padding-bottom: 130px;
+  border-bottom: 0;
+}
+
+.sectionHeading h2 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: clamp(30px, 3.4vw, 44px);
+  line-height: 1.05;
+  letter-spacing: -.02em;
+}
+
+.sectionHeading > p:last-child {
+  max-width: 390px;
+  color: var(--color-text-muted);
+}
+
+.resourceGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-border);
+}
+
+.resourceGrid > a {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  min-height: 200px;
+  padding: 24px;
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  transition: background .18s ease;
+}
+
+.resourceGrid > a:hover,
+.resourceGrid > a:focus-visible {
+  background: var(--color-accent-wash);
+}
+
+/* An odd last card fills its row, so no empty cell shows the grid's border colour. */
+.resourceGrid > a:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+  min-height: 160px;
+}
+
+.resourceBody {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.resourceBody small {
+  color: var(--color-accent-strong);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.resourceBody strong {
+  margin-top: 10px;
+  font-size: clamp(22px, 2vw, 29px);
+  line-height: 1.08;
+  letter-spacing: -.035em;
+}
+
+.resourceBody > span {
+  margin-top: auto;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.arrow {
+  align-self: start;
+  color: var(--color-accent);
+  font-size: 19px;
+}
+
+@media (max-width: 900px) {
+  .section { grid-template-columns: 1fr; gap: 28px; padding-top: 56px; padding-bottom: 56px; }
+  .sectionHeading > p:last-child { max-width: 650px; }
+}
+
+@media (max-width: 620px) {
+  .resourceGrid { grid-template-columns: minmax(0, 1fr); }
+  .resourceGrid > a { min-height: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .resourceGrid > a { transition: none; }
+}

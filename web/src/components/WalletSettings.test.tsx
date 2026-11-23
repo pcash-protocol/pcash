@@ -15,13 +15,15 @@ const wallet = vi.hoisted(() => ({
 }));
 vi.mock("../lib/WalletProvider.tsx", () => ({ useWallet: () => wallet, errorMessage: String }));
 vi.mock("../lib/useNativeActivity.ts", () => ({ useNativeActivity: () => ({ activity: undefined, failed: false, checking: false }) }));
+// The inline send form reads the network fee; this test is about names, so the fee is zero.
+vi.mock("../lib/useNetworkFee.ts", () => ({ S_ACTION_UNITS: 4n, S_ACTION_WITH_ACCOUNT_UNITS: 6n, useNetworkFee: () => 0n }));
 vi.mock("../lib/usePaymentIssuance.ts", () => ({ usePaymentIssuance: () => ({ issuance: 20n, inputs: { quote: { status: "rejected" }, economics: { status: "rejected" } } }) }));
 vi.mock("../lib/EthereumProvider.tsx", () => ({ useEthereumNetwork: () => ({ ethereumConfig: {}, l1ChainId: 1 }) }));
 const siteStorage = vi.hoisted(() => ({ requestSiteDataClear: vi.fn() }));
 vi.mock("../lib/siteStorage.ts", () => siteStorage);
 vi.mock("./NetworkContext.tsx", () => ({ useNetwork: () => ({ network: { l1ChainId: 1, pcashChainId: 1 } }) }));
 import { WalletSettings } from "./WalletSettings.tsx";
-import { WebsiteSettingsContext, WebsiteSettingsStore, WebsiteSettingsProvider, useWebsiteSettings, WEBSITE_SETTINGS_KEY } from "../lib/WebsiteSettings.tsx";
+import { WebsiteSettingsContext, WebsiteSettingsStore, WebsiteSettingsProvider, useWebsiteSettings, WEBSITE_SETTINGS_KEY, defaultPreferences } from "../lib/WebsiteSettings.tsx";
 import { EthereumAddress } from "./EthereumAddress.tsx";
 import { OwnerPanelsProvider, SendCard } from "../routes/wallet/OwnerPanels.tsx";
 import { Activity } from "../routes/wallet/Activity.tsx";
@@ -31,9 +33,12 @@ import { NameResolutionSession } from "../names/NameResolutionSession.ts";
 import { NameResolutionProvider } from "../names/NameResolutionProvider.tsx";
 import { NAME_CACHE_KEY, NAME_TTL } from "../names/nameCache.ts";
 
+/** Mainnet's defaults: these tests start at More private. */
+const MORE_PRIVATE_FIRST = defaultPreferences(1);
+
 const address = `0x${"12".repeat(20)}` as const;
 const identity: EthereumName = { address, name: "alice.eth", system: "ens" };
-const rpc = { reverseAddress: vi.fn(), resolveName: vi.fn(), getAvatar: vi.fn() };
+const rpc = { reverseAddress: vi.fn(), resolveName: vi.fn(), getAvatar: vi.fn(), readAddress: vi.fn() };
 let session: NameResolutionSession;
 let settings: WebsiteSettingsStore;
 let root: Root;
@@ -46,7 +51,7 @@ beforeEach(() => {
   rpc.getAvatar.mockReset().mockResolvedValue("https://example.com/avatar.png");
   wallet.preflightPrivateSend.mockReset().mockResolvedValue({ openFeeAmount: 1n, privateRelayFeeAmount: 0n, burn: { networkFeeAmount: 0n, voluntaryBurnAmount: 0n }, privateRelayRecipient: null, beneficiary: { kind: "publisher" }, publication: "open", retry: false });
   wallet.sendPrivate.mockReset().mockReturnValue(new Promise(() => undefined));
-  settings = new WebsiteSettingsStore(() => localStorage);
+  settings = new WebsiteSettingsStore(() => localStorage, MORE_PRIVATE_FIRST);
   settings.setEnsEnabled(false);
   session = new NameResolutionSession(() => rpc, () => localStorage);
   session.queryClient.mount();

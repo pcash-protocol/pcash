@@ -80,7 +80,7 @@ _ci-setup:
 _solidity-dependencies:
     #!/usr/bin/env bash
     set -euo pipefail
-    for project in marketplace/l1-contracts; do
+    for project in marketplace/l1-contracts stablecoin/l1-contracts; do
         (
             cd "{{ repo-root }}/$project"
             forge soldeer install --config-location foundry
@@ -143,6 +143,11 @@ bench:
 # Run one wallet HTTP server from environment configuration.
 wallet:
     node "{{ repo-root }}/scripts/dev/run.mts" wallet
+
+# Build the unpack-and-run wallet archive for Apple Silicon.
+[positional-arguments]
+wallet-dist *args:
+    node "{{ repo-root }}/scripts/package/wallet-dist.mjs" "$@"
 
 # Run one fallback relayer from environment configuration.
 relayer:

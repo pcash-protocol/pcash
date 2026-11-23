@@ -11,12 +11,12 @@
   "payoutSeed": "0x2094133c0d1bcedca73a38bfb66b17330a5e9f511a8bcf2ab1020147914d3ee5",
   "defaultUserRuleSecrets": {
     "paymentCommitmentBlinder": "0x2e5c2af7124b3787b32ba225b8a9a5d25e278708dd0ddc4a5e72daf2ac166f84",
-    "assetCreationCommitmentBlinder": "0x1033aad97a3fa5517f7b18e326a3e01a45d3205f7b5fb02cc30fbb8f9d6ff31d",
+    "mintCommitmentBlinder": "0x13f745123c759abd6553e065fc6578f9d044df253222c7120291ec7f0241051a",
     "assetPaymentCommitmentBlinder": "0x1fbdfe2d93c6df68805439d7f64f6676977c15e0f1ba94d87e16473bcb3debf1",
     "assetBurnCommitmentBlinder": "0x2f73db3e594f4f2254ad91adeb37ca6932eb40c0723c70d5b3406db8667825e0",
     "batchTransferCommitmentBlinder": "0x13c69dd5cd40bb5a0a9810d805c79a80269c43a7906fd51fac1465b8d238eab2",
     "largeBatchTransferCommitmentBlinder": "0x18b3f15400550f02e8c604c7adf49a41321d8320e6c0b6586fa56353c1db5726",
-    "largeAssetCreationCommitmentBlinder": "0x0fba2379b49de1622486fb80ab90af057242d2a257bf9b6662b060de95cb2836",
+    "largeMintCommitmentBlinder": "0x26d3dcbc1eab5df2a5814bc808e03fc15e6488337e9be2e6d9ae12c1d6eb843c",
     "largeContractFeeCommitmentBlinder": "0x1a2ad0dd1437c8cd13c7f93e14e0f0dd9fbd9ac4e836c2fb9ce7993970b952f3",
     "accountAdminCommitmentBlinder": "0x15a7b1aed9f8bfb3cc17923c53c454d6e40527948d4fc91dfcea88cddf2e53a0",
     "contractFeeCommitmentBlinder": "0x213ced3c60516602274f669ae4f2dc32dacea7146df6475c8d71ae474b785d00"

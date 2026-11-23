@@ -20,7 +20,7 @@ import {
 } from "@pcash/sdk/protocol";
 import { addressHex, bytes32Hex, randomFieldEntropy, toHex } from "@pcash/sdk/utils";
 import { syncWallet } from "../../src/wallet/actions/syncWallet.ts";
-import { historyReplayStore, replayHistory } from "../../src/wallet/actions/historyReplay.ts";
+import { scanHistory } from "../../src/wallet/actions/historyScan.ts";
 import { localReceiveKeyLookup } from "../../src/wallet/actions/localChain.ts";
 import { runNoteFundedTransferClient } from "../../src/wallet/actions/noteFundedClient.ts";
 import { OPEN_WALLET_INTERNAL, Wallet } from "../../src/wallet/actions/walletClient.ts";
@@ -28,7 +28,7 @@ import { createWalletRuntime } from "../../src/wallet/actions/walletRuntime.ts";
 import type { DurableSubmissionAdapter } from "../../src/wallet/actions/durableSubmission.ts";
 import { derivePcashProfileFromPrivateKey } from "../../src/wallet/externalIdentity.ts";
 import { memoryWalletStateStore, memoryWalletStoreBackend } from "../../src/wallet/memoryStoreBackend.ts";
-import type { WalletFileData } from "../../src/wallet/noteStore.ts";
+import { privateBalance, spendableBalance, type WalletFileData } from "../../src/wallet/noteStore.ts";
 import {
   emptyWalletState,
   walletStore,
@@ -430,6 +430,11 @@ describe("request transcripts", () => {
   });
 });
 
+function requestedOutputIndices(calls: SimCall[]): string[] {
+  return calls.filter(call => call.method === "getOutputPaths")
+    .flatMap(call => (JSON.parse(call.params)[0] as { outputIndex: string }[]).map(request => request.outputIndex));
+}
+
 describe("restore and spend", () => {
   const PRIVATE_KEY = new Uint8Array(randomBytes(32));
   const NETWORK = { pcashChainId: CHAIN_ID, l1ChainId: 11_155_111n, inboxAddress: `0x${"66".repeat(20)}` };
@@ -502,6 +507,68 @@ describe("restore and spend", () => {
     const after = await syncWallet({ node: sim.client(), wallet: profile, chainId: CHAIN_ID, store });
     expect(after.data.notes.filter((note) => !note.pending).map((note) => [note.amount, note.spent]))
       .toEqual([["10", true], ["5", false], ["2", false]]);
+  });
+
+  it("shows and spends a historical payment while older history is still downloading", { timeout: 60_000 }, async () => {
+    const sim = new ChainSim(CHAIN_ID);
+    sim.servesFundingReads = true;
+    const recipient = freshWallet();
+    sim.addBlock({
+      accounts: [
+        { address: addressHex(profile.address), nullifierKeyCommitment: profile.nullifierKeyCommitment,
+          accountRuleSetCommitment: rules.accountRuleSetCommitment, receiveKey: profile.mlKemPublicKey },
+        accountOf(recipient),
+      ],
+      transactions: Array.from({ length: 420 }, () => ({ outputs: [null, null, null, null, null] })),
+    });
+    sim.addBlock({ transactions: [{ outputs: [null, noteTo(profile, 10n), null, null, null] }] });
+    const client = sim.client();
+    const getOutputs = client.getOutputs.bind(client);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const node = Object.assign(Object.create(client), {
+      getOutputs: async (query: Parameters<typeof getOutputs>[0]) => {
+        // The older of the two history chunks waits until the test releases it.
+        if (query.fromOutputIndex === 0n) await gate;
+        return getOutputs(query);
+      },
+    });
+    const store = storeFor(sim, profile);
+    const database: WalletDatabase = { [WALLET_DATABASE_STATE_STORE]: () => store, subscribe: async () => async () => {}, close: async () => {} };
+    const submission: DurableSubmissionAdapter<string, string> = {
+      mode: "mempool", preflight: async () => "prepared",
+      submit: async ({ transactionBytes }) => {
+        sim.include(transactionBytes);
+        return { accepted: false, queued: true, output: "queued" };
+      },
+    };
+    const wallet = await Wallet[OPEN_WALLET_INTERNAL]({
+      database, node, profile, signer, backgroundHistory: true, submission,
+      provers: { privateValue: prover as never }, settlePollIntervalMs: 0, settlePollMaxAttempts: 1,
+    });
+    try {
+      const firstPage = new Promise<void>((resolve, reject) => {
+        wallet.on("history:progress", () => resolve());
+        wallet.on("history:error", ({ error }) => reject(error));
+      });
+      const done = new Promise<void>((resolve) => wallet.on("history:completed", () => resolve()));
+      await wallet.sync();
+      await firstPage;
+      expect(await wallet.snapshot()).toMatchObject({ historyPending: true, balances: [{ private: 10n, spendable: 10n }] });
+      expect(await wallet.nativeFunds()).toMatchObject({ total: 10n, spendablePrivate: 10n });
+      const payment = { to: addressHex(recipient.address), amount: 8n, openFeeAmount: 0n };
+      const review = await wallet.preflightSend(payment);
+      await wallet.send(payment, review);
+      expect((await wallet.snapshot()).historyPending).toBe(true);
+      expect(requestedOutputIndices(sim.calls)).toEqual(["2045n", "2104n"]);
+      release();
+      await wallet.sync();
+      await done;
+      expect(await wallet.nativeFunds()).toMatchObject({ total: 2n, spendablePrivate: 2n });
+    } finally {
+      release();
+      await wallet.close();
+    }
   });
 
   it("refuses a recipient key from an account set the payment's witnesses do not open against", async () => {
@@ -585,35 +652,37 @@ describe("restore and spend", () => {
   });
 });
 
-describe("history replay", () => {
-  // Adoption merges into the live document, which keeps its own notes first.
+describe("history scan", () => {
   const byLeaf = (notes: WalletFileData["notes"]) => [...notes].sort((left, right) => Number(BigInt(left.leafIndex!) - BigInt(right.leafIndex!)));
+  const scan = (sim: ChainSim, wallet: ReturnType<typeof freshWallet>, store: WalletStateStore, options: Partial<Parameters<typeof scanHistory>[0]> = {}) =>
+    scanHistory({ node: sim.client(), wallet, chainId: CHAIN_ID, store, chunkOutputs: 5n, ...options });
+  const openHeadFirst = (sim: ChainSim, wallet: ReturnType<typeof freshWallet>, store: WalletStateStore) =>
+    syncWallet({ node: sim.client(), wallet, chainId: CHAIN_ID, store, headFirst: true });
 
-  it("opens an empty store at the current block and adopts a replay of what came before", async () => {
+  it("opens an empty store at the current block and scans what came before it, newest first", async () => {
     const sim = new ChainSim(CHAIN_ID);
+    sim.servesFundingReads = true;
     const alice = freshWallet();
     sim.addBlock({ accounts: [accountOf(alice)], transactions: [{ outputs: [noteTo(alice, 10n), noteTo(alice, 3n), null, null, null] }] });
     const { data: full } = await sync(sim, alice, storeFor(sim, alice));
     sim.addBlock({ transactions: [{ nullifiers: [nullifierOf(alice, full.notes[1]!), randomWord()], outputs: [null, null, null, null, null] }] });
     const store = storeFor(sim, alice);
     sim.calls.length = 0;
-    const opened = await syncWallet({ node: sim.client(), wallet: alice, chainId: CHAIN_ID, store, headFirst: true });
+    const opened = await openHeadFirst(sim, alice, store);
     expect(sim.calls.map((call) => call.method)).toContain("getOutputFrontier");
     expect(opened.data).toMatchObject({ historyReplayRequired: true, historyStartOutputIndex: "10", notes: [] });
     sim.addBlock({ transactions: [{ outputs: [null, noteTo(alice, 6n), null, null, null] }] });
     await sync(sim, alice, store);
 
     const progress: [bigint, bigint][] = [];
-    await replayHistory({
-      node: sim.client(), wallet: alice, chainId: CHAIN_ID, store, replay: historyReplayStore(store),
-      onOutputs: (scanned, total) => progress.push([scanned, total]),
-    });
+    await scan(sim, alice, store, { onOutputs: (scanned, total) => progress.push([scanned, total]) });
     const data = (await store.load())!;
     expect(data.historyReplayRequired).toBeUndefined();
     expect(data.historyStartOutputIndex).toBe("0");
     expect(byLeaf(data.notes).map((note) => [note.leafIndex, note.amount, note.spent])).toEqual([["0", "10", false], ["1", "3", true], ["11", "6", false]]);
-    expect(progress.at(-1)).toEqual([15n, 15n]);
+    expect(progress).toEqual([[5n, 10n], [10n, 10n]]);
     await expectWitnessesOpen(store, data, addressHex(alice.address));
+    expect(await store.readChain((chain) => chain!.birthday.outputCount)).toBe(0n);
 
     sim.addBlock({ transactions: [{ outputs: [noteTo(alice, 1n), null, null, null, null] }] });
     const next = await sync(sim, alice, store);
@@ -621,41 +690,58 @@ describe("history replay", () => {
     await expectWitnessesOpen(store, next.data);
   });
 
-  it("follows a live wallet that moves on during the replay before adopting", async () => {
+  it("commits each chunk with its notes' final spend status, making the same requests for every wallet", async () => {
     const sim = new ChainSim(CHAIN_ID);
+    sim.servesFundingReads = true;
     const alice = freshWallet();
     sim.addBlock({ transactions: [{ outputs: [noteTo(alice, 10n), null, null, null, null] }] });
-    const store = storeFor(sim, alice);
-    await syncWallet({ node: sim.client(), wallet: alice, chainId: CHAIN_ID, store, headFirst: true });
-    const client = sim.client();
-    const getOutputs = client.getOutputs.bind(client);
-    let advanced = false;
-    const node = Object.assign(Object.create(client), {
-      getOutputs: async (query: Parameters<typeof getOutputs>[0]) => {
-        const page = await getOutputs(query);
-        if (!advanced) {
-          advanced = true;
-          sim.addBlock({ transactions: [{ outputs: [null, noteTo(alice, 4n), null, null, null] }] });
-          await sync(sim, alice, store);
-        }
-        return page;
-      },
-    });
-    await replayHistory({ node, wallet: alice, chainId: CHAIN_ID, store, replay: historyReplayStore(store) });
-    const data = (await store.load())!;
-    expect(data.historyReplayRequired).toBeUndefined();
-    expect(data.syncedThrough!.blockNumber).toBe("2");
-    expect(byLeaf(data.notes).map((note) => [note.leafIndex, note.amount])).toEqual([["0", "10"], ["6", "4"]]);
-    await expectWitnessesOpen(store, data);
+    const { data: first } = await sync(sim, alice, storeFor(sim, alice));
+    sim.addBlock({ transactions: [{ nullifiers: [nullifierOf(alice, first.notes[0]!), randomWord()], outputs: [null, null, null, null, null] }] });
+    sim.addBlock({ transactions: [{ outputs: [noteTo(alice, 5n), null, null, null, null] }] });
+    const transcripts: unknown[] = [];
+    for (const owner of [alice, freshWallet()]) {
+      const store = storeFor(sim, owner);
+      await openHeadFirst(sim, owner, store);
+      sim.calls.length = 0;
+      const balances: Promise<bigint>[] = [];
+      await scan(sim, owner, store, { onOutputs: () => { balances.push(store.load().then((data) => spendableBalance(data))); } });
+      // The newest chunk holds the 5; the oldest holds the 10 its newer chunk already spent.
+      expect(await Promise.all(balances)).toEqual(owner === alice ? [5n, 5n, 5n] : [0n, 0n, 0n]);
+      transcripts.push(sim.calls.map((call) => [call.method, call.params]));
+    }
+    expect(transcripts[0]).toEqual(transcripts[1]);
+    expect(requestedOutputIndices(sim.calls)).toEqual(["10n", "14n", "5n", "9n", "0n", "4n"]);
   });
 
-  it("keeps the consumption of a pending action's dummy inputs across adoption, so the action settles", async () => {
+  it("finds a historical note spent after the wallet opened at a later block", async () => {
     const sim = new ChainSim(CHAIN_ID);
+    sim.servesFundingReads = true;
+    const alice = freshWallet();
+    sim.addBlock({ transactions: [{ outputs: [noteTo(alice, 10n), null, null, null, null] }] });
+    const { data: first } = await sync(sim, alice, storeFor(sim, alice));
+    const store = storeFor(sim, alice);
+    await openHeadFirst(sim, alice, store);
+    // The live wallet does not know the note yet, so only keeping every spend catches this one.
+    sim.addBlock({ transactions: [{ nullifiers: [nullifierOf(alice, first.notes[0]!), randomWord()], outputs: [null, null, null, null, null] }] });
+    await sync(sim, alice, store);
+    await scan(sim, alice, store);
+    const data = (await store.load())!;
+    expect(data.notes.map((note) => [note.amount, note.spent])).toEqual([["10", true]]);
+    expect(spendableBalance(data)).toBe(0n);
+    // With the history scanned, spends nothing watches are dropped again.
+    sim.addBlock({ transactions: [{ outputs: [null, null, null, null, null] }] });
+    await sync(sim, alice, store);
+    expect(await store.readChain((chain) => [...chain!.consumed.keys()])).toEqual([nullifierOf(alice, first.notes[0]!).toLowerCase()]);
+  });
+
+  it("keeps the consumption of a pending action's dummy inputs, so the action settles", async () => {
+    const sim = new ChainSim(CHAIN_ID);
+    sim.servesFundingReads = true;
     sim.finalityLag = 10n;
     const alice = freshWallet();
     sim.addBlock({ transactions: [{ outputs: [noteTo(alice, 10n), null, null, null, null] }] });
     const store = storeFor(sim, alice);
-    await syncWallet({ node: sim.client(), wallet: alice, chainId: CHAIN_ID, store, headFirst: true });
+    await openHeadFirst(sim, alice, store);
     // Mining spends only dummy inputs, so its journal is all that watches them.
     const contentHash = randomWord();
     const dummies = [randomWord(), randomWord()];
@@ -672,7 +758,7 @@ describe("history replay", () => {
     sim.addBlock({ transactions: [{ contentHash, nullifiers: dummies, outputs: [null, null, null, null, null] }] });
     await sync(sim, alice, store);
 
-    await replayHistory({ node: sim.client(), wallet: alice, chainId: CHAIN_ID, store, replay: historyReplayStore(store) });
+    await scan(sim, alice, store);
     expect((await store.load())!.historyReplayRequired).toBeUndefined();
     expect(await store.readChain((chain) => chain!.consumption(dummies).map((consumption) => consumption?.contentHash)))
       .toEqual([contentHash, contentHash]);
@@ -682,24 +768,226 @@ describe("history replay", () => {
     expect(data.paymentHistory?.map((entry) => entry.state)).toEqual(["succeeded"]);
   });
 
-  it("leaves nothing to replay after a full rescan", async () => {
+  it("follows a live wallet that moves on during the scan", async () => {
+    const sim = new ChainSim(CHAIN_ID);
+    sim.servesFundingReads = true;
+    const alice = freshWallet();
+    sim.addBlock({ transactions: [{ outputs: [noteTo(alice, 10n), null, null, null, null] }] });
+    const store = storeFor(sim, alice);
+    await openHeadFirst(sim, alice, store);
+    const client = sim.client();
+    const getOutputs = client.getOutputs.bind(client);
+    let advanced = false;
+    const node = Object.assign(Object.create(client), {
+      getOutputs: async (query: Parameters<typeof getOutputs>[0]) => {
+        const page = await getOutputs(query);
+        if (!advanced) {
+          advanced = true;
+          sim.addBlock({ transactions: [{ outputs: [null, noteTo(alice, 4n), null, null, null] }] });
+          await sync(sim, alice, store);
+        }
+        return page;
+      },
+    });
+    await scan(sim, alice, store, { node });
+    const data = (await store.load())!;
+    expect(data.historyReplayRequired).toBeUndefined();
+    expect(data.syncedThrough!.blockNumber).toBe("2");
+    expect(byLeaf(data.notes).map((note) => [note.leafIndex, note.amount])).toEqual([["0", "10"], ["6", "4"]]);
+    await expectWitnessesOpen(store, data);
+  });
+
+  it("leaves a historical note spendable when a reorganization removes its spend", async () => {
+    const sim = new ChainSim(CHAIN_ID);
+    sim.servesFundingReads = true;
+    sim.finalityLag = 100n;
+    const alice = freshWallet();
+    sim.addBlock({ transactions: [{ outputs: [noteTo(alice, 10n), null, null, null, null] }] });
+    const { data: original } = await sync(sim, alice, storeFor(sim, alice));
+    const store = storeFor(sim, alice);
+    await openHeadFirst(sim, alice, store);
+    sim.addBlock({ transactions: [{ nullifiers: [nullifierOf(alice, original.notes[0]!), randomWord()], outputs: [null, null, null, null, null] }] });
+    sim.addBlock({ transactions: [{ outputs: [null, null, null, null, null] }] });
+    await sync(sim, alice, store);
+    await scan(sim, alice, store);
+    expect(spendableBalance((await store.load())!)).toBe(0n);
+
+    sim.reorg(1n, [
+      { transactions: [{ outputs: [null, null, null, null, null] }] },
+      { transactions: [{ outputs: [null, null, null, null, null] }] },
+    ]);
+    const { data } = await sync(sim, alice, store);
+    expect(spendableBalance(data)).toBe(10n);
+    await expectWitnessesOpen(store, data);
+  });
+
+  it("continues below its last committed chunk after a failed attempt", async () => {
+    const sim = new ChainSim(CHAIN_ID);
+    sim.servesFundingReads = true;
+    const alice = freshWallet();
+    sim.addBlock({ transactions: [{ outputs: [noteTo(alice, 10n), null, null, null, null] }] });
+    sim.addBlock({ transactions: [{ outputs: [null, null, null, null, null] }] });
+    sim.addBlock({ transactions: [{ outputs: [noteTo(alice, 5n), null, null, null, null] }] });
+    const store = storeFor(sim, alice);
+    await openHeadFirst(sim, alice, store);
+    const client = sim.client();
+    const getOutputs = client.getOutputs.bind(client);
+    const offline = Object.assign(Object.create(client), {
+      getOutputs: async (query: Parameters<typeof getOutputs>[0]) => {
+        if (query.fromOutputIndex === 0n) throw new Error("offline");
+        return getOutputs(query);
+      },
+    });
+    await expect(scan(sim, alice, store, { node: offline })).rejects.toThrow("offline");
+    const partial = (await store.load())!;
+    expect(partial).toMatchObject({ historyReplayRequired: true, historyStartOutputIndex: "5" });
+    expect(spendableBalance(partial)).toBe(5n);
+
+    sim.calls.length = 0;
+    await scan(sim, alice, store);
+    expect(sim.calls.filter((call) => call.method === "getOutputs")).toHaveLength(1);
+    const data = (await store.load())!;
+    expect(data.historyReplayRequired).toBeUndefined();
+    expect(spendableBalance(data)).toBe(15n);
+    await expectWitnessesOpen(store, data);
+  });
+
+  it("stays pending when the node cannot open the history it serves", async () => {
     const sim = new ChainSim(CHAIN_ID);
     const alice = freshWallet();
     sim.addBlock({ transactions: [{ outputs: [noteTo(alice, 10n), null, null, null, null] }] });
     const store = storeFor(sim, alice);
-    await syncWallet({ node: sim.client(), wallet: alice, chainId: CHAIN_ID, store, headFirst: true });
+    await openHeadFirst(sim, alice, store);
+    await expect(scan(sim, alice, store)).rejects.toThrow();
+    expect((await store.load())!).toMatchObject({ historyReplayRequired: true, notes: [] });
+  });
+
+  it("refuses a chunk the node answers short of its end", async () => {
+    const sim = new ChainSim(CHAIN_ID);
+    sim.servesFundingReads = true;
+    const alice = freshWallet();
+    sim.addBlock({ transactions: [{ outputs: [noteTo(alice, 10n), null, null, null, null] }] });
+    sim.addBlock({ transactions: [{ outputs: [null, null, null, null, noteTo(alice, 5n)] }] });
+    const store = storeFor(sim, alice);
+    await openHeadFirst(sim, alice, store);
+    const client = sim.client();
+    const getOutputs = client.getOutputs.bind(client);
+    const short = Object.assign(Object.create(client), {
+      getOutputs: async (query: Parameters<typeof getOutputs>[0]) => {
+        const page = await getOutputs(query);
+        return { ...page, target: { ...page.target, outputCount: page.target.outputCount - 1n }, outputs: page.outputs.slice(0, -1), complete: true, continuation: null };
+      },
+    });
+    await expect(scan(sim, alice, store, { node: short })).rejects.toThrow("stops short");
+    expect((await store.load())!).toMatchObject({ historyReplayRequired: true, historyStartOutputIndex: "10", notes: [] });
+  });
+
+  it("reads a chunk again when a reorganization replaced the block it was read at", async () => {
+    const sim = new ChainSim(CHAIN_ID);
+    sim.servesFundingReads = true;
+    sim.finalityLag = 100n;
+    const alice = freshWallet();
+    sim.addBlock({ transactions: [{ outputs: [noteTo(alice, 10n), null, null, null, null] }] });
+    const store = storeFor(sim, alice);
+    await openHeadFirst(sim, alice, store);
+    sim.addBlock({ transactions: [{ outputs: [null, null, null, null, null] }] });
+    await sync(sim, alice, store);
+    const client = sim.client();
+    const getOutputs = client.getOutputs.bind(client);
+    let reorganized = false;
+    const node = Object.assign(Object.create(client), {
+      getOutputs: async (query: Parameters<typeof getOutputs>[0]) => {
+        const page = await getOutputs(query);
+        if (!reorganized) {
+          reorganized = true;
+          sim.reorg(1n, [{ transactions: [{ outputs: [null, null, null, null, null] }] }]);
+          await sync(sim, alice, store);
+        }
+        return page;
+      },
+    });
+    sim.calls.length = 0;
+    await scan(sim, alice, store, { node });
+    // The scan's read, the live wallet's read of the replacement block, the scan's read again.
+    expect(sim.calls.filter((call) => call.method === "getOutputs").map((call) => (JSON.parse(call.params)[0] as { fromOutputIndex: string }).fromOutputIndex))
+      .toEqual(["0n", "5n", "0n"]);
+    const data = (await store.load())!;
+    expect(data.notes.map((note) => note.amount)).toEqual(["10"]);
+    await expectWitnessesOpen(store, data);
+  });
+
+  it("leaves nothing to scan after a full rescan", async () => {
+    const sim = new ChainSim(CHAIN_ID);
+    sim.servesFundingReads = true;
+    const alice = freshWallet();
+    sim.addBlock({ transactions: [{ outputs: [noteTo(alice, 10n), null, null, null, null] }] });
+    const store = storeFor(sim, alice);
+    await openHeadFirst(sim, alice, store);
     const { data } = await sync(sim, alice, store, { rescan: true });
     expect(data.historyReplayRequired).toBeUndefined();
     expect(data.notes.map((note) => note.amount)).toEqual(["10"]);
     sim.calls.length = 0;
-    await replayHistory({ node: sim.client(), wallet: alice, chainId: CHAIN_ID, store, replay: historyReplayStore(store) });
+    await scan(sim, alice, store);
     expect(sim.calls).toEqual([]);
+  });
+
+  it("opens at the current block again after a reorganization deeper than its checkpoints", async () => {
+    const sim = new ChainSim(CHAIN_ID);
+    sim.servesFundingReads = true;
+    const alice = freshWallet();
+    sim.addBlock({ transactions: [{ outputs: [noteTo(alice, 10n), null, null, null, null] }] });
+    const store = storeFor(sim, alice);
+    await openHeadFirst(sim, alice, store);
+    await scan(sim, alice, store);
+    sim.addBlock({ transactions: [{ outputs: [noteTo(alice, 4n), null, null, null, null] }] });
+    await openHeadFirst(sim, alice, store);
+    expect(spendableBalance((await store.load())!)).toBe(14n);
+
+    sim.reorg(0n, [{ transactions: [{ outputs: [null, noteTo(alice, 7n), null, null, null] }] }]);
+    const { data: reopened } = await openHeadFirst(sim, alice, store);
+    expect(reopened).toMatchObject({ historyReplayRequired: true, historyStartOutputIndex: "5", notes: [] });
+    await scan(sim, alice, store);
+    const data = (await store.load())!;
+    expect(data.notes.map((note) => [note.leafIndex, note.amount])).toEqual([["1", "7"]]);
+    await expectWitnessesOpen(store, data);
+  });
+
+  it("moves a store far behind to the current block and scans what it skipped", { timeout: 60_000 }, async () => {
+    const sim = new ChainSim(CHAIN_ID);
+    sim.servesFundingReads = true;
+    const alice = freshWallet();
+    sim.addBlock({ accounts: [accountOf(alice)], transactions: [{ outputs: [noteTo(alice, 10n), noteTo(alice, 3n), null, null, null] }] });
+    const store = storeFor(sim, alice);
+    const { data: full } = await sync(sim, alice, store);
+    sim.addBlock({ transactions: [{ nullifiers: [nullifierOf(alice, full.notes[1]!), randomWord()], outputs: [null, noteTo(alice, 6n), null, null, null] }] });
+    sim.addBlock({ transactions: Array.from({ length: 420 }, () => ({ outputs: [null, null, null, null, null] })) });
+
+    sim.calls.length = 0;
+    const { data: moved } = await openHeadFirst(sim, alice, store);
+    expect(moved).toMatchObject({ historyReplayRequired: true, historyStartOutputIndex: "2110", historyScanEndOutputIndex: "5" });
+    // The first output after the old frontier, then the empty interval up to the target.
+    expect(sim.calls.filter((call) => call.method === "getOutputs").map((call) => (JSON.parse(call.params)[0] as { fromOutputIndex: string }).fromOutputIndex))
+      .toEqual(["5n", "2110n"]);
+    // The skipped outputs spend one of the notes it held, which the scan shows.
+    expect(byLeaf(moved.notes).map((note) => note.amount)).toEqual(["10", "3"]);
+    expect([privateBalance(moved), spendableBalance(moved)]).toEqual([13n, 13n]);
+    await expectWitnessesOpen(store, moved, addressHex(alice.address));
+
+    await scanHistory({ node: sim.client(), wallet: alice, chainId: CHAIN_ID, store });
+    const data = (await store.load())!;
+    expect(data).toMatchObject({ historyStartOutputIndex: "0" });
+    expect(data.historyReplayRequired).toBeUndefined();
+    expect(data.historyScanEndOutputIndex).toBeUndefined();
+    expect(byLeaf(data.notes).map((note) => [note.leafIndex, note.amount, note.spent])).toEqual([["0", "10", false], ["1", "3", true], ["6", "6", false]]);
+    expect(spendableBalance(data)).toBe(16n);
+    await expectWitnessesOpen(store, data);
   });
 
   describe("in a wallet opened with background history", () => {
     const network = { pcashChainId: CHAIN_ID, l1ChainId: 11_155_111n, inboxAddress: `0x${"66".repeat(20)}` };
 
     async function open(sim: ChainSim, profile: ReturnType<typeof derivePcashProfileFromPrivateKey>) {
+      sim.servesFundingReads = true;
       // The replay's first page waits until the test releases it.
       let release!: () => void;
       const gate = new Promise<void>((resolve) => { release = resolve; });
@@ -737,7 +1025,7 @@ describe("history replay", () => {
       }
     });
 
-    it("stops the history scan without adopting it when the wallet closes", async () => {
+    it("stops the history scan without committing it when the wallet closes", async () => {
       const sim = new ChainSim(CHAIN_ID);
       const profile = derivePcashProfileFromPrivateKey(new Uint8Array(randomBytes(32)), network);
       sim.addBlock({ transactions: [{ outputs: [noteTo(profile, 10n), null, null, null, null] }] });

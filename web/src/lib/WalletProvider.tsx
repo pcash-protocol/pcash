@@ -9,10 +9,12 @@ import { PcashNodeClient, assertExpectedNetwork, type StatusResult } from "@pcas
 import { serializeEcdsaSignature, verifyPcashAuthorization, type PcashActionSigner } from "@pcash/sdk/eip712";
 import { networkConfigFromStatus } from "@pcash/sdk/protocol";
 import { toHex } from "@pcash/sdk/utils";
+import { synchronizedThrough } from "@pcash/sdk/wallet/scanning";
 import type { ProveStatus } from "@pcash/sdk/browser-prover/requests";
 import {
   DurablePreBroadcastError,
   WalletReviewStaleError,
+  viemL1LogReader,
   type L1SubmissionAdapter,
   type PublicationMode,
   type PendingUserAccountCreation,
@@ -31,7 +33,7 @@ import { useEthereumNetwork } from "./EthereumProvider.tsx";
 import { useNetwork } from "../components/NetworkContext.tsx";
 import { formatPcashAmount } from "../components/pcashAmount.ts";
 import { createProfileSessionStore, profileSessionIdentity, profileSessionKey, type ProfileSessionIdentity } from "./ProfileSessionStore.ts";
-import { networkInstanceKey } from "./networks.ts";
+import { chainInstanceKey } from "./networks.ts";
 import { networkChangedMessage } from "../routes/explorer/config.ts";
 import type { PaymentActivityStatus } from "../routes/wallet/model.ts";
 import { paymentMemo, pendingPaymentActivity, observedPaymentActivity } from "./paymentActivity.ts";
@@ -202,7 +204,7 @@ interface WalletContextValue {
   paymentActivity: WalletPaymentActivity[];
   /** Fresh actions whose journaled bytes wait on the Ethereum wallet's prompt: contentHash to wallet action id. */
   awaitingConfirmation: ReadonlyMap<string, string>;
-  funds?: WalletNativeFunds;
+  funds?: Pick<WalletNativeFunds, "total" | "spendablePrivate" | "synchronized" | "pcashNumber">;
   connectedAccount?: string;
   /** The connected Ethereum wallet's ETH balance on this network's L1, for gas checks. */
   l1Balance?: bigint;
@@ -276,7 +278,12 @@ function paymentCanceled(cause: unknown): boolean {
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { network } = useNetwork();
   const { ethereumConfig, l1Chain, l1ChainId } = useEthereumNetwork();
-  const [{ subscribeToSignOut, clearProfileSessionIfRevision, loadProfileSession, profileSessionRevision, saveProfileSession }] = useState(() => createProfileSessionStore(networkInstanceKey(network)));
+  // One store per chain the node reports: its sign-out broadcasts reuse the channel this tab listens on.
+  const profileSessionsRef = useRef<{ scope: string; store: ReturnType<typeof createProfileSessionStore> } | undefined>(undefined);
+  const profileSessions = useCallback((scope: string) => {
+    if (profileSessionsRef.current?.scope !== scope) profileSessionsRef.current = { scope, store: createProfileSessionStore(scope) };
+    return profileSessionsRef.current.store;
+  }, []);
   const node = useMemo(() => new PcashNodeClient(network.pcashRpcUrl), [network.pcashRpcUrl]);
   const activeProfileIdentityRef = useRef<ProfileSessionIdentity | undefined>(undefined);
   const [status, setStatus] = useState<StatusResult>();
@@ -291,7 +298,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [awaitingConfirmation, setAwaitingConfirmation] = useState<ReadonlyMap<string, string>>(new Map());
   const snapshotRef = useRef(snapshot);
   snapshotRef.current = snapshot;
-  const [funds, setFunds] = useState<WalletNativeFunds>();
+  const funds = useMemo(() => {
+    if (snapshot?.syncedThrough == null) return undefined;
+    const native = snapshot.balances.find((balance) => balance.assetId === 0n)!;
+    return {
+      total: native.private,
+      spendablePrivate: native.spendable,
+      pcashNumber: snapshot.syncedThrough.pcashNumber,
+      synchronized: followedStatus !== undefined && synchronizedThrough(followedStatus.status, snapshot.syncedThrough),
+    };
+  }, [snapshot, followedStatus]);
   const [connectedAccount, setConnectedAccount] = useState<string>();
   const [accountRecord, setAccountRecord] = useState<WalletAccountRecord>("unknown");
   const [phase, setPhase] = useState<WalletPhase>("initializing");
@@ -447,15 +463,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         ...completed,
       ]);
     }).catch(() => undefined);
-    const nextFunds = nextSnapshot.syncedThrough === null ? undefined : await opened.nativeFunds();
-    if (
-      sessionRef.current !== session
-      || walletRef.current !== opened
-      || walletStateReadSequenceRef.current !== readSequence
-    ) return false;
-    if (nextFunds?.synchronized) {
-      setFunds(nextFunds);
-    }
     return true;
   }, [node]);
 
@@ -524,7 +531,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setSnapshot(undefined);
     setPaymentActivity([]);
     setAwaitingConfirmation(new Map());
-    setFunds(undefined);
     setConnectedAccount(undefined);
     setAccountRecord("unknown");
     setConnectionStep(undefined);
@@ -816,6 +822,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         settlePollMaxAttempts: 1,
         backgroundHistory: true,
         trialDecrypt: (trialDecryptionRef.current ??= walletWeb.createBrowserTrialDecryption()).trialDecrypt,
+        // Restricted tokens' deny lists are read from Ethereum, never from a PCASH node.
+        l1Logs: viemL1LogReader(publicClient),
       });
       if (sessionRef.current !== session) {
         await opened.close();
@@ -871,6 +879,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     let saved = false;
     try {
       const current = await readStatus();
+      if (sessionRef.current === session) setStatus(current);
+      const { clearProfileSessionIfRevision, profileSessionRevision, saveProfileSession } = profileSessions(chainInstanceKey(current));
       const identity = profileSessionIdentity(current, address);
       const expectedRevision = await profileSessionRevision(identity);
       if (sessionRef.current !== session) return;
@@ -913,7 +923,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } finally {
       if (sessionRef.current === session) setBusy(false);
     }
-  }, [openSignedInProfile, readStatus]);
+  }, [openSignedInProfile, profileSessions, readStatus]);
 
   const connect = useCallback(async (requested?: Connector, options?: { allowNetworkSwitch?: boolean }) => {
     const allowNetworkSwitch = options?.allowNetworkSwitch ?? true;
@@ -934,6 +944,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
       const current = await readStatus();
       setStatus(current);
+      const { clearProfileSessionIfRevision, loadProfileSession } = profileSessions(chainInstanceKey(current));
       setConnectionStep("Requesting your Ethereum account");
       const connector = ethereumConnection.status === "connected"
         ? ethereumConnection.connector
@@ -1051,7 +1062,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } finally {
       if (sessionRef.current === session) setBusy(false);
     }
-  }, [disposeSession, ethereumConnection, navigate, node, openSignedInProfile, readStatus, signInAs]);
+  }, [disposeSession, ethereumConnection, navigate, node, openSignedInProfile, profileSessions, readStatus, signInAs]);
 
   const signIn = useCallback(async () => {
     if (signer === undefined || walletClient === undefined || connectedAccount === undefined) {
@@ -1087,12 +1098,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       : disposed.status === "rejected" ? errorMessage(disposed.reason) : undefined);
   }, [disposeSession, ethereumConfig]);
 
-  useEffect(() => subscribeToSignOut((key, revision) => {
+  const profileSessionScope = status === undefined ? undefined : chainInstanceKey(status);
+  useEffect(() => profileSessionScope === undefined ? undefined : profileSessions(profileSessionScope).subscribeToSignOut((key, revision) => {
     const identity = activeProfileIdentityRef.current;
     if (identity === undefined || profileSessionKey(identity) !== key
       || (activeProfileRevisionRef.current !== undefined && activeProfileRevisionRef.current >= revision)) return;
     void disconnect().catch((cause) => setError(errorMessage(cause)));
-  }), [disconnect, subscribeToSignOut]);
+  }), [disconnect, profileSessions, profileSessionScope]);
 
   useEffect(() => {
     if (connectedAccount === undefined || status === undefined) return;

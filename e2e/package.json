@@ -27,7 +27,8 @@
     "@pcash/wallet": "0.1.0",
     "viem": "^2.55.1",
     "@pcash/lineage": "^0.1.0",
-    "@pcash/board": "0.0.0"
+    "@pcash/board": "0.0.0",
+    "@pcash/stablecoin": "0.1.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",

@@ -22,6 +22,8 @@
 .tokensHeading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .tokensHeading a { color: var(--color-text-muted); font-size: 12px; }
 .tokens { margin-bottom: 26px; }
+/* The account's own page, for a wider view than the sidebar's. */
+.accountPage { display: block; margin: -14px 0 24px; color: var(--color-text); font-size: 13px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
 .footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; }
 .back { display: inline-flex; padding: 8px 10px; border: 0; border-radius: var(--radius-control); background: none; color: var(--color-text-muted); margin: -6px 0 14px -10px; }
 .back:hover { background: var(--color-surface-raised); color: var(--color-text); }

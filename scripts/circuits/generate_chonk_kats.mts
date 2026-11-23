@@ -2,8 +2,9 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { Barretenberg, BackendType } from "@aztec-foundation/bb.js";
 
-import { sharedAssetClaimFixture } from "../../sdk/test/sharedAssetClaimFixtures.ts";
+import { sharedAssetClaimFixture } from "../../test-support/src/sharedAssetClaimFixtures.ts";
 import { assetProfileFixture } from "../../sdk/test/assetProfileFixtures.ts";
+import { restrictedSponsoredTransferFixture, restrictedTransferFixture } from "../../test-support/src/restrictedFixtures.ts";
 import { encodePrivateValueTransaction } from "../../sdk/src/protocol/codec.ts";
 import { privateValueProfileFixture } from "../../sdk/test/privateValueProfileFixtures.ts";
 import { buildNativeTransfer } from "../../sdk/src/builders/nativeTransfer.ts";
@@ -15,7 +16,8 @@ import { receiveKeyHash } from "../../sdk/src/protocol/account.ts";
 import { defaultUserAccountRuleSet } from "../../sdk/src/rules/referenceRules.ts";
 import {
   prepareEventApplication,
-  proveAssetCreationChonk,
+  proveMintChonk,
+  proveRestrictedTransferChonk,
   proveSponsoredTransferChonk,
   proveTransferTransactionChonk,
   proveUserAccountUpdateChonk,
@@ -27,7 +29,7 @@ import {
   proverReleaseConfig,
 } from "../../sdk/src/node/nativeProver.ts";
 import { feePaymentFixture, TEST_DEFAULT_RULE_SECRETS, transferFixture } from "../../test-support/src/protocolFixtures.ts";
-import { deriveTestWallet } from "../../sdk/test/testWallet.ts";
+import { deriveTestWallet } from "../../test-support/src/testWallet.ts";
 import { Config } from "../../sdk/src/bcfg/index.ts";
 import { Logger } from "../../sdk/src/blgr/index.ts";
 
@@ -239,12 +241,36 @@ if (!runtimeOnly) {
     primary: { packageName: claimApplication, witnessMap: sponsoredClaim.claimWitnessMap },
     feePayer: { packageName: sponsorApplication, witnessMap: sponsoredClaim.signed!.witnessMap },
     buildKernelWitnessMap: sponsoredClaim.kernelWitnessMap, resolve: resolveCircuit, backend: nativeChonkBackend(1) }));
-  const assetCreationApplication = "account_rule_large_asset_creation_ecdsa";
-  const assetCreationVk = await resolveCircuit(assetCreationApplication, "app");
-  const assetCreation = assetProfileFixture({ shape: 1, authorizationVkHash: BigInt(assetCreationVk.vkHash) });
-  await emit("large_asset_creation", assetCreation.build.publicInputs, () => proveAssetCreationChonk({ build: assetCreation.build,
-    authorization: { packageName: assetCreationApplication, witnessMap: assetCreation.signed.witnessMap },
+  const mintApplication = "account_rule_large_mint_ecdsa";
+  const mintVk = await resolveCircuit(mintApplication, "app");
+  const mintRuleVk = await resolveCircuit("mint_rule_fixed_supply", "app");
+  const mint = assetProfileFixture({ shape: 1, authorizationVkHash: BigInt(mintVk.vkHash), mintRuleVkHash: BigInt(mintRuleVk.vkHash) });
+  await emit("large_mint", mint.build.publicInputs, () => proveMintChonk({ build: mint.build,
+    authorization: { packageName: mintApplication, witnessMap: mint.signed.witnessMap },
+    mintRule: mint.mintRule, resolve: resolveCircuit, backend: nativeChonkBackend(1) }));
+  const paymentApplication = "account_rule_asset_payment_ecdsa";
+  const policyApplication = "transfer_rule_sender_deny_list";
+  const policyVkHash = BigInt((await resolveCircuit(policyApplication, "app")).vkHash);
+  const restricted = restrictedTransferFixture({
+    authorizationVkHash: BigInt((await resolveCircuit(paymentApplication, "app")).vkHash),
+    policyVkHash,
+  });
+  await emit("restricted_transfer", restricted.build.publicInputs, () => proveRestrictedTransferChonk({ build: restricted.build,
+    authorization: { packageName: paymentApplication, witnessMap: restricted.signed.witnessMap },
+    policy: { packageName: policyApplication, witnessMap: restricted.policyWitness() },
     resolve: resolveCircuit, backend: nativeChonkBackend(1) }));
+  const smallSponsorApplication = "account_rule_contract_fee_sponsorship_ecdsa";
+  const restrictedSponsored = restrictedSponsoredTransferFixture({
+    claimVkHash: BigInt(claimVk.vkHash),
+    sponsorVkHash: BigInt((await resolveCircuit(smallSponsorApplication, "app")).vkHash),
+    policyVkHash,
+  });
+  await emit("restricted_sponsored_transfer", restrictedSponsored.build.publicInputs, () => proveSponsoredTransferChonk({
+    build: restrictedSponsored.build,
+    primary: { packageName: claimApplication, witnessMap: restrictedSponsored.claimWitnessMap },
+    feePayer: { packageName: smallSponsorApplication, witnessMap: restrictedSponsored.signed.witnessMap },
+    policy: { packageName: policyApplication, witnessMap: restrictedSponsored.policyWitness() },
+    buildKernelWitnessMap: restrictedSponsored.kernelWitnessMap, resolve: resolveCircuit, backend: nativeChonkBackend(1) }));
 }
 
 log.info(`generated ${completed} known answers in ${elapsed(started)}: ${outputDirectory}`);

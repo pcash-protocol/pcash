@@ -134,7 +134,7 @@ This is a separate socket from `--rpc-addr` on purpose. The `pcash_*` port is un
 
 `pcash-cli` reaches it with `--admin-url` / `PCASH_ADMIN_URL`:
 
-```
+```sh
 pcash-cli --admin-url http://127.0.0.1:8647 node-info
 pcash-cli --admin-url http://127.0.0.1:8647 add-peer /ip4/203.0.113.7/tcp/8646/p2p/12D3Koo...
 pcash-cli --admin-url http://127.0.0.1:8647 peers --json
@@ -159,7 +159,7 @@ The node's network identity is an Ed25519 keypair at `$PCASH_DATA_DIR/p2p_identi
 
 `pcash-cli p2p-key` works on that file directly. It reads and writes the key itself, so it needs no running node, no `--rpc-url`, and no `--admin-url`:
 
-```
+```sh
 pcash-cli p2p-key generate --out /var/lib/pcash/p2p_identity.pb --addr /ip4/203.0.113.7/tcp/8646
 pcash-cli p2p-key inspect /var/lib/pcash/p2p_identity.pb
 pcash-cli p2p-key inspect /var/lib/pcash/p2p_identity.pb --json
@@ -182,6 +182,28 @@ The node process does not embed Grafana. Pass `--metrics-addr` / `PCASH_METRICS_
 Pre-provisioned dashboards are available for the node (`node/crates/metrics/dashboards/pcash-node.json`) and wallet (`wallet/dashboards/pcash-wallet.json`).
 
 ## Wallet service credentials
+
+### Run the Apple Silicon testnet wallet over Tor
+
+On an Apple Silicon Mac, `just wallet-dist` builds `pcash-wallet-darwin-arm64.tar.gz` and its SHA-256 checksum under `.cache/pcash/wallet-dist/`. The archive includes Node and the wallet's Wasm proving assets. To use a downloaded archive, verify its checksum with `shasum -a 256 -c pcash-wallet-darwin-arm64.tar.gz.sha256` and extract it with `tar -xzf pcash-wallet-darwin-arm64.tar.gz`.
+
+Start Tor with a SOCKS5 listener at `127.0.0.1:9050` and its default SOCKS authentication isolation. For example, install Tor with `brew install tor`, run `tor`, and wait for it to finish bootstrapping. Set `PCASH_WALLET_TOR_SOCKS` before launching if your listener uses a different address. From the extracted directory, run:
+
+```sh
+./start-testnet
+```
+
+The launcher uses the public PCASH testnet node on Sepolia. It prompts for a vault password and stores the vault under `~/.pcash/wallet-testnet`. In a second terminal, from the same extracted directory:
+
+```sh
+./pcash-wallet-cli wallet create
+./pcash-wallet-cli account ensure
+./pcash-wallet-cli receive
+```
+
+Registration goes through the mempool and needs a relayer to publish it. Give the receive code to someone with test PCASH. Once `./pcash-wallet-cli balance` shows the payment, use `./pcash-wallet-cli send --to <receive-code> --amount 10` to send 10 atomic units to another wallet.
+
+### Run the wallet service directly
 
 The local wallet service (`pcash-wallet`) holds keys, synchronizes notes, encrypts and decrypts payments, generates proofs, and submits transactions. Its CLI (`pcash-wallet-cli`) creates or restores a wallet from a 24-word BIP-39 recovery phrase. The service encrypts the seed and private wallet database with AES-256-GCM and derives the password key with Argon2id. On persistent startup the service generates a bearer token and saves it with its bound endpoint in an owner-only `connection.json` under the wallet data directory. The CLI discovers this connection automatically. Pass the same `--data-dir` (or `PCASH_WALLET_DATA_DIR`) to both processes when using a custom directory. Explicit URL and token settings override discovery; a discovered token is only sent to its recorded endpoint. Explicit tokens are never saved: set the same `PCASH_WALLET_TOKEN` in both terminals, or use the server’s `--token` and the CLI’s `--wallet-token`.
 

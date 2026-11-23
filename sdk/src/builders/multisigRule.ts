@@ -162,7 +162,7 @@ export function buildMultisigContractCall(
 type MultisigContractAuthorizationParams = Omit<
   BuildMultisigRuleParams,
   | "transaction"
-  | "createdAssetId"
+  | "mintedAssetId"
   | "accountAddress"
   | "recentPcashBlockHash"
   | "pcashChainId"
@@ -203,7 +203,7 @@ export function buildMultisigContractAuthorization(
   const result = buildMultisigRule({
     ...proving,
     transaction: call.transaction,
-    createdAssetId: 0n,
+    mintedAssetId: 0n,
     accountAddress: call.contractAddress,
     recentPcashBlockHash: call.recentPcashBlockHash,
     pcashChainId: call.pcashChainId,

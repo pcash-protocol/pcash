@@ -6,18 +6,25 @@ export interface WebsitePreferences {
   defaultSubmissionMode: SubmissionMode;
 }
 export const WEBSITE_SETTINGS_KEY = "pcash-website-settings";
-const defaults: WebsitePreferences = { ensEnabled: true, defaultSubmissionMode: "slow" };
+/**
+ * Faster by default except on Ethereum mainnet: a testnet has few relayers to post
+ * More private transactions, so they would wait.
+ */
+export function defaultPreferences(l1ChainId: number): WebsitePreferences {
+  return { ensEnabled: true, defaultSubmissionMode: l1ChainId === 1 ? "slow" : "fast" };
+}
+const siteDefaults = defaultPreferences(Number(import.meta.env.VITE_L1_CHAIN_ID));
 
 export class WebsiteSettingsStore {
-  private state = defaults;
+  private state: WebsitePreferences;
   private listeners = new Set<() => void>();
-  constructor(private storage: () => Storage) {}
+  constructor(private storage: () => Storage, private defaults: WebsitePreferences = siteDefaults) { this.state = defaults; }
   getSnapshot = () => this.state;
-  getServerSnapshot = () => defaults;
+  getServerSnapshot = () => this.defaults;
   getDefaultSubmissionMode = () => this.state.defaultSubmissionMode;
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   restore = () => {
-    let next = defaults;
+    let next = this.defaults;
     try {
       // Browser storage can be edited by the user or another tab.
       const saved: unknown = JSON.parse(this.storage().getItem(WEBSITE_SETTINGS_KEY) ?? "null");

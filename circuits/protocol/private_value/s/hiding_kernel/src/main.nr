@@ -2,8 +2,9 @@
 // Inputs: circuits/manifest.json, assets/private_value_profiles.json, sdk/src/protocol/witness.ts.
 use pcash_protocol::generated::private_value_profiles::S_PUBLIC_INPUTS;
 use pcash_protocol::generated::protocol_stack_hashes::{
-    PRIVATE_VALUE_ASSET_CREATION_KERNEL_VK_HASH, PRIVATE_VALUE_SPONSORED_TRANSFER_KERNEL_VK_HASH,
-    PRIVATE_VALUE_TRANSFER_KERNEL_VK_HASH,
+    PRIVATE_VALUE_MINT_KERNEL_VK_HASH, PRIVATE_VALUE_RESTRICTED_SPONSORED_TRANSFER_KERNEL_VK_HASH,
+    PRIVATE_VALUE_RESTRICTED_TRANSFER_KERNEL_VK_HASH,
+    PRIVATE_VALUE_SPONSORED_TRANSFER_KERNEL_VK_HASH, PRIVATE_VALUE_TRANSFER_KERNEL_VK_HASH,
 };
 use pcash_protocol::recursion::{hiding_kernel, KernelVerificationKey};
 
@@ -58,8 +59,10 @@ fn main(
         kernel_vk,
         [
             PRIVATE_VALUE_TRANSFER_KERNEL_VK_HASH,
+            PRIVATE_VALUE_RESTRICTED_TRANSFER_KERNEL_VK_HASH,
             PRIVATE_VALUE_SPONSORED_TRANSFER_KERNEL_VK_HASH,
-            PRIVATE_VALUE_ASSET_CREATION_KERNEL_VK_HASH,
+            PRIVATE_VALUE_RESTRICTED_SPONSORED_TRANSFER_KERNEL_VK_HASH,
+            PRIVATE_VALUE_MINT_KERNEL_VK_HASH,
         ],
     );
 }

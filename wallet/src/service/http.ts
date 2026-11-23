@@ -2,7 +2,8 @@ import { storeTransactionData, type TransactionData, type DataRecord } from "@pc
 import { BN254_SCALAR_MODULUS } from "@pcash/sdk/crypto";
 import { formatAssetDefinition, parseAssetDefinition, privateValueUnits, quoteNetworkFee, type AssetDefinition } from "@pcash/sdk/protocol";
 import { PRIVATE_VALUE_PROFILES } from "@pcash/sdk/constants";
-import { bytes32Hex, fromHex, toHex, U128_LIMIT } from "@pcash/sdk/utils";
+import { recognizeMintRule, type RecognizedMintRule } from "@pcash/sdk/rules";
+import { addressHex, bytes32Hex, fromHex, toHex, U128_LIMIT } from "@pcash/sdk/utils";
 import { stringify } from "viem";
 import { inspect } from "node:util";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -251,6 +252,13 @@ function optionalOpenFee(body: Record<string, unknown>): { openFeeAmount?: bigin
   return { openFeeAmount };
 }
 
+function presentMintRule(rule: RecognizedMintRule) {
+  if (rule.kind === "fixed-supply") return { kind: rule.kind, supply: rule.configuration.supply };
+  if (rule.kind === "account-mint") return { kind: rule.kind, account: addressHex(rule.configuration.accountAddress) };
+  if (rule.kind === "deposit-mint") return { kind: rule.kind, vault: addressHex(rule.configuration.vault) };
+  return { kind: rule.kind };
+}
+
 function presentDefinition(definition: AssetDefinition) {
   return {
     text: formatAssetDefinition(definition),
@@ -258,7 +266,8 @@ function presentDefinition(definition: AssetDefinition) {
     symbol: definition.metadata.symbol,
     decimals: definition.metadata.decimals,
     contentDigest: toHex(definition.metadata.contentDigest),
-    initialSupply: definition.initialSupply,
+    mintRule: presentMintRule(recognizeMintRule(definition.mintRule)),
+    restricted: definition.transferRule !== undefined,
   };
 }
 
@@ -567,11 +576,11 @@ export async function handleWalletHttp(
       return;
     }
     if (url.pathname === "/assets") {
-      const initialSupply = decimalBigint(body.initialSupply);
+      const supply = decimalBigint(body.supply);
       const retry = optionalRetryContentHash(body);
       const openFee = optionalOpenFee(body);
-      if (typeof body.name !== "string" || typeof body.symbol !== "string" || typeof body.decimals !== "number" || initialSupply === undefined || initialSupply <= 0n) {
-        send(response, 400, { error: "asset creation requires name, symbol, numeric decimals and positive initialSupply" }); return;
+      if (typeof body.name !== "string" || typeof body.symbol !== "string" || typeof body.decimals !== "number" || supply === undefined || supply <= 0n) {
+        send(response, 400, { error: "asset creation requires name, symbol, numeric decimals and positive supply" }); return;
       }
       if (typeof body.contentDigest !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(body.contentDigest)) {
         throw new HttpValidationError("contentDigest must be a 32-byte 0x-hex digest");
@@ -581,7 +590,7 @@ export async function handleWalletHttp(
       const submission = context.submissionFor(body, bodyWallet);
       const result = await context.runtimeFor(bodyWallet).createAsset({
         metadata: { name: body.name, symbol: body.symbol, decimals: body.decimals, contentDigest: fromHex(body.contentDigest) },
-        initialSupply, ...openFee, ...retry,
+        supply, ...openFee, ...retry,
         ...(assetId === undefined ? {} : { assetId }),
         ...relayTerms, submission, onPrepared: journaled.record,
       });

@@ -20,7 +20,7 @@ import { authorizePcashRequestWithPrivateKey } from "../src/eip712/authorization
 import { createChonkCircuitResolver } from "../src/node/chonkMaterial.ts";
 import { isProverAvailable, nativeChonkBackend } from "../src/node/nativeProver.ts";
 import { accountRuleEntryCommitment, accountStateCommitment, buildAccountRuleSet } from "../src/protocol/account.ts";
-import { assetSecretCommitment, standardFungibleAssetId } from "../src/protocol/asset.ts";
+import { findAssetDescriptor } from "../src/protocol/asset.ts";
 import { sizeClassFiller } from "../src/protocol/envelope.ts";
 import { DEFAULT_NETWORK_CONFIG } from "../src/protocol/network.ts";
 import {
@@ -33,7 +33,7 @@ import {
 import type { WitnessMap } from "../src/protocol/witness.ts";
 import { proveTransferTransactionChonk, type ChonkCircuitMaterial } from "../src/prover/stacks.ts";
 import { defaultUserAccountRuleSet } from "../src/rules/referenceRules.ts";
-import { syntheticRecentBlockFixture, TEST_DEFAULT_RULE_SECRETS } from "@pcash/test-support/protocol-fixtures";
+import { syntheticRecentBlockFixture, TEST_DEFAULT_RULE_SECRETS, TEST_MINT_RULE } from "@pcash/test-support/protocol-fixtures";
 import { proverAssetsDir } from "./circuitBundle.ts";
 import { noOpEventApplicationWitness } from "./noOpEventApplication.ts";
 import { verifyGeneratedProof } from "./proofVerification.ts";
@@ -54,11 +54,7 @@ const RECIPIENT = 0x1234567890123456789012345678901234567890n;
 const SPENT = { asset: [MAX_NOTE_AMOUNT, 1250n], native: [77n] };
 const PAYMENT = 1000n;
 const BURN = 10n;
-const assetId = standardFungibleAssetId({
-  metadataCommitment: 765n,
-  initialSupply: MAX_NOTE_AMOUNT + 1250n,
-  assetSecretCommitment: assetSecretCommitment(654n),
-});
+const assetId = findAssetDescriptor({ metadataCommitment: 765n, mintRule: TEST_MINT_RULE }, 0n).assetId;
 
 function fundedSplitFixture(authorizationVkHash: bigint) {
   const defaults = defaultUserAccountRuleSet({ wallet, secrets: TEST_DEFAULT_RULE_SECRETS });

@@ -1,6 +1,8 @@
 import type { StoredTransactionData } from "@pcash/sdk/delivery";
 import type { BulkJob, BulkRecoveryObservation } from "./bulkJobs.ts";
-import { PRIVATE_VALUE_PROFILES } from "@pcash/sdk/constants";
+import type { PaymentDisclosure } from "./paymentDisclosure.ts";
+import { PRIVATE_VALUE_PROFILES, SENDER_DENY_LIST_RULE_VK_HASH } from "@pcash/sdk/constants";
+import { namesStandardMintRule, recognizeMintRule, recognizeTransferRule } from "@pcash/sdk/rules";
 // PCASH note inventory — pure logic.
 //
 // The note-selection, scan-range, rebuild, spent-flag, and pending
@@ -10,7 +12,7 @@ import { PRIVATE_VALUE_PROFILES } from "@pcash/sdk/constants";
 // live only in wallet persistence and are never printed.
 
 import { maxSpendable, selectNotes } from "./coinSelect.ts";
-import { decodeDirectSendOpening, directSendOutputKey, type AssetDefinition, type PayoutComponent, type PayoutSourceKind } from "@pcash/sdk/protocol";
+import { decodeAssetDefinition, decodeDirectSendOpening, directSendOutputKey, encodeAssetDefinition, type AssetDefinition, type PayoutComponent, type PayoutSourceKind } from "@pcash/sdk/protocol";
 import { numberToHex } from "viem";
 import { fixedHex, fromHex, sameHex, toHex } from "@pcash/sdk/utils";
 import { fieldToHex } from "@pcash/sdk/crypto";
@@ -61,6 +63,8 @@ export interface WalletNote {
   memo?: string;
   /** Address (0x-hex) the sender wrote as its own. Unauthenticated. */
   sender?: string;
+  /** Opens this note's output alone for someone else; absent for a payout note or a pending one. */
+  disclosure?: PaymentDisclosure;
 }
 
 /** Application records in a sender region, with 0x-hex data. */
@@ -88,6 +92,8 @@ export interface StoredSentOutput {
   senderIncluded: boolean;
   /** A direct send: this wallet delivers the opening to its owner by link. */
   directSend?: true;
+  /** The output's disclosure key (0x-hex); absent for an output whose bytes the builder supplied. */
+  disclosureKey?: string;
   /** The transaction's sender-region application records, repeated on each output it sent. */
   senderRecords?: StoredSenderRecords;
   blockNumber: string;
@@ -209,7 +215,7 @@ export interface PendingAssetAction {
   privateRelayFeeAmount?: string;
   privateRelayRecipient?: string;
   /** Present only for standard asset creation; binds an explicit exact-byte retry to reviewed terms. */
-  assetCreationReview?: { metadataCommitment: string; initialSupply: string };
+  assetCreationReview?: { metadataCommitment: string; supply: string };
   /** Present only for a wallet asset payment or burn; binds an explicit exact-byte retry to reviewed terms. */
   assetTransferReview?: {
     /** Recipients as requested, in output-slot order. */
@@ -243,16 +249,9 @@ export interface PendingAssetAction {
  * `assetId` is recorded: delivered ones come from senders, imported ones from users. */
 interface WalletAssetRecord {
   assetId: string;
-  definition: {
-    /** Decimal. */
-    initialSupply: string;
-    assetSecretCommitment: string;
-    name: string;
-    symbol: string;
-    decimals: number;
-    contentDigest: string;
-  };
-  /** Present only for an asset this wallet created. */
+  /** The canonical encoded definition, hex. */
+  definition: string;
+  /** Present only for a fixed-supply asset this wallet created. */
   assetSecret?: string;
 }
 
@@ -371,11 +370,15 @@ export interface WalletFileData {
   notes: WalletNote[];
   /** First output-tree index not yet examined by the dense output scan. */
   nextOutputIndex?: string;
-  /** First output covered by this inventory; zero means full history. */
+  /** First output covered by this inventory; zero means full history. A
+   * history scan lowers it as it reads back from the block the wallet opened at. */
   historyStartOutputIndex?: string;
-  /** The wallet opened at a later block without scanning what came before it.
-   * A replay from genesis replaces the scanned inventory and clears this. */
+  /** Outputs before the block the wallet opened at are still being scanned,
+   * newest first, down to `historyScanEndOutputIndex`. */
   historyReplayRequired?: true;
+  /** Where a pending history scan stops: the end of the outputs a returning
+   * wallet had already scanned. Absent: genesis. */
+  historyScanEndOutputIndex?: string;
   /** Changes when history is rebuilt, including a canonical reorg. */
   historyRevision?: string;
   /** Canonical block against which `nextOutputIndex` was established. */
@@ -769,17 +772,7 @@ export function walletAssetRecord(data: WalletFileData | null, assetId: bigint):
 }
 
 export function storedAssetDefinition(record: WalletAssetRecord): AssetDefinition {
-  const { definition } = record;
-  return {
-    initialSupply: BigInt(definition.initialSupply),
-    assetSecretCommitment: BigInt(definition.assetSecretCommitment),
-    metadata: {
-      name: definition.name,
-      symbol: definition.symbol,
-      decimals: definition.decimals,
-      contentDigest: fromHex(definition.contentDigest),
-    },
-  };
+  return decodeAssetDefinition(fromHex(record.definition));
 }
 
 export function knownAssetDefinition(data: WalletFileData | null, assetId: bigint): AssetDefinition | undefined {
@@ -788,30 +781,54 @@ export function knownAssetDefinition(data: WalletFileData | null, assetId: bigin
 }
 
 /**
+ * Whether a definition's transfer-rule configuration is usable. The asset ID
+ * commits to the configuration commitment, not to its opening, so anyone can
+ * deliver a definition of a real asset with another configuration. A wallet can
+ * check the opening only for the standard rule, so a definition naming the
+ * standard rule's keys must carry a configuration that opens its commitment.
+ */
+export function openableTransferRule(definition: AssetDefinition): boolean {
+  const rule = definition.transferRule;
+  if (rule === undefined || rule.sVkHash !== SENDER_DENY_LIST_RULE_VK_HASH || rule.lVkHash !== SENDER_DENY_LIST_RULE_VK_HASH) return true;
+  return recognizeTransferRule(rule).kind === "sender-deny-list";
+}
+
+/** Whether a definition naming a standard mint rule's keys carries a configuration that opens its commitment. */
+export function openableMintRule(definition: AssetDefinition): boolean {
+  return !namesStandardMintRule(definition.mintRule) || recognizeMintRule(definition.mintRule).kind !== "custom";
+}
+
+/** Why a wallet refuses a definition whose standard rule configuration does not open, or undefined. */
+export function unopenableRuleReason(definition: AssetDefinition): string | undefined {
+  if (!openableMintRule(definition)) return "the definition's mint rule configuration does not open its commitment";
+  if (!openableTransferRule(definition)) return "the definition's transfer rule configuration does not open its commitment";
+  return undefined;
+}
+
+/**
  * Record a definition the caller verified against `assetId`. An existing record
- * is kept, gaining the asset secret when this wallet created the asset.
- * Returns whether a new record was inserted.
+ * is kept, gaining the asset secret when this wallet created the asset, and
+ * takes this definition with `replaceDefinition`: the asset ID does not commit
+ * to a custom rule's configuration bytes, so a definition a scan learned may
+ * carry wrong ones, and an explicit import replaces it. A definition naming a
+ * standard rule whose configuration does not open its commitment is not
+ * recorded. Returns whether a new record was inserted.
  */
 export function addWalletAsset(
   data: WalletFileData,
   asset: { assetId: bigint; definition: AssetDefinition; assetSecret?: bigint },
+  options: { replaceDefinition?: boolean } = {},
 ): boolean {
+  if (unopenableRuleReason(asset.definition) !== undefined) return false;
   const existing = walletAssetRecord(data, asset.assetId);
   if (existing !== undefined) {
+    if (options.replaceDefinition === true) existing.definition = toHex(encodeAssetDefinition(asset.definition));
     if (asset.assetSecret !== undefined) existing.assetSecret = fieldToHex(asset.assetSecret);
     return false;
   }
-  const { metadata } = asset.definition;
   (data.assets ??= []).push({
     assetId: fieldToHex(asset.assetId),
-    definition: {
-      initialSupply: asset.definition.initialSupply.toString(),
-      assetSecretCommitment: fieldToHex(asset.definition.assetSecretCommitment),
-      name: metadata.name,
-      symbol: metadata.symbol,
-      decimals: metadata.decimals,
-      contentDigest: toHex(metadata.contentDigest),
-    },
+    definition: toHex(encodeAssetDefinition(asset.definition)),
     ...(asset.assetSecret === undefined ? {} : { assetSecret: fieldToHex(asset.assetSecret) }),
   });
   return true;

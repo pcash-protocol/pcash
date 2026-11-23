@@ -12,7 +12,7 @@ import type { NativeBurn } from "../src/protocol/fee.ts";
 import { privateValueCommitment } from "../src/protocol/transaction.ts";
 import { transferFixture } from "@pcash/test-support/protocol-fixtures";
 import { assetProfileFixture } from "./assetProfileFixtures.ts";
-import { sharedAssetClaimFixture } from "./sharedAssetClaimFixtures.ts";
+import { sharedAssetClaimFixture } from "@pcash/test-support/shared-asset-claim-fixtures";
 import { deriveTestWallet } from "./testWallet.ts";
 
 const { offsets } = PRIVATE_VALUE_PROFILES.S;

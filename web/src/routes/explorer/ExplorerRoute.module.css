@@ -682,6 +682,14 @@
   white-space: nowrap;
 }
 
+.effects {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .tableScroll .num { text-align: right; }
 .tableScroll tbody tr:last-child td { border-bottom: 0; }
 

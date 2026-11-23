@@ -101,10 +101,10 @@ describe("activity rows", () => {
     const [row] = activityRows(sources({ canonical: [{
       transactionId: hash("0d"), direction: "received", amount: 9n * PCASH, blockNumber: 1n, blockHash: "0x01", timestamp: 100n, commitments: [], payout: null,
       messages: [
-        { memo: new TextEncoder().encode("Thanks"), sender },
-        { memo: new Uint8Array(0), sender: 0x78n },
-        { memo: Uint8Array.of(0x68, 0x69, 0xff), sender: null },
-        { memo: new Uint8Array(0), sender: null },
+        { amount: 3n * PCASH, memo: new TextEncoder().encode("Thanks"), sender },
+        { amount: 2n * PCASH, memo: new Uint8Array(0), sender: 0x78n },
+        { amount: 2n * PCASH, memo: Uint8Array.of(0x68, 0x69, 0xff), sender: null },
+        { amount: 2n * PCASH, memo: new Uint8Array(0), sender: null },
       ],
     }] }));
     expect(lines(row!.note)).toEqual([
@@ -131,7 +131,7 @@ describe("activity rows", () => {
 
   it("shows what senders wrote into a transaction that also spent this wallet's notes", () => {
     const entry = { transactionId: hash("1c"), direction: "spent" as const, amount: PCASH, blockNumber: 2n, blockHash: "0x02", timestamp: 200n, commitments: [], payout: null,
-      messages: [{ memo: new TextEncoder().encode("Swap"), sender: null }] };
+      messages: [{ amount: PCASH, memo: new TextEncoder().encode("Swap"), sender: null }] };
     const [row] = activityRows(sources({ canonical: [entry] }));
     expect([text(row!.title), text(row!.note)]).toEqual(["Sent 1 PCASH", "“Swap”"]);
   });

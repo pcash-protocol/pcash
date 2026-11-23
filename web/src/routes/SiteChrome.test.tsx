@@ -24,7 +24,6 @@ it("counts the marketplace trades that wait on the signed-in owner beside the Ma
 it("does not mark released products as alpha", () => {
   state.todos = 0;
   expect(link("/marketplace")).toBe("Marketplace");
-  expect(link("/tokens")).toBe("Tokens");
   expect(link("/explorer")).toBe("Explorer");
   for (const pathname of ["/marketplace", "/marketplace/listing/1", "/tokens", "/tokens/new", "/token/abc", "/claim", `/drop/0x${"ab".repeat(20)}`]) {
     expect(chrome(pathname)).not.toContain("subject to change at any time");
@@ -32,7 +31,7 @@ it("does not mark released products as alpha", () => {
 });
 
 it("marks every page as testnet unless the L1 is Ethereum mainnet", () => {
-  expect(chrome().replace(/<[^>]+>/g, "")).toContain("Testnet. This site runs on Sepolia, and its PCASH has no value. Mainnet is coming soon.");
+  expect(chrome().replace(/<[^>]+>/g, "")).toContain("Testnet · Mainnet coming soon");
   state.l1ChainId = 1;
   state.l1Name = "Ethereum";
   expect(chrome()).not.toContain("testnet-banner");

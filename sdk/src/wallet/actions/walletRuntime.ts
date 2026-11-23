@@ -4,6 +4,10 @@ import { batchEntryCarrying } from "@pcash/sdk/relay";
 import type { SelectedRelayQuoteProvider } from "@pcash/sdk/eip712";
 import { userAccountCreationAttachment } from "./accountCreation.ts";
 import { runAssetCreationClient, type AssetCreationIntent, type AssetCreationProver } from "./assetCreationClient.ts";
+import { recognizeTransferRule } from "@pcash/sdk/rules";
+import { DenyLists, type L1LogReader } from "../denyListSync.ts";
+import { runAccountMintClient, type AccountMintIntent } from "./mintClient.ts";
+import { createDepositCode, listDeposits, runDepositMintClient, type DepositMintIntent, type DepositScans } from "./depositMintClient.ts";
 import type { AssetActionProver } from "./assetActionClient.ts";
 import { runAssetTransferClient, type AssetTransferIntent } from "./assetTransferClient.ts";
 import { runBulkJobStep, startBulkJob } from "./bulkJobClient.ts";
@@ -23,6 +27,7 @@ import {
   TX_KIND_PRIVATE_VALUE,
   generateMlKemKeyPair,
   type MlKemKeyPair,
+  type AssetDefinition,
   type RawPrivateValueTransaction,
   type WalletProfile,
 } from "@pcash/sdk/protocol";
@@ -42,7 +47,9 @@ import {
   removePendingNotesForTransaction,
   selectSpendableInputNotes,
   spendableNotes,
+  storedAssetDefinition,
   type PendingUserAccountCreation,
+  type WalletFileData,
   type WalletNote,
 } from "../noteStore.ts";
 import type { WalletStateStore } from "../store.ts";
@@ -93,7 +100,7 @@ import {
 } from "./userAccountUpdateClient.ts";
 import type { TrialDecrypt } from "./scan.ts";
 import { syncWallet, type SyncWalletResult } from "./syncWallet.ts";
-import { replayHistory, type HistoryReplayStore } from "./historyReplay.ts";
+import { scanHistory } from "./historyScan.ts";
 import { isWalletSyncConflict } from "./syncConflictRetry.ts";
 import { throwIfWalletActionCanceled } from "./cancellation.ts";
 import { localAccount } from "./localChain.ts";
@@ -152,6 +159,8 @@ interface WalletRuntimeParams<Prepared = unknown, Output = unknown> {
   settlePollIntervalMs?: number;
   settlePollMaxAttempts?: number;
   trialDecrypt?: TrialDecrypt;
+  /** Reads Ethereum logs for the deny lists of restricted assets. */
+  l1Logs?: L1LogReader;
 }
 
 interface WalletAccountActivationIntent extends DurableSubmissionCallbacks {
@@ -228,14 +237,59 @@ export function createWalletRuntime<Prepared = unknown, Output = unknown>(
   const settleInterval = params.settlePollIntervalMs ?? 2000;
   const settleAttempts = params.settlePollMaxAttempts ?? 150;
   const trialDecrypt = params.trialDecrypt === undefined ? {} : { trialDecrypt: params.trialDecrypt };
+  let denyLists: Promise<{ lists: DenyLists; genesisL1Block: bigint }> | undefined;
+  // What this wallet's deposit listings have read from Ethereum, per asset.
+  const depositScans: DepositScans = new Map();
+  const denyListsFor = (): Promise<{ lists: DenyLists; genesisL1Block: bigint }> | undefined => {
+    if (params.l1Logs === undefined) return undefined;
+    if (denyLists === undefined) {
+      const created = params.node.status().then((status) => ({
+        lists: new DenyLists(params.l1Logs!, status.genesisL1Block), genesisL1Block: status.genesisL1Block,
+      }));
+      denyLists = created;
+      // A failed status read is not kept, so the next use reads it again.
+      created.catch(() => {
+        if (denyLists === created) denyLists = undefined;
+      });
+    }
+    return denyLists;
+  };
+  const denyListsOption = async (): Promise<{ denyLists?: DenyLists }> => {
+    const tracked = await denyListsFor();
+    return tracked === undefined ? {} : { denyLists: tracked.lists };
+  };
+  // Each sync, an action's included, fetches the publication openings its new
+  // anchor needs for every held asset under a standard deny list, so a send
+  // asks nothing that names its asset.
+  const prefetchPublicationOpenings = async (data: WalletFileData): Promise<void> => {
+    const tracked = denyListsFor();
+    if (tracked === undefined) return;
+    const configurations = (data.assets ?? []).flatMap((record) => {
+      const rule = storedAssetDefinition(record).transferRule;
+      if (rule === undefined) return [];
+      const recognized = recognizeTransferRule(rule);
+      return recognized.kind === "sender-deny-list" ? [recognized.configuration] : [];
+    });
+    if (configurations.length === 0) return;
+    const anchor = await params.store.readChain((chain) => chain?.anchor ?? null);
+    if (anchor === null) return;
+    const { lists, genesisL1Block } = await tracked;
+    await lists.prefetch(params.node, configurations,
+      { blockHash: BigInt(anchor.blockHash), number: BigInt(anchor.header.number) }, genesisL1Block);
+  };
   // Settling reads the local chain state, so each attempt synchronizes first.
-  const synchronize = () => syncWallet({
-    node: params.node,
-    wallet: requireReceiveKeys(params.wallet),
-    chainId: params.chainId,
-    store: params.store,
-    ...trialDecrypt,
-  });
+  const synchronize = async (): Promise<SyncWalletResult> => {
+    const result = await syncWallet({
+      node: params.node,
+      wallet: requireReceiveKeys(params.wallet),
+      chainId: params.chainId,
+      store: params.store,
+      ...trialDecrypt,
+    });
+    // A failed prefetch leaves the sync intact; a restricted send then says to sync again.
+    await prefetchPublicationOpenings(result.data).catch(() => undefined);
+    return result;
+  };
   // An action reads from the node its submission publishes through; sync stays on the wallet's node.
   const actionNode = (submission?: Pick<DurableSubmissionAdapter, "node">): PcashNodeClient =>
     submission?.node ?? params.node;
@@ -694,7 +748,7 @@ export function createWalletRuntime<Prepared = unknown, Output = unknown>(
       onProgress?: Parameters<typeof syncWallet>[0]["onProgress"];
       onNodeTip?: Parameters<typeof syncWallet>[0]["onNodeTip"];
     } = {}): Promise<SyncWalletResult> {
-      return syncWallet({
+      const result = await syncWallet({
         node: params.node,
         wallet: requireReceiveKeys(params.wallet),
         chainId: params.chainId,
@@ -708,15 +762,27 @@ export function createWalletRuntime<Prepared = unknown, Output = unknown>(
         ...(options.onProgress === undefined ? {} : { onProgress: options.onProgress }),
         ...(options.onNodeTip === undefined ? {} : { onNodeTip: options.onNodeTip }),
       });
+      // A failed prefetch leaves the sync intact; a restricted send then says to sync again.
+      await prefetchPublicationOpenings(result.data).catch(() => undefined);
+      return result;
     },
 
-    /** Scan the history before the block a head-first open started at, and adopt it. */
-    replayHistory(options: {
-      replay: HistoryReplayStore;
+    /**
+     * Fetch the publication openings the wallet's current anchor needs for
+     * every held asset under a standard deny list. A failed fetch is left for
+     * the next sync.
+     */
+    async prefetchPublicationOpenings(): Promise<void> {
+      const data = await params.store.load();
+      if (data !== null) await prefetchPublicationOpenings(data).catch(() => undefined);
+    },
+
+    /** Scan the outputs a head-first open skipped, newest first. */
+    scanHistory(options: {
       signal?: AbortSignal;
       onOutputs?: (scanned: bigint, total: bigint) => void;
     }): Promise<void> {
-      return replayHistory({
+      return scanHistory({
         node: params.node,
         wallet: requireReceiveKeys(params.wallet),
         chainId: params.chainId,
@@ -966,6 +1032,42 @@ export function createWalletRuntime<Prepared = unknown, Output = unknown>(
       });
     },
 
+    async accountMint(intent: AccountMintIntent & { submission?: DurableSubmissionAdapter<Prepared, Output> }) {
+      const spend = requireSpendable(params, "mint");
+      if (params.provers?.assetCreation === undefined) throw new WalletCapabilityError("prover", "mint");
+      const submission = intent.submission ?? params.submission;
+      if (submission === undefined) throw new WalletCapabilityError("submission", "mint");
+      return runAccountMintClient({
+        ...intent, node: actionNode(submission), store: params.store, wallet: spend.wallet, signer: spend.signer,
+        chainId: params.chainId, prover: params.provers.assetCreation, submission,
+        settlePollIntervalMs: settleInterval, settlePollMaxAttempts: settleAttempts, synchronize,
+      });
+    },
+
+    depositCode(asset: AssetDefinition): string {
+      return createDepositCode({ asset, wallet: params.wallet, chainId: params.chainId });
+    },
+
+    async deposits(asset: AssetDefinition) {
+      if (params.l1Logs === undefined) throw new Error("finding deposits needs an Ethereum connection");
+      return listDeposits({
+        reader: params.l1Logs, node: params.node, wallet: params.wallet, chainId: params.chainId, asset, scans: depositScans,
+      });
+    },
+
+    async depositMint(intent: DepositMintIntent & { submission?: DurableSubmissionAdapter<Prepared, Output> }) {
+      const spend = requireSpendable(params, "deposit mint");
+      if (params.provers?.assetCreation === undefined) throw new WalletCapabilityError("prover", "deposit mint");
+      const submission = intent.submission ?? params.submission;
+      if (submission === undefined) throw new WalletCapabilityError("submission", "deposit mint");
+      if (params.l1Logs === undefined) throw new Error("minting a deposit needs an Ethereum connection");
+      return runDepositMintClient({
+        ...intent, reader: params.l1Logs, node: actionNode(submission), store: params.store, wallet: spend.wallet, signer: spend.signer,
+        chainId: params.chainId, prover: params.provers.assetCreation, submission,
+        settlePollIntervalMs: settleInterval, settlePollMaxAttempts: settleAttempts, synchronize,
+      });
+    },
+
     async assetTransfer(intent: AssetTransferIntent & { submission?: DurableSubmissionAdapter<Prepared, Output> }) {
       const spend = requireSpendable(params, "asset transfer");
       if (params.provers?.assetAction === undefined) throw new WalletCapabilityError("prover", "asset transfer");
@@ -974,6 +1076,7 @@ export function createWalletRuntime<Prepared = unknown, Output = unknown>(
       return runAssetTransferClient({
         ...intent, node: actionNode(submission), store: params.store, wallet: spend.wallet, signer: spend.signer,
         chainId: params.chainId, prover: params.provers.assetAction, submission,
+        ...await denyListsOption(),
         settlePollIntervalMs: settleInterval, settlePollMaxAttempts: intent.settlePollMaxAttempts ?? settleAttempts, synchronize,
       });
     },
@@ -996,6 +1099,7 @@ export function createWalletRuntime<Prepared = unknown, Output = unknown>(
         node: actionNode(submission), store: params.store, wallet: spend.wallet, signer: spend.signer,
         chainId: params.chainId, prover: params.provers.assetAction, submission,
         callbacks: durableSubmissionCallbacks(intent),
+        ...await denyListsOption(),
       });
     },
 

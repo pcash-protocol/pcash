@@ -21,6 +21,8 @@ export { assertReceiveKeyOwned, registeredSelfReceiveKey, loadSelfAccountAtSnaps
 export { receiveKeyPairs } from "../receiveKeyring.ts";
 
 export * from "./assetCreationClient.ts";
+export * from "./mintClient.ts";
+export * from "./depositMintClient.ts";
 
 export * from "./bulkJobClient.ts";
 export * from "../bulkJobs.ts";
@@ -30,3 +32,4 @@ export * from "./protocolFee.ts";
 export type { SyncWalletResult } from "./syncWallet.ts";
 
 export type { ResumeValueTransactionIntent, ResumeValueTransactionResult } from "./resumeValueTransaction.ts";
+export { planRestrictedTransfer, RestrictedTransferUnavailable, SENDER_DENY_LIST_PACKAGE, type RestrictedTransferPlan } from "./restrictedTransfer.ts";

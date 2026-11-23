@@ -23,7 +23,8 @@ import { deriveStackPins, STACK_PINS_PATH } from "./stack_pins.mjs";
 import { applicationPinPaths, RULE_PINS_PATH } from "./application_pins.mjs";
 
 const staticRequiredArtifacts = [
-  ...["real_event", "shared_claim_s", "shared_claim_l", "large_sponsored_transfer", "large_asset_creation"].flatMap(name =>
+  ...["real_event", "shared_claim_s", "shared_claim_l", "large_sponsored_transfer", "large_mint", "restricted_transfer",
+    "restricted_sponsored_transfer"].flatMap(name =>
     ["proof", "proof.rejected", "public_inputs"].map(file => `known-answers/${name}/${file}`)),
   "known-answers/shared_claim_s/tx_bytes",
   "known-answers/shared_claim_l/tx_bytes",
@@ -213,7 +214,7 @@ test("the real generator excludes application clients and includes proof builder
   const repo = fileURLToPath(new URL("../..", import.meta.url));
   const inputs = circuitInputFiles(repo).map((path) => relative(repo, path));
   assert.ok(inputs.includes("sdk/src/builders/nativeTransfer.ts"));
-  assert.ok(inputs.includes("sdk/test/sharedAssetClaimFixtures.ts"));
+  assert.ok(inputs.includes("test-support/src/sharedAssetClaimFixtures.ts"));
   for (const prefix of ["wallet/", "marketplace/src/client/", "sdk/src/clients/", "sdk/src/relay/"]) {
     assert.equal(inputs.some((path) => path.startsWith(prefix)), false, prefix);
   }
@@ -398,7 +399,8 @@ test("runtime bundles require the hiding-kernel KATs and exclude integration fix
     path.startsWith("known-answers/real_event/") ||
     path.startsWith("known-answers/shared_claim_") ||
     path.startsWith("known-answers/large_sponsored_transfer/") ||
-    path.startsWith("known-answers/large_asset_creation/"));
+    path.startsWith("known-answers/large_mint/") ||
+    path.startsWith("known-answers/restricted_"));
   for (const path of integrationArtifacts) await unlink(join(runtime, path));
   writeCircuitBundleManifest(runtime, "a".repeat(64), "runtime");
   assert.equal(validateCircuitBundle(runtime).katSet, "runtime");
@@ -457,7 +459,7 @@ test("the bundle digest covers circuits and keys but not the randomized known an
   await populateBundle(second);
   // Another known-answer set from another source fingerprint.
   for (const path of requiredArtifacts.filter((path) => path.startsWith("known-answers/"))) {
-    if (/^known-answers\/(?:real_event\/|shared_claim_|large_)/.test(path)) await unlink(join(second, path));
+    if (/^known-answers\/(?:real_event\/|shared_claim_|large_|restricted_)/.test(path)) await unlink(join(second, path));
     else await writeFile(join(second, path), `${path}:another proof`);
   }
   const firstManifest = writeCircuitBundleManifest(first, "b".repeat(64), "full");

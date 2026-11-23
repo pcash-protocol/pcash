@@ -206,12 +206,14 @@ for (const method of ["proveTransfer", "proveUserAccountUpdate"] as const) {
   });
 }
 
-test("unfunded issuance folds registered authorization", async () => {
+test("a mint folds the minting account's rule and the asset's mint rule", async () => {
   await withFakes(async () => {
     const seen: Array<{ step?: string; circuit?: string }> = [];
+    const mintRuleWitness = { secret: "0x1" };
     await browserProver.proveAssetAction({
-      operation: "assetCreation",
-      authorization: { circuitUrl: CIRCUIT_URLS.account_rule_asset_creation_ecdsa, witnessMap: EMPTY, label: "asset creation" },
+      operation: "mint",
+      authorization: { circuitUrl: CIRCUIT_URLS.account_rule_mint_ecdsa, witnessMap: EMPTY, label: "mint" },
+      mintRule: { circuitUrl: CIRCUIT_URLS.mint_rule_fixed_supply, witnessMap: mintRuleWitness, label: "mint rule" },
       buildKernelWitnessMap: () => EMPTY,
       expectedPublicInputs: PUBLIC_INPUTS,
     }, (status) => seen.push(status));
@@ -220,14 +222,16 @@ test("unfunded issuance folds registered authorization", async () => {
     assert.equal(request.profile.srsPoints, 2 ** 18);
     if (request.kind !== "chonk") return;
     assert.deepEqual(request.steps.map((step) => step.circuitUrl), [
-      CIRCUIT_URLS.account_rule_asset_creation_ecdsa,
+      CIRCUIT_URLS.account_rule_mint_ecdsa,
+      CIRCUIT_URLS.mint_rule_fixed_supply,
       CIRCUIT_URLS.no_op_event_application,
-      CIRCUIT_URLS.private_value_asset_creation_kernel,
+      CIRCUIT_URLS.private_value_mint_kernel,
       CIRCUIT_URLS.private_value_hiding_kernel,
     ]);
-    assert.deepEqual(request.steps.map((step) => step.kind), ["app", "app", "kernel", "hiding"]);
+    assert.deepEqual(request.steps.map((step) => step.kind), ["app", "app", "app", "kernel", "hiding"]);
+    assert.deepEqual(request.steps[1]!.witnessMap, mintRuleWitness);
     assert.ok(seen.some((status) =>
-      status.step === "assemble" && status.circuit === "private_value_asset_creation_kernel"));
+      status.step === "assemble" && status.circuit === "private_value_mint_kernel"));
   });
 });
 
@@ -238,7 +242,7 @@ const L_HIDING = CIRCUIT_URLS.private_value_large_hiding_kernel;
 test("L profiles take their SRS from the circuit manifest", () => {
   assert.equal(PROTOCOL_CIRCUIT_PROFILES[CIRCUIT_URLS.account_rule_large_batch_transfer_ecdsa]!.srsPoints, 2 ** 20);
   assert.equal(PROTOCOL_CIRCUIT_PROFILES[CIRCUIT_URLS.private_value_large_transfer_kernel]!.srsPoints, 2 ** 18);
-  assert.equal(PROTOCOL_CIRCUIT_PROFILES[CIRCUIT_URLS.account_rule_asset_creation_ecdsa]!.srsPoints, 2 ** 18);
+  assert.equal(PROTOCOL_CIRCUIT_PROFILES[CIRCUIT_URLS.account_rule_mint_ecdsa]!.srsPoints, 2 ** 18);
 });
 
 test("an opted-in session folds the L transfer kernel and hiding kernel", async () => {
@@ -280,9 +284,10 @@ test("an opted-in session folds the L transfer kernel and hiding kernel", async 
         expectedPublicInputs: L_PUBLIC_INPUTS,
       });
       await prover.proveAssetAction({
-        operation: "assetCreation",
+        operation: "mint",
         shape: L,
-        authorization: { circuitUrl: CIRCUIT_URLS.account_rule_large_asset_creation_ecdsa, witnessMap: EMPTY, label: "asset creation" },
+        authorization: { circuitUrl: CIRCUIT_URLS.account_rule_large_mint_ecdsa, witnessMap: EMPTY, label: "mint" },
+        mintRule: { circuitUrl: CIRCUIT_URLS.mint_rule_account_mint, witnessMap: EMPTY, label: "mint rule" },
         buildKernelWitnessMap: () => EMPTY,
         expectedPublicInputs: L_PUBLIC_INPUTS,
       });
@@ -295,7 +300,13 @@ test("an opted-in session folds the L transfer kernel and hiding kernel", async 
           CIRCUIT_URLS.private_value_large_sponsored_transfer_kernel,
           L_HIDING,
         ],
-        [CIRCUIT_URLS.account_rule_large_asset_creation_ecdsa, CIRCUIT_URLS.no_op_event_application, CIRCUIT_URLS.private_value_large_asset_creation_kernel, L_HIDING],
+        [
+          CIRCUIT_URLS.account_rule_large_mint_ecdsa,
+          CIRCUIT_URLS.mint_rule_account_mint,
+          CIRCUIT_URLS.no_op_event_application,
+          CIRCUIT_URLS.private_value_large_mint_kernel,
+          L_HIDING,
+        ],
       ]);
     } finally {
       prover.destroy();
@@ -546,6 +557,30 @@ test("two-account fee payment folds both installed applications", async () => {
     ]);
     assert.ok(seen.some((status) =>
       status.step === "assemble" && status.circuit === "private_value_sponsored_transfer_kernel"));
+  });
+});
+
+test("a mint folds a custom mint rule under its application profile", async () => {
+  await withFakes(async () => {
+    const ruleUrl = "/prover/custom-mint-rule.json";
+    await createBrowserProver(ASSET_SOURCE, { [ruleUrl]: applicationProfile(ruleUrl) }).proveAssetAction({
+      operation: "mint",
+      authorization: { circuitUrl: CIRCUIT_URLS.account_rule_mint_ecdsa, witnessMap: EMPTY, label: "mint" },
+      mintRule: { circuitUrl: ruleUrl, witnessMap: EMPTY, label: "mint rule" },
+      buildKernelWitnessMap: () => EMPTY,
+      expectedPublicInputs: PUBLIC_INPUTS,
+    });
+    const request = FakeWorker.requests[0]!;
+    assert.equal(request.kind, "chonk");
+    if (request.kind !== "chonk") return;
+    assert.deepEqual(request.steps.map((step) => step.circuitUrl), [
+      CIRCUIT_URLS.account_rule_mint_ecdsa,
+      ruleUrl,
+      CIRCUIT_URLS.no_op_event_application,
+      CIRCUIT_URLS.private_value_mint_kernel,
+      CIRCUIT_URLS.private_value_hiding_kernel,
+    ]);
+    assert.equal(request.steps[1]!.vkUrl, applicationProfile(ruleUrl).vkUrl);
   });
 });
 

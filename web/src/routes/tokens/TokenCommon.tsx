@@ -3,7 +3,7 @@ import type { AssetDefinition } from "@pcash/sdk/protocol";
 import { TokenAmount } from "../../components/TokenAmount.tsx";
 import { errorMessage, useWallet } from "../../lib/WalletProvider.tsx";
 import { useWalletPanel } from "../wallet/OwnerPanels.tsx";
-import { assetIdHex, contentDigestHex, isZeroDigest, tokenUnit } from "./model.ts";
+import { assetIdHex, contentDigestHex, durationText, isZeroDigest, tokenTerms, tokenUnit } from "./model.ts";
 import styles from "./Tokens.module.css";
 
 /** Token actions need the shared wallet; the sidebar owns connecting and setup. */
@@ -31,6 +31,7 @@ export function WalletPromptButton() {
 /** Only values the token ID commits to. Anything else on the page is rendered outside this box. */
 export function VerifiedDefinition({ definition, assetId }: { definition: AssetDefinition; assetId: bigint }) {
   const unit = tokenUnit(definition);
+  const terms = tokenTerms(definition);
   const digest = definition.metadata.contentDigest;
   return <section className={styles.verified} aria-label="Verified definition">
     <span className={styles.seal}><span aria-hidden="true">✓</span> Verified against the token ID</span>
@@ -38,7 +39,16 @@ export function VerifiedDefinition({ definition, assetId }: { definition: AssetD
       <dt>Name</dt><dd className={styles.bigName}>{definition.metadata.name}</dd>
       <dt>Symbol</dt><dd><code>{definition.metadata.symbol}</code></dd>
       <dt>Decimals</dt><dd>{definition.metadata.decimals}</dd>
-      <dt>Original supply</dt><dd><TokenAmount value={definition.initialSupply} unit={unit} /> · fixed, no more can ever be created</dd>
+      <dt>Supply</dt><dd>{terms.mint.kind === "fixed-supply"
+        ? <><TokenAmount value={terms.mint.supply} unit={unit} /> · fixed, no more can ever be created</>
+        : terms.mint.kind === "account-mint"
+          ? <>Minted at the discretion of account <code>{terms.mint.account}</code></>
+          : terms.mint.kind === "deposit-mint"
+            ? <>Minted once per deposit to vault <code>{terms.mint.vault}</code> on Ethereum</>
+            : "Minted under a custom mint rule"}</dd>
+      {terms.transfers.kind !== "unrestricted" && <><dt>Transfers</dt><dd>{terms.transfers.kind === "sender-deny-list"
+        ? <>The issuer can freeze accounts within {durationText(terms.transfers.maxDelta)} through deny list <code>{terms.transfers.listId}</code> of the contract at <code>{terms.transfers.contract}</code> on Ethereum</>
+        : "Restricted by a custom transfer rule"}</dd></>}
       <dt>Content digest</dt><dd>{isZeroDigest(digest) ? "None" : <code>{contentDigestHex(digest)}</code>}</dd>
       <dt>Token ID</dt><dd><code>{assetIdHex(assetId)}</code></dd>
     </dl>

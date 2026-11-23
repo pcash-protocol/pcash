@@ -6,6 +6,7 @@ import { PRIVATE_VALUE_PROFILES, privateValueProfile, type PrivateValueShape } f
 // their own nullifiers against the feed, so no request names a note they hold.
 
 import {
+  extendOutputWitness,
   type FieldNumberish,
   toAddressField,
   toField,
@@ -30,6 +31,7 @@ import {
   decodeAssetDefinition,
   directSendOutputCommitment,
   directSendOutputKey,
+  directSendSharedSecret,
   encodeAssetDefinition,
   openEnvelope,
   openSenderRecords,
@@ -68,6 +70,7 @@ import {
   WalletSyncRequiredError,
   type ChainBlock,
   type ChainCommit,
+  type NullifierConsumption,
 } from "../chainState.ts";
 import type { WalletStateStore } from "../store.ts";
 import {
@@ -108,6 +111,8 @@ export interface SpendableNote {
   sender?: bigint;
   /** Delivered with the note and already verified against its assetId. */
   assetDefinition?: AssetDefinition;
+  /** The output's disclosure key; absent for a system note. */
+  disclosureKey?: Uint8Array;
 }
 
 /** A system note's payout source and one tagged value component. */
@@ -147,7 +152,7 @@ export type ScanFeedItem = {
 
 type OrdinaryScanFeedItem = Exclude<ScanFeedItem, { kind: "system" }>;
 
-type KnownPayoutOpening = { owner: bigint; noteSecret: bigint };
+export type KnownPayoutOpening = { owner: bigint; noteSecret: bigint };
 
 /**
  * Trial-decrypts each envelope with the secret keys in order and answers in
@@ -231,7 +236,7 @@ function outputArena(
  * Returns to the event loop once about 30 ms have passed since it last did, so
  * a scan running on a page's main thread does not freeze the page.
  */
-function eventLoopSlicer(): () => Promise<void> {
+export function eventLoopSlicer(): () => Promise<void> {
   let sliceStart = performance.now();
   return async () => {
     if (performance.now() - sliceStart < 30) return;
@@ -300,6 +305,7 @@ export async function scanFeed(params: ScanParams): Promise<ScanReport> {
     scanned += 1;
     let payload: NotePayload;
     let records: () => DataRecord[] | null = () => null;
+    let disclosureKey: Uint8Array | undefined;
     if (item.kind === "system") {
       let opening = knownOpenings.get(item.payout.ownerCommitment);
       if (opening === undefined && seed !== undefined && params.recoveryWallet !== undefined) {
@@ -314,6 +320,7 @@ export async function scanFeed(params: ScanParams): Promise<ScanReport> {
       if (direct !== undefined) {
         // The kept opening is checked against the commitment below; it also opens the envelope that carries the records.
         payload = { version: 1, chainId, assetId: 0n, amount: direct.amount, owner: direct.owner, noteSecret: direct.noteSecret, outputIndex: item.outputIndex };
+        disclosureKey = directSendSharedSecret(direct.noteSecret);
         records = () => {
           const source = outputArena(chainId, item.kind, item.shape, item.arena);
           return source === null ? null : directSendRecords(direct, item.outputData, source);
@@ -337,6 +344,7 @@ export async function scanFeed(params: ScanParams): Promise<ScanReport> {
           continue;
         }
         const { sharedSecret } = opened;
+        disclosureKey = sharedSecret;
         const decoded = payload;
         records = () => {
           const source = outputArena(chainId, item.kind, item.shape, item.arena);
@@ -370,6 +378,7 @@ export async function scanFeed(params: ScanParams): Promise<ScanReport> {
       outputCommitment: leaf,
       // An unavailable region leaves the note recovered without records.
       ...noteRecords(noteAssetRecords(delivered, payload.assetId)),
+      ...(disclosureKey === undefined ? {} : { disclosureKey }),
     });
   }
   return { scanned, trialDecryptAttempts, decrypted, recovered, receivedData };
@@ -391,6 +400,8 @@ export interface RecoveredSentOutput {
   records?: DataRecord[];
   /** A direct send, delivered to its owner by link. */
   directSend?: true;
+  /** The output's disclosure key: it opens the output's envelope and records. */
+  disclosureKey?: Uint8Array;
 }
 
 /** A transaction whose sender region this wallet's outgoing key opened. */
@@ -463,6 +474,7 @@ export function recoverSentTransaction(params: {
       slot: sent.slot, leafIndex: row.leafIndex, recipientAddress: sent.recipientAddress,
       assetId: payload.assetId, amount: payload.amount, noteSecret: payload.noteSecret,
       ...(records === null ? {} : { records: noteAssetRecords(records, payload.assetId)! }),
+      disclosureKey: sent.sharedSecret,
     });
   }
   for (const opening of region.sentOpenings) {
@@ -474,7 +486,7 @@ export function recoverSentTransaction(params: {
       slot: opening.slot, leafIndex: row.leafIndex, recipientAddress: opening.recipientAddress,
       assetId: opening.assetId, amount: opening.amount, noteSecret: opening.noteSecret,
       ...(records === null ? {} : { records }),
-      ...(opening.directSend ? { directSend: true as const } : {}),
+      ...(opening.directSend ? { directSend: true as const, disclosureKey: directSendSharedSecret(opening.noteSecret) } : {}),
     });
   }
   outputs.sort((left, right) => left.slot - right.slot);
@@ -525,13 +537,104 @@ function pageTransactions(outputs: readonly OutputResult[]): { first: OrdinaryOu
   return transactions;
 }
 
-function addSentOutputs(data: WalletFileData, outputs: readonly StoredSentOutput[]): void {
+/**
+ * Fold what this wallet's sender regions on a page record into `data`: the
+ * definitions they carry, their sent outputs (into `sentOutputs`), and the
+ * direct-send openings they hold. Returns the openings first learned here
+ * whose notes the page did not recover.
+ */
+export function recordSentRegions(
+  data: WalletFileData,
+  report: Pick<OutputScanReport, "sent" | "recovered">,
+  outputs: readonly OutputResult[],
+  sentOutputs: StoredSentOutput[],
+  owner: bigint,
+  chainId: bigint,
+): DirectSendOpening[] {
+  const unmatched: DirectSendOpening[] = [];
+  for (const sent of report.sent) {
+    const first = outputs.find((candidate) => candidate.outputIndex === sent.leafIndex);
+    if (first?.kind === "ordinary") sentOutputs.push(...storedSentOutputs(sent, first));
+    // The wallet's own copy of an action's definition, recovered with or without sent outputs.
+    if (sent.assetDefinition !== undefined) {
+      addWalletAsset(data, { assetId: assetDefinitionAssetId(sent.assetDefinition), definition: sent.assetDefinition });
+    }
+    for (const opening of sent.directSendOpenings) {
+      if (first?.kind !== "ordinary" || opening.owner !== owner || opening.chainId !== chainId) continue;
+      const learned = addDirectSendOpening(data, opening, {
+        leafIndex: sent.leafIndex.toString(), blockNumber: first.origin.pcashNumber.toString(), blockHash: first.origin.pcashHash.toLowerCase(),
+      });
+      const found = report.recovered.some((note) => note.owner === opening.owner
+        && note.noteSecret === opening.noteSecret && note.amount === opening.amount);
+      if (learned && !found) unmatched.push(opening);
+    }
+  }
+  return unmatched;
+}
+
+/** The wallet notes a page's recovered outputs make, recording the definitions they carry in `data`. */
+export function foldRecoveredNotes(
+  data: WalletFileData,
+  recovered: readonly SpendableNote[],
+  outputs: readonly OutputResult[],
+): WalletNote[] {
+  for (const note of recovered) {
+    if (note.assetDefinition !== undefined) addWalletAsset(data, { assetId: note.assetId, definition: note.assetDefinition });
+  }
+  return pageWalletNotes(recovered, outputs);
+}
+
+function pageWalletNotes(recovered: readonly SpendableNote[], outputs: readonly OutputResult[]): WalletNote[] {
+  const positions = new Map(outputs.map((output) => [
+    `${output.outputIndex}:${output.kind === "ordinary" ? output.outputSlot : SYSTEM_NOTE_OUTPUT_INDEX}`,
+    output,
+  ]));
+  return recovered.map((note) => {
+    const position = positions.get(`${note.leafIndex}:${note.outputIndex}`)!;
+    return {
+      leafIndex: note.leafIndex.toString(),
+      outputIndex: note.outputIndex,
+      assetId: `0x${note.assetId.toString(16)}`,
+      amount: note.amount.toString(),
+      owner: `0x${note.owner.toString(16)}`,
+      noteSecret: `0x${note.noteSecret.toString(16)}`,
+      commitment: bytes32Hex(note.outputCommitment),
+      spent: false,
+      pending: false,
+      cursor: {
+        kind: position.kind,
+        payout: position.kind === "system" ? {
+          sourceKind: position.payout.source.kind,
+          component: position.payout.component,
+        } : null,
+        blockNumber: position.origin.pcashNumber.toString(),
+        blockHash: position.origin.pcashHash.toLowerCase(),
+        blockTimestamp: position.origin.timestamp.toString(),
+        transactionId: (position.kind === "ordinary" ? position.transactionId : position.payout.transactionId)?.toLowerCase() ?? null,
+        outputIndex: note.outputIndex.toString(),
+      },
+      ...(note.memo.length === 0 ? {} : { memo: toHex(note.memo) }),
+      ...(note.sender === undefined ? {} : { sender: addressHex(note.sender) }),
+      ...(note.disclosureKey === undefined || position.kind !== "ordinary" ? {} : { disclosure: {
+        contentHash: position.contentHash.toLowerCase(), slot: note.outputIndex, disclosureKey: toHex(note.disclosureKey),
+      } }),
+    };
+  });
+}
+
+/** Record sent outputs and the definitions they carry. */
+export function addSentOutputs(data: WalletFileData, outputs: readonly StoredSentOutput[]): void {
   if (outputs.length === 0) return;
   const known = new Set((data.sentOutputs ?? []).map((output) => `${output.transactionId}:${output.slot}`));
   data.sentOutputs = [
     ...(data.sentOutputs ?? []),
     ...outputs.filter((output) => !known.has(`${output.transactionId}:${output.slot}`)),
   ];
+  for (const output of outputs) {
+    if (output.assetDefinition !== undefined) {
+      addWalletAsset(data, { assetId: BigInt(output.assetId), definition: decodeAssetDefinition(fromHex(output.assetDefinition)) });
+    }
+  }
 }
 
 /** Stored form of a recovered transaction's outputs; every output repeats the transaction's sender records. */
@@ -562,6 +665,7 @@ function storedSentOutputs(sent: RecoveredSentTransaction, first: OrdinaryOutput
       ...(memo === undefined ? {} : { memo: toHex(memo) }),
       senderIncluded: records.sender !== undefined,
       ...(output.directSend ? { directSend: true as const } : {}),
+      ...(output.disclosureKey === undefined ? {} : { disclosureKey: toHex(output.disclosureKey) }),
       ...(senderRecords.length === 0 ? {} : { senderRecords }),
       blockNumber: first.origin.pcashNumber.toString(),
       blockHash: first.origin.pcashHash.toLowerCase(),
@@ -631,6 +735,12 @@ export interface OutputScanReport extends ScanReport {
   transactionRecords: import("../noteStore.ts").StoredTransactionRecords[];
 }
 
+/** The node's ceiling on the outputs one page request may ask for. */
+const MAX_PAGE_OUTPUTS = 10_000n;
+/** The most outputs one transaction writes. */
+const MAX_TRANSACTION_OUTPUTS = BigInt(Math.max(...Object.values(PRIVATE_VALUE_PROFILES).map((profile) => profile.outputs)));
+const minBigInt = (left: bigint, right: bigint): bigint => left < right ? left : right;
+
 /**
  * Scan every output from `fromOutputIndex` to the target, page by page. Pages
  * hold whole transactions, so each transaction's arena arrives once with its
@@ -654,6 +764,8 @@ export async function scanOutputPages(params: {
    * matched, so a funding output in the same page is found.
    */
   directSendOpenings?: Map<string, DirectSendOpening>;
+  /** A transaction boundary before the target's output count to stop at. */
+  endOutputIndex?: bigint;
   /** `outputCount` is the target's: the scan ends when the tree holds that many outputs. */
   onPage?: (report: OutputScanReport, outputs: readonly OutputResult[], outputCount: bigint) => void | Promise<void>;
   /** Stops the scan before its next page. */
@@ -674,11 +786,16 @@ export async function scanOutputPages(params: {
   let outputCount: bigint | undefined;
   let lastOutputIndex: bigint | undefined;
   const seenContinuations = new Set<string>();
-  const request = (continuation?: Record<string, unknown>) => {
+  const end = params.endOutputIndex;
+  // Up to `end`: a first request inside a transaction starts at its first output.
+  const limits = (next: bigint, slack: bigint) => end === undefined ? {}
+    : { limits: { maxOutputs: Number(minBigInt(end - next + slack, MAX_PAGE_OUTPUTS)) } };
+  const request = (continuation?: Record<string, unknown>, next?: bigint) => {
     const page = params.node.getOutputs({
       fromOutputIndex: params.fromOutputIndex,
       target: params.target,
       ...(continuation !== undefined ? { continuation } : {}),
+      ...(next === undefined ? limits(params.fromOutputIndex, MAX_TRANSACTION_OUTPUTS) : limits(next, 0n)),
     });
     // A page the scan stops before is dropped unread, whether it arrived or failed.
     page.catch(() => undefined);
@@ -690,20 +807,20 @@ export async function scanOutputPages(params: {
     const page = await next;
     outputCount ??= page.target.outputCount;
     if (page.target.outputCount !== outputCount) throw new Error("output target count changed across pages");
-    if (page.outputs.some((output) => lastOutputIndex !== undefined && output.outputIndex <= lastOutputIndex)) {
+    const outputs = end === undefined ? page.outputs : page.outputs.filter((output) => output.outputIndex < end);
+    if (outputs.some((output) => lastOutputIndex !== undefined && output.outputIndex <= lastOutputIndex)) {
       throw new Error("output pages overlap or regress");
     }
     // The next page downloads while this one is decrypted and folded in.
     next = null;
-    if (!page.complete && page.continuation !== null) {
+    const following = (outputs.at(-1)?.outputIndex ?? lastOutputIndex ?? params.fromOutputIndex - 1n) + 1n;
+    if (!page.complete && page.continuation !== null && (end === undefined || following < end)) {
       const continuationKey = JSON.stringify(page.continuation);
       if (seenContinuations.has(continuationKey)) throw new Error("output continuation did not advance");
       seenContinuations.add(continuationKey);
-      next = request(page.continuation);
+      next = request(page.continuation, following);
     }
-    const transactions = pageTransactions(page.outputs);
-    const arenas = new Map(transactions.flatMap(({ transaction }) =>
-      transaction.outputs.map((row) => [row.leafIndex, transaction.arena] as const)));
+    const transactions = pageTransactions(outputs);
     const pageSent = params.outgoingKey === undefined ? [] : transactions.flatMap(({ transaction }) => {
       const opened = recoverSentTransaction({ chainId, outgoingKey: params.outgoingKey!, transaction });
       return opened === null ? [] : [opened];
@@ -721,14 +838,7 @@ export async function scanOutputPages(params: {
       knownPayoutOpenings,
       directSendOpenings: directOpenings,
       ...(params.trialDecrypt === undefined ? {} : { trialDecrypt: params.trialDecrypt }),
-      feed: page.outputs.map((output): ScanFeedItem => output.kind === "ordinary" ? {
-        outputData: output.outputData, kind: output.transactionType, shape: output.privateValueShape, outputIndex: output.outputSlot,
-        leafIndex: output.outputIndex, outputCommitment: BigInt(output.outputCommitment), contentHash: output.contentHash,
-        ...(arenas.has(output.outputIndex) ? { arena: arenas.get(output.outputIndex)! } : {}),
-      } : {
-        kind: "system", payout: scanPayout(output.payout), outputIndex: SYSTEM_NOTE_OUTPUT_INDEX,
-        leafIndex: output.outputIndex, outputCommitment: BigInt(output.outputCommitment),
-      }),
+      feed: outputFeed(outputs, transactions),
     });
     scanned += pageReport.scanned;
     trialDecryptAttempts += pageReport.trialDecryptAttempts;
@@ -750,11 +860,28 @@ export async function scanOutputPages(params: {
       }];
     });
     transactionRecords.push(...pageRecords);
-    await params.onPage?.({ ...pageReport, sent: pageSent, transactionRecords: pageRecords }, page.outputs, outputCount);
-    if (page.outputs.length > 0) lastOutputIndex = page.outputs[page.outputs.length - 1]!.outputIndex;
+    await params.onPage?.({ ...pageReport, sent: pageSent, transactionRecords: pageRecords }, outputs, outputCount);
+    if (outputs.length > 0) lastOutputIndex = outputs[outputs.length - 1]!.outputIndex;
   }
   if (outputCount === undefined) throw new Error("output scan returned no target");
   return { scanned, trialDecryptAttempts, decrypted, recovered, sent, receivedData, transactionRecords, outputCount };
+}
+
+/** The scan feed for output rows that hold whole transactions. */
+export function outputFeed(
+  outputs: readonly OutputResult[],
+  transactions: ReturnType<typeof pageTransactions> = pageTransactions(outputs),
+): ScanFeedItem[] {
+  const arenas = new Map(transactions.flatMap(({ transaction }) =>
+    transaction.outputs.map((row) => [row.leafIndex, transaction.arena] as const)));
+  return outputs.map((output): ScanFeedItem => output.kind === "ordinary" ? {
+    outputData: output.outputData, kind: output.transactionType, shape: output.privateValueShape, outputIndex: output.outputSlot,
+    leafIndex: output.outputIndex, outputCommitment: BigInt(output.outputCommitment), contentHash: output.contentHash,
+    ...(arenas.has(output.outputIndex) ? { arena: arenas.get(output.outputIndex)! } : {}),
+  } : {
+    kind: "system", payout: scanPayout(output.payout), outputIndex: SYSTEM_NOTE_OUTPUT_INDEX,
+    leafIndex: output.outputIndex, outputCommitment: BigInt(output.outputCommitment),
+  });
 }
 
 export async function scanWallet(
@@ -798,13 +925,18 @@ function publishInventory(target: WalletFileData, next: WalletFileData): void {
 }
 
 function walletHasPendingActivity(data: WalletFileData): boolean {
-  return data.notes.length !== 0
-    || data.fullRescanRequired === true
+  return data.notes.length !== 0 || walletHasPendingActions(data);
+}
+
+/** Actions the outputs after the synced block can settle, so a scan must not skip them. */
+function walletHasPendingActions(data: WalletFileData): boolean {
+  return data.fullRescanRequired === true
     || (data.pendingNoteFundedTransfers?.length ?? 0) !== 0
     || (data.pendingAssetActions?.length ?? 0) !== 0
     || (data.pendingUserAccountCreations?.length ?? 0) !== 0
     || (data.pendingUserAccountUpdates?.length ?? 0) !== 0
-    || (data.mempoolOutbox?.length ?? 0) !== 0;
+    || (data.mempoolOutbox?.length ?? 0) !== 0
+    || (data.bulkJobs ?? []).some((job) => job.chunks.some((chunk) => chunk.outcome === "unresolved"));
 }
 
 export function assertWalletCanAnchorAtCurrentBoundary(
@@ -834,7 +966,7 @@ async function persistAndPublish(
 const nullifierCache = new Map<string, string>();
 
 /** The nullifier of one of this wallet's confirmed notes, computed once per process. */
-function noteNullifier(note: WalletNote, nk: bigint): string {
+export function noteNullifier(note: WalletNote, nk: bigint): string {
   const key = `${nk}:${note.commitment}:${note.noteSecret}`;
   let value = nullifierCache.get(key);
   if (value === undefined) {
@@ -842,6 +974,17 @@ function noteNullifier(note: WalletNote, nk: bigint): string {
     nullifierCache.set(key, value);
   }
   return value;
+}
+
+/** The consumption a transaction's first output records for each nullifier it spent. */
+export function outputConsumption(output: OrdinaryOutput): NullifierConsumption {
+  return {
+    pcashNumber: output.origin.pcashNumber,
+    pcashHash: output.origin.pcashHash.toLowerCase(),
+    timestamp: output.origin.timestamp,
+    transactionId: output.transactionId.toLowerCase(),
+    contentHash: output.contentHash.toLowerCase(),
+  };
 }
 
 /**
@@ -924,14 +1067,7 @@ async function passedDirectSendNote(
   if (row === undefined || row.contentHash.toLowerCase() !== opening.contentHash
     || row.outputSlot !== opening.slot || BigInt(row.outputCommitment) !== commitment) return null;
   if (spender !== undefined && !chain.consumed.has(spent)) {
-    chain.recordConsumption(spent, {
-      pcashNumber: spender.origin.pcashNumber,
-      pcashHash: spender.origin.pcashHash.toLowerCase(),
-      timestamp: spender.origin.timestamp,
-      transactionId: spender.transactionId.toLowerCase(),
-      contentHash: spender.contentHash.toLowerCase(),
-      nullifiers: spender.nullifiers.map((value) => value.toLowerCase()),
-    });
+    chain.recordConsumption(spent, outputConsumption(spender));
   }
   // A spend a reorganization can still remove leaves the note spendable again, so it keeps its witness until final.
   const spentBy = chain.consumed.get(spent);
@@ -969,6 +1105,7 @@ async function passedDirectSendNote(
     },
     ...(memo.length === 0 ? {} : { memo: toHex(memo) }),
     ...(sender === undefined ? {} : { sender: addressHex(sender) }),
+    disclosure: { contentHash: opening.contentHash, slot: opening.slot, disclosureKey: toHex(directSendSharedSecret(opening.noteSecret)) },
   };
 }
 
@@ -1030,6 +1167,49 @@ async function applyAccountChanges(
   }
 }
 
+/** Outputs a history-scan chunk covers. Chunks start at multiples of it, so every wallet reads the same ones. */
+export const HISTORY_CHUNK_OUTPUTS = 2048n;
+
+/**
+ * `previous` moved to `target` without reading the outputs between: the
+ * node's frontier at the target, every recorded spend, and each marked note's
+ * witness extended through the first output after the old frontier. Null when
+ * the node cannot open that output; the caller then scans forward.
+ */
+async function reanchoredChainState(
+  node: PcashNodeClient,
+  previous: WalletChainState,
+  data: WalletFileData,
+  target: { pcashNumber: bigint; pcashHash: string },
+): Promise<WalletChainState | null> {
+  const index = previous.outputs.count;
+  let edge: { index: bigint; commitment: bigint; siblings: readonly bigint[] };
+  try {
+    const first = (await node.getOutputs({ fromOutputIndex: index, target, limits: { maxOutputs: Number(MAX_TRANSACTION_OUTPUTS) } })).outputs[0];
+    if (first?.outputIndex !== index) return null;
+    const commitment = BigInt(first.outputCommitment);
+    const paths = await node.getOutputPaths([{ outputIndex: index, outputCommitment: commitment }]);
+    if (paths === null) return null;
+    edge = { index, commitment, siblings: paths.paths[0]!.siblings };
+  } catch {
+    return null;
+  }
+  const chain = await anchoredChainState(node, target, previous.revision);
+  for (const [nullifier, consumption] of previous.consumed) chain.recordConsumption(nullifier, consumption);
+  const leaves = new Map(data.notes.flatMap((note) => note.pending || note.leafIndex === null || note.commitment === null
+    ? [] : [[BigInt(note.leafIndex), BigInt(note.commitment)] as const]));
+  const slice = eventLoopSlicer();
+  for (const leaf of previous.outputs.markedIndices()) {
+    await slice();
+    const commitment = leaves.get(leaf);
+    if (commitment === undefined) continue;
+    if (!chain.outputs.markPath(leaf, commitment, extendOutputWitness(leaf, previous.outputs.witness(leaf), edge))) {
+      throw new Error("a carried note does not open the target's output tree");
+    }
+  }
+  return chain;
+}
+
 interface SynchronizeWalletInventoryOptions {
   /** The wallet's store; its local chain state advances in the same commit as the document. */
   store: WalletStateStore;
@@ -1041,7 +1221,8 @@ interface SynchronizeWalletInventoryOptions {
   status?: StatusResult;
   /**
    * A store with no local chain state and no pending activity opens at the
-   * target, leaving the history before it to `replayHistory`.
+   * target, and one at least a history chunk behind moves there, leaving the
+   * outputs it skipped to `scanHistory`.
    */
   headFirst?: boolean;
   /** After each page: outputs this step has read, and all it will read. */
@@ -1132,14 +1313,32 @@ export async function synchronizeWalletInventory(
       }
       stepTarget = { pcashNumber: chain.synced.pcashNumber, pcashHash: chain.synced.pcashHash };
     }
-    const fresh = chain === null;
+    // A store with its whole history and a chunk or more behind opens at the
+    // target like a new one; `scanHistory` reads what it skipped, newest first.
+    let reanchored = false;
+    if (chain !== null && stepTarget === target && options.headFirst === true
+      && data.historyReplayRequired !== true && data.historyStartOutputIndex === "0"
+      && !walletHasPendingActions(data) && status.outputCount >= chain.outputs.count + HISTORY_CHUNK_OUTPUTS) {
+      const skippedFrom = chain.outputs.count;
+      const moved = await reanchoredChainState(node, chain, data, target);
+      if (moved !== null) {
+        chain = moved;
+        reanchored = true;
+        data.historyReplayRequired = true;
+        data.historyStartOutputIndex = moved.birthday.outputCount.toString();
+        data.historyScanEndOutputIndex = skippedFrom.toString();
+      }
+    }
+    const fresh = chain === null || reanchored;
     if (chain === null) {
       const previousRevision = loaded?.revision ?? 0;
       if (data.syncedThrough !== undefined || loaded !== null) dropConfirmedNotes(data, 0n);
+      delete data.historyScanEndOutputIndex;
       // A wallet born at a later block restarts there after a reorganization
       // deeper than its checkpoints, but only while that exact block is still
       // canonical: a replacement block at the same height can hold a payment
-      // below its own end frontier, so any other case replays from genesis.
+      // below its own end frontier. Otherwise a wallet with background history
+      // opens at the target again and any other replays from genesis.
       const birthday = options.rescan !== true && loaded !== null && loaded.birthday.outputCount !== 0n
         && loaded.birthday.pcashNumber <= status.latestBlock
         ? loaded.birthday
@@ -1150,7 +1349,7 @@ export async function synchronizeWalletInventory(
         chain = await anchoredChainState(node, target, previousRevision);
       } else if (birthdayCanonical) {
         chain = await anchoredChainState(node, birthday, previousRevision);
-      } else if (options.headFirst === true && loaded === null && !walletHasPendingActivity(data)) {
+      } else if (options.headFirst === true && !walletHasPendingActivity(data)) {
         chain = await anchoredChainState(node, target, previousRevision);
         data.historyReplayRequired = true;
       } else {
@@ -1171,6 +1370,9 @@ export async function synchronizeWalletInventory(
 
     const startedAtOutputIndex = synced.outputs.count;
     const watched = watchedNullifiers(data, nk);
+    // While history behind this block is unscanned, every spend is kept: a note
+    // the scan finds later is spent if any transaction since consumed it.
+    const recordEverySpend = data.historyReplayRequired === true;
     const sentOutputs: StoredSentOutput[] = [];
     // The scan finds the funding output of every direct send it knows before
     // passing it. One it passed before learning the opening is added after the scan.
@@ -1220,22 +1422,8 @@ export async function synchronizeWalletInventory(
         for (const note of pageReport.recovered) {
           watched.add(bytes32Hex(nullifier(note.outputCommitment, nk, note.noteSecret)));
         }
-        for (const sent of pageReport.sent) {
-          const first = outputs.find((candidate) => candidate.outputIndex === sent.leafIndex);
-          if (first?.kind === "ordinary") sentOutputs.push(...storedSentOutputs(sent, first));
-          // The wallet's own copy of an action's definition, recovered with or without sent outputs.
-          if (sent.assetDefinition !== undefined) {
-            addWalletAsset(data, { assetId: assetDefinitionAssetId(sent.assetDefinition), definition: sent.assetDefinition });
-          }
-          for (const opening of sent.directSendOpenings) {
-            if (first?.kind !== "ordinary" || opening.owner !== wallet.address || opening.chainId !== chainId) continue;
-            const learned = addDirectSendOpening(data, opening, {
-              leafIndex: sent.leafIndex.toString(), blockNumber: first.origin.pcashNumber.toString(), blockHash: first.origin.pcashHash.toLowerCase(),
-            });
-            const found = pageReport.recovered.some((note) => note.owner === opening.owner
-              && note.noteSecret === opening.noteSecret && note.amount === opening.amount);
-            if (learned && !found) await resolvePassed(opening, synced.outputs.count);
-          }
+        for (const opening of recordSentRegions(data, pageReport, outputs, sentOutputs, wallet.address, chainId)) {
+          await resolvePassed(opening, synced.outputs.count);
         }
         const slice = eventLoopSlicer();
         for (const output of outputs) {
@@ -1245,67 +1433,17 @@ export async function synchronizeWalletInventory(
           }
           if (output.kind === "ordinary") {
             for (const consumed of output.nullifiers) {
-              if (!watched.has(consumed.toLowerCase())) continue;
-              synced.recordConsumption(consumed, {
-                pcashNumber: output.origin.pcashNumber,
-                pcashHash: output.origin.pcashHash.toLowerCase(),
-                timestamp: output.origin.timestamp,
-                transactionId: output.transactionId.toLowerCase(),
-                contentHash: output.contentHash.toLowerCase(),
-                nullifiers: output.nullifiers.map((value) => value.toLowerCase()),
-              });
+              if (recordEverySpend || watched.has(consumed.toLowerCase())) synced.recordConsumption(consumed, outputConsumption(output));
             }
           }
           synced.outputs.append(BigInt(output.outputCommitment), recoveredLeaves.has(output.outputIndex));
         }
-        const positions = new Map(outputs.map((output) => [
-          `${output.outputIndex}:${output.kind === "ordinary" ? output.outputSlot : SYSTEM_NOTE_OUTPUT_INDEX}`,
-          output,
-        ]));
-        const recoveredNotes: WalletNote[] = pageReport.recovered.map((note) => {
-          const position = positions.get(`${note.leafIndex}:${note.outputIndex}`)!;
-          return {
-            leafIndex: note.leafIndex.toString(),
-            outputIndex: note.outputIndex,
-            assetId: `0x${note.assetId.toString(16)}`,
-            amount: note.amount.toString(),
-            owner: `0x${note.owner.toString(16)}`,
-            noteSecret: `0x${note.noteSecret.toString(16)}`,
-            commitment: bytes32Hex(note.outputCommitment),
-            spent: false,
-            pending: false,
-            cursor: {
-              kind: position.kind,
-              payout: position.kind === "system" ? {
-                sourceKind: position.payout.source.kind,
-                component: position.payout.component,
-              } : null,
-              blockNumber: position.origin.pcashNumber.toString(),
-              blockHash: position.origin.pcashHash.toLowerCase(),
-              blockTimestamp: position.origin.timestamp.toString(),
-              transactionId: (position.kind === "ordinary" ? position.transactionId : position.payout.transactionId)?.toLowerCase() ?? null,
-              outputIndex: note.outputIndex.toString(),
-            },
-            ...(note.memo.length === 0 ? {} : { memo: toHex(note.memo) }),
-            ...(note.sender === undefined ? {} : { sender: addressHex(note.sender) }),
-          };
-        });
-        mergeRecoveredWalletNotes(data, recoveredNotes);
-        for (const note of pageReport.recovered) {
-          if (note.assetDefinition !== undefined) {
-            addWalletAsset(data, { assetId: note.assetId, definition: note.assetDefinition });
-          }
-        }
+        mergeRecoveredWalletNotes(data, foldRecoveredNotes(data, pageReport.recovered, outputs));
         options.onOutputs?.(synced.outputs.count - startedAtOutputIndex, targetOutputCount - startedAtOutputIndex);
       },
     });
 
     addSentOutputs(data, sentOutputs);
-    for (const output of sentOutputs) {
-      if (output.assetDefinition !== undefined) {
-        addWalletAsset(data, { assetId: BigInt(output.assetId), definition: decodeAssetDefinition(fromHex(output.assetDefinition)) });
-      }
-    }
     for (const direct of passed.values()) {
       if (directSendNote(data, direct.opening) !== undefined) continue;
       const note = await passedDirectSendNote(node, synced, stepTarget, status.finalizedBlock, direct);
@@ -1345,7 +1483,7 @@ export async function synchronizeWalletInventory(
       blockHash: status.finalizedBlockHash.toLowerCase(),
     };
     retainWalletReceiveKey(data, wallet);
-    const commit = synced.finishStep({ anchor, finalizedBlock: status.finalizedBlock, watched });
+    const commit = synced.finishStep({ anchor, finalizedBlock: status.finalizedBlock, watched, keepEverySpend: recordEverySpend });
     const persist = options.persist ?? (() => undefined);
     await persistAndPublish(destination, data, async () => persist(data, { state: synced, commit }));
     return {

@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { assetDefinitionAssetId } from "@pcash/sdk/protocol";
 import { DurablePreBroadcastError } from "@pcash/sdk/wallet";
 import { readTokenActivity, tokenActivityKey } from "../../lib/tokenActivity.ts";
-import { WebsiteSettingsContext, WebsiteSettingsStore } from "../../lib/WebsiteSettings.tsx";
+import { WebsiteSettingsContext, WebsiteSettingsStore, defaultPreferences } from "../../lib/WebsiteSettings.tsx";
 import { testDefinition } from "./tokenTestSupport.ts";
 
 const PCASH = 10n ** 18n;
@@ -36,6 +36,9 @@ import DropPage from "./DropPage.tsx";
 import { TokenFailureNotice, tokenFailure } from "./EthereumSubmission.tsx";
 import { TokensActionProgress } from "./TokenTransactionStatus.tsx";
 
+/** Mainnet's defaults: these tests start at More private. */
+const MORE_PRIVATE_FIRST = defaultPreferences(1);
+
 const definition = testDefinition("Harbor Credit", "HBR", 2);
 const assetId = assetDefinitionAssetId(definition);
 const UNIT = { decimals: 2, symbol: "HBR" };
@@ -61,7 +64,7 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); element.remove(); vi.unstubAllGlobals(); });
 
 async function render(node: ReactNode, path = "/") {
-  const settings = new WebsiteSettingsStore(() => localStorage);
+  const settings = new WebsiteSettingsStore(() => localStorage, MORE_PRIVATE_FIRST);
   await act(async () => root.render(<WebsiteSettingsContext.Provider value={settings}><MemoryRouter key={path} initialEntries={[path]}>{node}</MemoryRouter></WebsiteSettingsContext.Provider>));
 }
 const text = () => element.textContent ?? "";

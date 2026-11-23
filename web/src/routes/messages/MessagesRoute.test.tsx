@@ -35,6 +35,7 @@ vi.mock("../../lib/useFastSendEstimate.ts", () => ({ useFastSendEstimate: (enabl
   : undefined }));
 vi.mock("../wallet/OwnerPanels.tsx", () => ({ useWalletPanel: () => ({ openOverview: vi.fn() }) }));
 import MessagesRoute from "./MessagesRoute.tsx";
+import { defaultPreferences, WebsiteSettingsContext, WebsiteSettingsStore } from "../../lib/WebsiteSettings.tsx";
 
 const board = boardId("general");
 const NO_FEE = { networkFeeAmount: 0n, voluntaryBurnAmount: 0n };
@@ -117,7 +118,7 @@ afterEach(() => {
 
 async function render(path: string) {
   await act(async () => {
-    root.render(<MemoryRouter initialEntries={[path]}><Routes><Route path="/messages/*" element={<MessagesRoute />} /></Routes></MemoryRouter>);
+    root.render(<MemoryRouter initialEntries={[path]}><Routes><Route path="/board/*" element={<MessagesRoute />} /></Routes></MemoryRouter>);
   });
   await settle();
 }
@@ -150,19 +151,19 @@ describe("Messages", () => {
   it("lists threads by latest activity with their reply counts", async () => {
     const [first] = feed([{ text: "first thread" }, { text: "second thread" }]);
     feed([{ text: "first thread" }, { text: "second thread" }, { text: "a late reply", parent: first }]);
-    await render("/messages");
+    await render("/board");
     const rows = Array.from(element.querySelectorAll("li")).map((row) => row.textContent);
     expect(rows[0]).toContain("first thread");
     expect(rows[0]).toContain("1 reply");
     expect(rows[1]).toContain("second thread");
     expect(rows[1]).toContain("0 replies");
-    expect(element.querySelector(`a[href="/messages/${first!.id}"]`)).not.toBeNull();
+    expect(element.querySelector(`a[href="/board/${first!.id}"]`)).not.toBeNull();
   });
 
   it("shows posts still in the mempool as pending", async () => {
     const [rootPost] = feed([{ text: "root" }]);
     feed([{ text: "root" }], [{ text: "waiting thread" }, { text: "waiting reply", parent: rootPost }]);
-    await render("/messages");
+    await render("/board");
     const rows = Array.from(element.querySelectorAll("li"));
     expect(rows[0]!.textContent).toContain("waiting thread");
     expect(rows[0]!.textContent).toContain("Pending");
@@ -171,7 +172,7 @@ describe("Messages", () => {
 
     act(() => root.unmount());
     root = createRoot(element);
-    await render(`/messages/${rootPost!.id}`);
+    await render(`/board/${rootPost!.id}`);
     const articles = Array.from(element.querySelectorAll("article"));
     expect(articles.map((article) => article.querySelector("p")!.textContent)).toEqual(["root", "waiting reply"]);
     expect(articles[1]!.dataset.pending).toBe("true");
@@ -186,7 +187,7 @@ describe("Messages", () => {
   it("drops a thread that a reorg removed on the next poll", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     feed([{ text: "kept" }, { text: "replaced" }]);
-    await render("/messages");
+    await render("/board");
     expect(element.querySelectorAll("li")).toHaveLength(2);
     feed([{ text: "kept" }]);
     await poll();
@@ -199,7 +200,7 @@ describe("Messages", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const [rootPost] = feed([{ text: "root" }]);
     feed([{ text: "root" }, { text: "replaced reply", parent: rootPost }]);
-    await render(`/messages/${rootPost!.id}`);
+    await render(`/board/${rootPost!.id}`);
     expect(texts()).toEqual(["root", "replaced reply"]);
     feed([{ text: "root" }]);
     await poll();
@@ -214,7 +215,7 @@ describe("Messages", () => {
     const lateParent = encodePost(network, { board, text: "late parent", parent: rootPost.id, nonce: hash(34) }).post;
     const before = [{ text: "orphan", parent: lateParent }, { text: "root" }, ...replies];
     expect(feed(before)[1]!.id).toBe(rootPost.id);
-    await render(`/messages/${rootPost.id}`);
+    await render(`/board/${rootPost.id}`);
     await act(async () => { button("More replies").click(); });
     await settle();
     expect(texts()).toHaveLength(32);
@@ -227,7 +228,7 @@ describe("Messages", () => {
     const [root] = feed([{ text: "root" }]);
     const reply = encodePost(network, { board, text: "reply", parent: root!.id, nonce: hash(2) }).post;
     feed([{ text: "root" }, { text: "reply", parent: root }, { text: "<b>nested</b>", parent: reply }, { text: "elsewhere" }]);
-    await render(`/messages/${root!.id}`);
+    await render(`/board/${root!.id}`);
     const posts = Array.from(element.querySelectorAll("article")).map((article) => article.querySelector("p")!.textContent);
     expect(posts).toEqual(["root", "reply", "<b>nested</b>"]);
     expect(element.querySelector("article b")).toBeNull();
@@ -237,7 +238,7 @@ describe("Messages", () => {
   it("sends a reply to a reply in one click as a relayed zero-value publication of one public record", async () => {
     const [root] = feed([{ text: "root" }]);
     const [, reply] = feed([{ text: "root" }, { text: "reply", parent: root }]);
-    await render(`/messages/${root!.id}`);
+    await render(`/board/${root!.id}`);
     const review = { openFeeAmount: PCASH, publication: "open", retry: false, burn: NO_FEE };
     state.wallet.preflightPrivateSend.mockResolvedValue(review);
     state.wallet.sendPrivate.mockResolvedValue({ contentHash: hash(999), accepted: true });
@@ -265,7 +266,7 @@ describe("Messages", () => {
     feed([{ text: "root" }]);
     state.networkFee = 2n * PCASH;
     state.wallet.funds = { spendablePrivate: PCASH };
-    await render("/messages");
+    await render("/board");
     await type("hello");
     expect(element.textContent).toContain("Fee: 1 PCASH to the relayer · network fee 2 PCASH");
     expect(element.textContent).toContain("Posting costs 3 PCASH, including a 2 PCASH network fee, and your wallet has 1 PCASH. Get PCASH first.");
@@ -274,7 +275,7 @@ describe("Messages", () => {
     expect(element.textContent).toContain("Posting costs 2 PCASH, including a 2 PCASH network fee, and your wallet has 1 PCASH. Get PCASH first.");
     expect(button("Post").disabled).toBe(true);
     state.wallet.funds = { spendablePrivate: 2n * PCASH };
-    await render("/messages");
+    await render("/board");
     expect(element.textContent).not.toContain("Posting costs");
     expect(button("Post").disabled).toBe(false);
   });
@@ -283,7 +284,7 @@ describe("Messages", () => {
     feed([{ text: "root" }]);
     state.networkFee = 2n * PCASH;
     state.wallet.funds = { spendablePrivate: 10n * PCASH };
-    await render("/messages");
+    await render("/board");
     await type("hello");
     expect(element.textContent).toContain("network fee 2 PCASH");
     const review = { openFeeAmount: PCASH, publication: "open", retry: false, burn: { networkFeeAmount: 3n * PCASH, voluntaryBurnAmount: 0n } };
@@ -302,7 +303,7 @@ describe("Messages", () => {
     feed([{ text: "root" }]);
     state.networkFee = 2n * PCASH;
     state.wallet.funds = { spendablePrivate: 10n * PCASH };
-    await render("/messages");
+    await render("/board");
     await type("hello");
     state.wallet.preflightPrivateSend.mockResolvedValue({ openFeeAmount: PCASH, publication: "open", retry: false, burn: { networkFeeAmount: 3n * PCASH, voluntaryBurnAmount: 0n } });
     await act(async () => button("Post").click());
@@ -318,7 +319,7 @@ describe("Messages", () => {
     const [, reply] = feed([{ text: "root" }, { text: "reply", parent: root }]);
     state.networkFee = 2n * PCASH;
     state.wallet.funds = { spendablePrivate: 10n * PCASH };
-    await render(`/messages/${root!.id}`);
+    await render(`/board/${root!.id}`);
     await act(async () => element.querySelector<HTMLButtonElement>(`button[aria-label="Reply to ${shortValue(reply!.id)}"]`)!.click());
     await type("hello");
     const review = { openFeeAmount: PCASH, publication: "open", retry: false, burn: { networkFeeAmount: 3n * PCASH, voluntaryBurnAmount: 0n } };
@@ -340,7 +341,7 @@ describe("Messages", () => {
   it("posts Faster from the Ethereum wallet, which needs no PCASH and is named as the sender", async () => {
     feed([{ text: "root" }]);
     state.wallet.funds = { spendablePrivate: 0n };
-    await render("/messages");
+    await render("/board");
     await type("hello");
     expect(element.textContent).toContain("Get PCASH first, or choose Faster.");
     expect(button("Post").disabled).toBe(true);
@@ -351,7 +352,7 @@ describe("Messages", () => {
     const review = { openFeeAmount: 0n, publication: "self", retry: false, burn: NO_FEE };
     state.wallet.preflightPrivateSend.mockResolvedValue(review);
     state.wallet.sendPrivate.mockResolvedValue({ contentHash: hash(999), publication: "self", accepted: true });
-    expect(element.textContent).toMatch(/Fee: Ethereum gas about .+, up to .+, paid by your Ethereum wallet/);
+    expect(element.textContent).toContain("Fee: Ethereum gas, paid by your Ethereum wallet");
     await act(async () => button("Post").click());
 
     const intent = state.wallet.preflightPrivateSend.mock.calls[0]![0];
@@ -363,7 +364,7 @@ describe("Messages", () => {
 
   it("says a Faster post is waiting on Ethereum once the wallet has sent it", async () => {
     feed([{ text: "root" }]);
-    await render("/messages");
+    await render("/board");
     await type("hello");
     await act(async () => speed("Faster").click());
     state.wallet.preflightPrivateSend.mockResolvedValue({ openFeeAmount: 0n, publication: "self", retry: false, burn: NO_FEE });
@@ -380,15 +381,26 @@ describe("Messages", () => {
   it("offers Faster only once the Ethereum wallet can post", async () => {
     feed([{ text: "root" }]);
     state.wallet.selfPublication = undefined;
-    await render("/messages");
+    await render("/board");
     expect(speed("Faster").disabled).toBe(true);
+    expect(speed("More private").checked).toBe(true);
+  });
+
+  it("starts a post More private even where the site's default speed is Faster", async () => {
+    feed([{ text: "root" }]);
+    const testnet = new WebsiteSettingsStore(() => localStorage, defaultPreferences(11155111));
+    await act(async () => {
+      root.render(<WebsiteSettingsContext.Provider value={testnet}><MemoryRouter initialEntries={["/board"]}><Routes><Route path="/board/*" element={<MessagesRoute />} /></Routes></MemoryRouter></WebsiteSettingsContext.Provider>);
+    });
+    await settle();
+    expect(testnet.getDefaultSubmissionMode()).toBe("fast");
     expect(speed("More private").checked).toBe(true);
   });
 
   it("moves focus to the composer when replying to the thread, keeping the draft", async () => {
     const [root] = feed([{ text: "root" }]);
     const [, reply] = feed([{ text: "root" }, { text: "reply", parent: root }]);
-    await render(`/messages/${root!.id}`);
+    await render(`/board/${root!.id}`);
     await act(async () => element.querySelector<HTMLButtonElement>(`button[aria-label="Reply to ${shortValue(reply!.id)}"]`)!.click());
     await type("kept text");
     await act(async () => button("Reply to the thread instead").click());
@@ -399,12 +411,12 @@ describe("Messages", () => {
   it("asks for a wallet instead of offering to post, and refuses a malformed post link", async () => {
     feed([{ text: "root" }]);
     state.wallet.phase = "disconnected";
-    await render("/messages");
+    await render("/board");
     expect(element.textContent).toContain("Connect a wallet to start a thread.");
     expect(element.querySelector("textarea")).toBeNull();
     act(() => root.unmount());
     root = createRoot(element);
-    await render("/messages/0x1234");
+    await render("/board/0x1234");
     expect(element.textContent).toContain("Not found");
   });
 });

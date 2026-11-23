@@ -24,7 +24,7 @@ const identity = { address: profile.address, network: { chainId: 8191n, genesisH
 /** Local chain state synced through block 10, where the transaction with `content` consumed every nullifier. */
 function syncedChain(content: string | null) {
   return anchoredChain({ blockNumber: 10n, consumed: content === null ? [] : [[nullifiers[0]!, {
-    pcashNumber: 10n, pcashHash: word(10), timestamp: 1_800_000_120n, transactionId: word(51), contentHash: content, nullifiers,
+    pcashNumber: 10n, pcashHash: word(10), timestamp: 1_800_000_120n, transactionId: word(51), contentHash: content,
   }]] });
 }
 

@@ -25,13 +25,13 @@ import {
 import {
   ADMIN_RULE_VK_HASH,
   ASSET_BURN_RULE_VK_HASH,
-  ASSET_CREATION_RULE_VK_HASH,
   ASSET_PAYMENT_RULE_VK_HASH,
   BATCH_TRANSFER_RULE_VK_HASH,
   CONTRACT_FEE_SPONSORSHIP_RULE_VK_HASH,
-  LARGE_ASSET_CREATION_RULE_VK_HASH,
   LARGE_BATCH_TRANSFER_RULE_VK_HASH,
   LARGE_CONTRACT_FEE_SPONSORSHIP_RULE_VK_HASH,
+  LARGE_MINT_RULE_VK_HASH,
+  MINT_RULE_VK_HASH,
   PAYMENT_RULE_VK_HASH,
 } from "../constants/rulePins.ts";
 
@@ -42,9 +42,9 @@ export const DEFAULT_ASSET_BURN_RULE_ENTRY_INDEX = 2;
 export const DEFAULT_BATCH_TRANSFER_RULE_ENTRY_INDEX = 3;
 export const DEFAULT_ACCOUNT_ADMIN_RULE_ENTRY_INDEX = 4;
 export const DEFAULT_CONTRACT_FEE_RULE_ENTRY_INDEX = 5;
-export const DEFAULT_ASSET_CREATION_RULE_ENTRY_INDEX = 6;
+export const DEFAULT_MINT_RULE_ENTRY_INDEX = 6;
 export const DEFAULT_LARGE_BATCH_TRANSFER_RULE_ENTRY_INDEX = 7;
-export const DEFAULT_LARGE_ASSET_CREATION_RULE_ENTRY_INDEX = 8;
+export const DEFAULT_LARGE_MINT_RULE_ENTRY_INDEX = 8;
 export const DEFAULT_LARGE_CONTRACT_FEE_RULE_ENTRY_INDEX = 9;
 
 /** Every index the product rule set reserves. */
@@ -55,9 +55,9 @@ export const DEFAULT_RULE_ENTRY_INDICES = [
   DEFAULT_BATCH_TRANSFER_RULE_ENTRY_INDEX,
   DEFAULT_ACCOUNT_ADMIN_RULE_ENTRY_INDEX,
   DEFAULT_CONTRACT_FEE_RULE_ENTRY_INDEX,
-  DEFAULT_ASSET_CREATION_RULE_ENTRY_INDEX,
+  DEFAULT_MINT_RULE_ENTRY_INDEX,
   DEFAULT_LARGE_BATCH_TRANSFER_RULE_ENTRY_INDEX,
-  DEFAULT_LARGE_ASSET_CREATION_RULE_ENTRY_INDEX,
+  DEFAULT_LARGE_MINT_RULE_ENTRY_INDEX,
   DEFAULT_LARGE_CONTRACT_FEE_RULE_ENTRY_INDEX,
 ] as const;
 
@@ -107,12 +107,12 @@ export interface DefaultUserAccountRuleSet {
   /** The native payment rule — the wallet's default interactive signing path. */
   rule: DefaultUserAccountRule;
   assetPaymentRule: DefaultUserAccountRule;
-  assetCreationRule: DefaultUserAccountRule;
+  mintRule: DefaultUserAccountRule;
   assetBurnRule: DefaultUserAccountRule;
   /** The general batch rule for shapes the narrow messages cannot cover. */
   batchTransferRule: DefaultUserAccountRule;
   largeBatchTransferRule: DefaultUserAccountRule;
-  largeAssetCreationRule: DefaultUserAccountRule;
+  largeMintRule: DefaultUserAccountRule;
   largeContractFeeSponsorshipRule: DefaultUserAccountRule;
   accountAdminRule: DefaultUserAccountRule;
   contractFeeSponsorshipRule: DefaultUserAccountRule;
@@ -120,12 +120,12 @@ export interface DefaultUserAccountRuleSet {
 
 export interface DefaultUserRuleSecrets {
   paymentCommitmentBlinder: FieldNumberish;
-  assetCreationCommitmentBlinder: FieldNumberish;
+  mintCommitmentBlinder: FieldNumberish;
   assetPaymentCommitmentBlinder: FieldNumberish;
   assetBurnCommitmentBlinder: FieldNumberish;
   batchTransferCommitmentBlinder: FieldNumberish;
   largeBatchTransferCommitmentBlinder: FieldNumberish;
-  largeAssetCreationCommitmentBlinder: FieldNumberish;
+  largeMintCommitmentBlinder: FieldNumberish;
   largeContractFeeCommitmentBlinder: FieldNumberish;
   accountAdminCommitmentBlinder: FieldNumberish;
   contractFeeCommitmentBlinder: FieldNumberish;
@@ -142,12 +142,12 @@ export interface DefaultUserRuleSecrets {
 export function generateDefaultUserRuleSecrets(): DefaultUserRuleSecrets {
   return {
     paymentCommitmentBlinder: scalarFromBytes(randomBytes(48)),
-    assetCreationCommitmentBlinder: scalarFromBytes(randomBytes(48)),
+    mintCommitmentBlinder: scalarFromBytes(randomBytes(48)),
     assetPaymentCommitmentBlinder: scalarFromBytes(randomBytes(48)),
     assetBurnCommitmentBlinder: scalarFromBytes(randomBytes(48)),
     batchTransferCommitmentBlinder: scalarFromBytes(randomBytes(48)),
     largeBatchTransferCommitmentBlinder: scalarFromBytes(randomBytes(48)),
-    largeAssetCreationCommitmentBlinder: scalarFromBytes(randomBytes(48)),
+    largeMintCommitmentBlinder: scalarFromBytes(randomBytes(48)),
     largeContractFeeCommitmentBlinder: scalarFromBytes(randomBytes(48)),
     accountAdminCommitmentBlinder: scalarFromBytes(randomBytes(48)),
     contractFeeCommitmentBlinder: scalarFromBytes(randomBytes(48)),
@@ -220,22 +220,22 @@ export function defaultUserAccountRuleSet(params: {
     CONTRACT_FEE_SPONSORSHIP_RULE_VK_HASH,
     params.secrets.contractFeeCommitmentBlinder,
   );
-  const assetCreation = buildRule(
-    DEFAULT_ASSET_CREATION_RULE_ENTRY_INDEX,
-    ASSET_CREATION_RULE_VK_HASH,
-    params.secrets.assetCreationCommitmentBlinder,
+  const mint = buildRule(
+    DEFAULT_MINT_RULE_ENTRY_INDEX,
+    MINT_RULE_VK_HASH,
+    params.secrets.mintCommitmentBlinder,
   );
-  const largeAssetCreation = buildRule(
-    DEFAULT_LARGE_ASSET_CREATION_RULE_ENTRY_INDEX,
-    LARGE_ASSET_CREATION_RULE_VK_HASH,
-    params.secrets.largeAssetCreationCommitmentBlinder,
+  const largeMint = buildRule(
+    DEFAULT_LARGE_MINT_RULE_ENTRY_INDEX,
+    LARGE_MINT_RULE_VK_HASH,
+    params.secrets.largeMintCommitmentBlinder,
   );
   const largeContractFeeSponsorship = buildRule(
     DEFAULT_LARGE_CONTRACT_FEE_RULE_ENTRY_INDEX,
     LARGE_CONTRACT_FEE_SPONSORSHIP_RULE_VK_HASH,
     params.secrets.largeContractFeeCommitmentBlinder,
   );
-  const entries = [largeAssetCreation, largeContractFeeSponsorship, payment, assetPayment, assetBurn, batchTransfer, largeBatchTransfer, accountAdmin, contractFeeSponsorship, assetCreation];
+  const entries = [largeMint, largeContractFeeSponsorship, payment, assetPayment, assetBurn, batchTransfer, largeBatchTransfer, accountAdmin, contractFeeSponsorship, mint];
   const set = buildAccountRuleSet(entries.map((entry) => ({
     entryIndex: entry.entryIndex,
     accountRuleEntryCommitment: entry.accountRuleEntryCommitment,
@@ -249,11 +249,11 @@ export function defaultUserAccountRuleSet(params: {
     entries: [...entries].sort((a, b) => a.entryIndex - b.entryIndex).map(withMembership),
     rule: withMembership(payment),
     assetPaymentRule: withMembership(assetPayment),
-    assetCreationRule: withMembership(assetCreation),
+    mintRule: withMembership(mint),
     assetBurnRule: withMembership(assetBurn),
     batchTransferRule: withMembership(batchTransfer),
     largeBatchTransferRule: withMembership(largeBatchTransfer),
-    largeAssetCreationRule: withMembership(largeAssetCreation),
+    largeMintRule: withMembership(largeMint),
     largeContractFeeSponsorshipRule: withMembership(largeContractFeeSponsorship),
     accountAdminRule: withMembership(accountAdmin),
     contractFeeSponsorshipRule: withMembership(contractFeeSponsorship),

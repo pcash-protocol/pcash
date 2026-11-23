@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { emptyWalletState as makeEmptyWalletFile } from "../../src/wallet/store.ts";
 import {
   addPendingNote,
+  addWalletAsset,
+  knownAssetDefinition,
   mergeRecoveredWalletNotes,
   addPendingUserAccountCreation,
   markPendingUserAccountCreationBroadcastRequested,
@@ -10,7 +12,28 @@ import {
   type WalletFileData,
   type WalletNote,
 } from "../../src/wallet/noteStore.ts";
-import { generateMlKemKeyPair } from "@pcash/sdk/protocol";
+import type { PcashNodeClient } from "@pcash/sdk/clients";
+import {
+  assetDefinitionAssetId,
+  assetDefinitionOf,
+  findAssetDefinition,
+  formatAssetDefinition,
+  generateMlKemKeyPair,
+  type AssetDefinition,
+} from "@pcash/sdk/protocol";
+import {
+  createAccountMintAsset,
+  deriveFixedSupplyAsset,
+  encodeAccountMintConfiguration,
+  encodeFixedSupplyConfiguration,
+  fixedSupplySecretCommitment,
+  senderDenyListTransferRule,
+} from "@pcash/sdk/rules";
+import { OPEN_WALLET_INTERNAL, Wallet } from "../../src/wallet/actions/walletClient.ts";
+import { derivePcashProfileFromPrivateKey } from "../../src/wallet/externalIdentity.ts";
+import { memoryWalletStateStore } from "../../src/wallet/memoryStoreBackend.ts";
+import { WALLET_DATABASE_STATE_STORE, type WalletDatabase } from "../../src/wallet/store.ts";
+import { testStatus } from "./statusFixture.ts";
 import { receiveKeyPairs, retainReceiveKeyPair } from "../../src/wallet/receiveKeyring.ts";
 import { PCASH_CHAIN_ID } from "@pcash/sdk/constants";
 
@@ -147,5 +170,114 @@ describe("dense private-output inventory", () => {
     addPendingNote(data, txTwo, opening);
     expect(data.notes).toHaveLength(2);
     expect(data.notes.map((value) => value.pendingContentHash)).toEqual([txOne, txTwo]);
+  });
+});
+
+describe("asset definitions", () => {
+  const metadata = { name: "Ruled Token", symbol: "RUL", decimals: 2, contentDigest: new Uint8Array(32).fill(5) };
+  const standard = senderDenyListTransferRule({ contractAddress: 0x5fbdb2315678afecb367f032d93f642f64180aa3n, listId: new Uint8Array(32).fill(9), maxDelta: 7_200n });
+  // One asset per rule; its definitions differ only in the configuration, which the asset ID does not commit to.
+  const asset = (rule: typeof standard) => {
+    const created = createAccountMintAsset({ metadata, accountAddress: 0xabcn, transferRule: rule });
+    return (configuration: Uint8Array) => ({
+      assetId: created.descriptor.assetId,
+      definition: assetDefinitionOf(created.descriptor, metadata, { mintRule: created.definition.mintRule.configuration, transferRule: configuration }),
+    });
+  };
+  // A definition of the same asset whose mint rule carries another configuration under the same VK hashes and commitment.
+  const withMintConfiguration = (definition: AssetDefinition, configuration: Uint8Array): AssetDefinition =>
+    ({ ...definition, mintRule: { ...definition.mintRule, configuration } });
+  const fixedSupplySecret = 0x77n;
+  // Each standard mint rule's genuine definition and a well-formed configuration that does not open its commitment.
+  const standardMintRules = [
+    ["fixed-supply", deriveFixedSupplyAsset({ metadata, supply: 10n, secret: fixedSupplySecret }).definition,
+      encodeFixedSupplyConfiguration({ supply: 11n, secretCommitment: fixedSupplySecretCommitment(fixedSupplySecret) })],
+    ["account-mint", createAccountMintAsset({ metadata, accountAddress: ADDRESS, startSalt: 0n }).definition,
+      encodeAccountMintConfiguration({ accountAddress: ADDRESS + 1n })],
+  ] as const;
+
+  it("records a standard-rule definition only when its configuration opens the commitment", () => {
+    const data = emptyWalletFile();
+    const define = asset(standard);
+    expect(addWalletAsset(data, define(new Uint8Array(60).fill(1)))).toBe(false);
+    expect(addWalletAsset(data, define(standard.configuration.subarray(0, 52)))).toBe(false);
+    expect(data.assets).toBeUndefined();
+    const genuine = define(standard.configuration);
+    expect(addWalletAsset(data, genuine)).toBe(true);
+    expect(knownAssetDefinition(data, genuine.assetId)).toEqual(genuine.definition);
+  });
+
+  it.each(standardMintRules)("records a %s definition only when its mint rule configuration opens the commitment", (_kind, genuine, other) => {
+    const data = emptyWalletFile();
+    const assetId = assetDefinitionAssetId(genuine);
+    for (const configuration of [other, genuine.mintRule.configuration.subarray(1)]) {
+      const definition = withMintConfiguration(genuine, configuration);
+      expect(assetDefinitionAssetId(definition)).toBe(assetId);
+      expect(addWalletAsset(data, { assetId, definition })).toBe(false);
+    }
+    expect(data.assets).toBeUndefined();
+    expect(addWalletAsset(data, { assetId, definition: genuine })).toBe(true);
+    expect(knownAssetDefinition(data, assetId)).toEqual(genuine);
+  });
+
+  it.each(standardMintRules)("imports a %s definition only when its mint rule configuration opens the commitment", async (_kind, genuine, other) => {
+    const networkConfig = { pcashChainId: PCASH_CHAIN_ID, l1ChainId: 11_155_111n, inboxAddress: `0x${"66".repeat(20)}` };
+    const profile = derivePcashProfileFromPrivateKey(new Uint8Array(32).fill(7), networkConfig);
+    const status = testStatus({ pcashChainId: Number(PCASH_CHAIN_ID), genesisHash: NETWORK.genesisHash });
+    const store = memoryWalletStateStore(makeEmptyWalletFile({ address: profile.address, network: NETWORK }));
+    const database: WalletDatabase = { [WALLET_DATABASE_STATE_STORE]: () => store, subscribe: async () => async () => {}, close: async () => {} };
+    const wallet = await Wallet[OPEN_WALLET_INTERNAL]({ database, node: { status: async () => status } as unknown as PcashNodeClient, profile });
+    try {
+      const forged = withMintConfiguration(genuine, other);
+      for (const input of [forged, formatAssetDefinition(forged)]) {
+        await expect(wallet.importAssetDefinition(input))
+          .rejects.toThrow("the definition's mint rule configuration does not open its commitment");
+      }
+      expect(store.snapshot()?.assets).toBeUndefined();
+      const assetId = assetDefinitionAssetId(genuine);
+      expect(await wallet.importAssetDefinition(genuine)).toEqual({ assetId });
+      expect(knownAssetDefinition(store.snapshot(), assetId)).toEqual(genuine);
+    } finally {
+      await wallet.close();
+    }
+  });
+
+  it("replaces a scan-learned definition of another rule with an imported one", async () => {
+    // The standard S key beside another L key is not the standard rule, so the asset ID does not fix its configuration bytes.
+    const custom = asset({ ...standard, lVkHash: standard.lVkHash + 1n });
+    const learned = custom(new Uint8Array(60).fill(1));
+    const shared = custom(new Uint8Array(60).fill(2));
+    expect(shared.assetId).toBe(learned.assetId);
+    const networkConfig = { pcashChainId: PCASH_CHAIN_ID, l1ChainId: 11_155_111n, inboxAddress: `0x${"66".repeat(20)}` };
+    const profile = derivePcashProfileFromPrivateKey(new Uint8Array(32).fill(7), networkConfig);
+    const data = makeEmptyWalletFile({ address: profile.address, network: NETWORK });
+    expect(addWalletAsset(data, learned)).toBe(true);
+    expect(addWalletAsset(data, shared)).toBe(false);
+    expect(knownAssetDefinition(data, learned.assetId)).toEqual(learned.definition);
+
+    const status = testStatus({ pcashChainId: Number(PCASH_CHAIN_ID), genesisHash: NETWORK.genesisHash });
+    const store = memoryWalletStateStore(data);
+    const database: WalletDatabase = { [WALLET_DATABASE_STATE_STORE]: () => store, subscribe: async () => async () => {}, close: async () => {} };
+    const wallet = await Wallet[OPEN_WALLET_INTERNAL]({ database, node: { status: async () => status } as unknown as PcashNodeClient, profile });
+    try {
+      expect(await wallet.importAssetDefinition(shared.definition)).toEqual({ assetId: shared.assetId });
+      expect(knownAssetDefinition(store.snapshot(), shared.assetId)).toEqual(shared.definition);
+      expect(store.snapshot()?.assets).toHaveLength(1);
+    } finally {
+      await wallet.close();
+    }
+  });
+
+  it("records a definition of another rule with any configuration", () => {
+    const data = emptyWalletFile();
+    // The standard S key beside another L key is not the standard rule, so its configuration is opaque.
+    const custom = asset({ ...standard, lVkHash: standard.lVkHash + 1n })(new Uint8Array(60).fill(1));
+    expect(addWalletAsset(data, custom)).toBe(true);
+    expect(knownAssetDefinition(data, custom.assetId)).toEqual(custom.definition);
+    const [, { mintRule }] = standardMintRules[1];
+    const customMint = findAssetDefinition({ metadata, mintRule: { ...mintRule, lVkHash: mintRule.lVkHash + 1n, configuration: new Uint8Array(20).fill(1) } }, 0n);
+    const customMintId = assetDefinitionAssetId(customMint);
+    expect(addWalletAsset(data, { assetId: customMintId, definition: customMint })).toBe(true);
+    expect(knownAssetDefinition(data, customMintId)).toEqual(customMint);
   });
 });

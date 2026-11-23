@@ -27,7 +27,7 @@ export function batchTransferEip712TypeFor(outputs: number): string {
     + outputFields(outputs) + AUTHORIZATION_FIELDS;
 }
 
-export function assetCreationEip712TypeFor(outputs: number): string {
-  return "PcashAssetCreation(uint256 pcashChainId,uint256 assetId,uint256 metadataCommitment,uint256 initialSupply,uint256 assetSecretCommitment,"
+export function mintEip712TypeFor(outputs: number): string {
+  return "PcashMint(uint256 pcashChainId,uint256 assetId,"
     + outputFields(outputs) + AUTHORIZATION_FIELDS;
 }

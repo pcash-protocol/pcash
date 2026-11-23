@@ -10,6 +10,7 @@ import {
   awaitingAcceptance,
   createL1SubmissionAdapter,
   createMempoolSubmissionAdapter,
+  viemL1LogReader,
   type PcashProfile,
   type SubmissionOutput,
   type DurableSubmissionAdapter,
@@ -19,7 +20,7 @@ import type { WalletDatabase } from "@pcash/sdk/wallet/database";
 import { existsSync, readdirSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { join } from "node:path";
-import type { Transport } from "viem";
+import { createPublicClient, http, type Transport } from "viem";
 import { Config } from "@pcash/sdk/bcfg";
 import { Logger, type LoggerContext } from "@pcash/sdk/blgr";
 import { PcashNodeClient } from "@pcash/sdk/clients";
@@ -824,6 +825,10 @@ async function startWalletServerWithDatabase(
     // Each wallet syncs on its own circuit, so a server cannot count or link the wallets one service holds.
     const session = tor?.session();
     const walletNode = session === undefined ? node : nodeOn(session.fetch);
+    // Deny lists of restricted assets are read from Ethereum on the wallet's own circuit.
+    const l1Logs = opts.l1Rpc === undefined ? undefined : viemL1LogReader(createPublicClient({
+      transport: session === undefined ? http(opts.l1Rpc) : torL1Transport(session.fetch, opts.l1Rpc),
+    }));
     try {
       if (opts.dev && identity.profile.recoveryContract !== "seed-derived") {
         devSigningKeys.set(addressHex(identity.profile.address), toHex(identity.privateKey));
@@ -833,6 +838,7 @@ async function startWalletServerWithDatabase(
         signer: privateKeyPcashActionSigner(identity.privateKey),
         provers,
         submission: awaitingAcceptance({ ...createMempoolSubmissionAdapter(walletNode), l1Recovery: recovery }, { node: walletNode }),
+        ...(l1Logs === undefined ? {} : { l1Logs }),
         ...(metrics === undefined ? {} : { metrics }),
       });
     } catch (error) {

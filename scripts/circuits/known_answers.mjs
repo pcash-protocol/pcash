@@ -12,7 +12,9 @@ export const KNOWN_ANSWERS = [
   { name: "shared_claim_s", hidingKernel: "private_value_hiding_kernel", runtime: false, transaction: true },
   { name: "shared_claim_l", hidingKernel: "private_value_large_hiding_kernel", runtime: false, transaction: true },
   { name: "large_sponsored_transfer", hidingKernel: "private_value_large_hiding_kernel", runtime: false },
-  { name: "large_asset_creation", hidingKernel: "private_value_large_hiding_kernel", runtime: false },
+  { name: "large_mint", hidingKernel: "private_value_large_hiding_kernel", runtime: false },
+  { name: "restricted_transfer", hidingKernel: "private_value_hiding_kernel", runtime: false },
+  { name: "restricted_sponsored_transfer", hidingKernel: "private_value_hiding_kernel", runtime: false },
 ];
 
 /** The bundle-relative files of one known answer; `tx_bytes` is the whole encoded transaction. */

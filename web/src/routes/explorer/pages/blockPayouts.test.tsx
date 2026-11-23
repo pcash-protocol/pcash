@@ -161,6 +161,48 @@ describe("explorer blockPayouts", () => {
 
 });
 
+describe("transaction effects", () => {
+  const account = { address: POSTER, accountRevision: 1n };
+  const nullifiers = (count: number) => Array.from({ length: count }, (_, i) => `0x${(i + 1).toString(16).padStart(64, "0")}`);
+  const payment = { ...summary("open", null), nullifiers: nullifiers(4), outputsAdded: 5n };
+
+  it.each(["/explorer", "/transactions"])("shows both payment effects in one row on %s", (path) => {
+    const page = { items: [{ ...payment, accountCreation: 1, account }], nextCursor: null };
+    state.value = path === "/explorer" ? [[], page] : page;
+    const html = renderAt(path);
+    expect(html).toContain("<th>Effects</th>");
+    const paymentRows = [...html.matchAll(/<tr>(.*?)<\/tr>/g)].map(([, row]) => row!).filter(row => row.includes(`/tx/${payment.transactionId}`));
+    expect(paymentRows).toHaveLength(1);
+    const row = paymentRows[0]!;
+    expect(text(row)).toContain("Private payment + account creation");
+    expect(row).toContain("<li>4 in → 5 out</li><li>Created account ");
+    expect(row).toContain(`href="${addressPath(POSTER)}"`);
+  });
+
+  it.each([0, 2])("shows only the large payment's counts for accountCreation %i", (accountCreation) => {
+    state.value = { items: [{ ...payment, accountCreation, nullifiers: nullifiers(32), outputsAdded: 32n }], nextCursor: null };
+    const html = renderAt("/transactions");
+    expect(text(html)).toContain("32 in → 32 out");
+    expect(html).not.toContain("Created account");
+  });
+
+  it("shows no effects when a payment fails", () => {
+    state.value = { items: [{ ...payment, outcome: "proofRejected", nullifiers: null, outputsAdded: 0n }], nextCursor: null };
+    const html = text(renderAt("/transactions"));
+    expect(html).toContain("None — the transaction failed");
+    expect(html).not.toContain(" in → ");
+    expect(html).not.toContain("Created account");
+  });
+
+  it("links the updated account without describing a creation", () => {
+    state.value = { items: [{ ...payment, kind: "userAccountUpdate", account }], nextCursor: null };
+    const html = renderAt("/transactions");
+    expect(text(html)).toContain("Updated account");
+    expect(html).toContain(`href="${addressPath(POSTER)}"`);
+    expect(html).not.toContain("Created account");
+  });
+});
+
 /** The recorded chain, searched by the state each case needs. */
 function recordedBlockPayouts(predicate: (entry: BlockPayoutsResult) => boolean): BlockPayoutsResult {
   const entry = [...fixtureWorld.blockPayouts.values()].find(predicate);

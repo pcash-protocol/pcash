@@ -10,8 +10,8 @@ use crate::configuration::{Configuration, configuration_commitment};
 use crate::message::NativeBurn;
 use crate::payout::{note_secret, note_secret_seed};
 use pcash_protocol::authorization::statement::{
-    assert_rule_statement, asset_creation_action_commitment, authorization_commitment,
-    rule_statement, RULE_STATEMENT_LENGTH, transfer_action_commitment,
+    assert_rule_statement, authorization_commitment, mint_action_commitment, rule_statement,
+    RULE_STATEMENT_LENGTH, transfer_action_commitment,
 };
 use pcash_protocol::generated::private_value_profiles::{S_INPUTS, S_OUTPUTS};
 use pcash_protocol::ledger::note::{
@@ -167,15 +167,15 @@ pub fn assert_transfer_kernel_accepts<let N_IN: u32, let N_OUT: u32, let SHAPE: 
     );
 }
 
-/// The statement the asset-creation kernel expects from TEST_SIGNER's rule for
-/// `private_value` creating `asset_id` on TEST_PCASH_CHAIN_ID.
-pub fn asset_creation_statement<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
+/// The statement the mint kernel expects from TEST_SIGNER's rule for
+/// `private_value` minting `asset_id` on TEST_PCASH_CHAIN_ID.
+pub fn mint_statement<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
     private_value: PrivateValue<N_IN, N_OUT, SHAPE>,
     asset_id: Field,
     event_entry: Field,
 ) -> [Field; RULE_STATEMENT_LENGTH] {
     signer_statement(
-        asset_creation_action_commitment(
+        mint_action_commitment(
             TEST_PCASH_CHAIN_ID,
             private_value_commitment(private_value),
             asset_id,

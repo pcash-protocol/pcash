@@ -34,7 +34,7 @@ import {
   addressHex,
   sleep,
 } from "@pcash/sdk/browser";
-import { deferSubmission, WalletConflictError, type PcashProfile, type Wallet } from "@pcash/sdk/wallet";
+import { deferSubmission, WalletConflictError, type DenyLists, type PcashProfile, type Wallet } from "@pcash/sdk/wallet";
 import { PADDED_PRIVATE_VALUE_BYTE_SIZE } from "@pcash/sdk/wallet/actions";
 import { buildContractFunctionCall, snapshotFromAccountProof, type AssetActionBuild } from "@pcash/sdk/builders";
 import {
@@ -73,6 +73,7 @@ import {
 import { assertPublicationChainId, publicationAssetDefinition, publicationEscrowNote, type OfferPublication } from "./publication.ts";
 import { escrowPayoutAmount } from "./networkFee.ts";
 import { defaultMarketplaceProver } from "./prover.ts";
+import { escrowRestriction } from "./restrictedEscrow.ts";
 import { selectedRelayTransactionExpiry } from "./selectedRelayExpiry.ts";
 import type { MarketplaceProver } from "./claimFlow.ts";
 import {
@@ -130,6 +131,8 @@ export interface BrowserReclaimParams {
   voluntaryBurnAmount?: bigint;
   /** The seller's wallet; pays a token reclaim's open fee, selected relay output, or network fee. */
   sponsor?: MarketplaceFeeSponsor;
+  /** The deny lists a restricted token's reclaim proves its escrow against. */
+  denyLists?: DenyLists;
   prover?: MarketplaceProver;
   pollIntervalMs?: number;
   pollMaxAttempts?: number;
@@ -520,23 +523,36 @@ async function proveUnsponsoredTokenReclaim(setup: ReclaimSetup, params: Browser
     noteSecret: selfIssuance.noteSecret,
     transactionContext: selfIssuance.context,
   };
+  const restriction = await escrowRestriction({
+    definition: setup.assetDefinition, denyLists: params.denyLists, node: params.node, escrow: canonical.l2Contract.address,
+    anchor: snapshot.accountProof.boundary, genesisL1Block: (await params.node.status()).genesisL1Block,
+    validUntilTimestamp: MAX_PAYMENT_DEADLINE_T,
+  });
   const build = buildUnsponsoredTokenEscrowRelease({
     ...tokenReclaimRelease(setup, params, { accountProof: snapshot.accountProof, siblings: snapshot.outputPath.siblings },
       await params.sellerReceiveKey(snapshot.accountProof.accountStateRoot)),
     issuanceOwnerCommitment: selfIssuance?.ownerCommitment ?? 0n,
     ...(designatedIssuanceOpening === undefined ? {} : { designatedIssuanceOpening }),
     notBeforeTimestamp: setup.notBefore,
-    validUntilTimestamp: MAX_PAYMENT_DEADLINE_T,
+    validUntilTimestamp: restriction?.plan.validUntilTimestamp ?? MAX_PAYMENT_DEADLINE_T,
     dummyInputSeed,
+    ...(restriction === undefined ? {} : { restricted: restriction.plan.restricted }),
   });
-  const proof = await setup.prover.proveAssetAction({
+  const reclaimAuthorization = {
+    circuitUrl: MARKETPLACE_CIRCUITS.reclaim,
+    witnessMap: await tokenReclaimWitness(setup, params, build, false, designatedIssuanceOpening),
+    label: "reclaim circuit",
+  };
+  const proof = await setup.prover.proveAssetAction(restriction === undefined ? {
     operation: "transfer",
-    authorization: {
-      circuitUrl: MARKETPLACE_CIRCUITS.reclaim,
-      witnessMap: await tokenReclaimWitness(setup, params, build, false, designatedIssuanceOpening),
-      label: "reclaim circuit",
-    },
+    authorization: reclaimAuthorization,
     buildKernelWitnessMap: build.buildKernelWitnessMap,
+    expectedPublicInputs: build.publicInputs,
+  } : {
+    operation: "restricted-transfer",
+    authorization: reclaimAuthorization,
+    policy: restriction.policy(build, "transfer"),
+    buildKernelWitnessMap: build.buildRestrictedKernelWitnessMap,
     expectedPublicInputs: build.publicInputs,
   }, params.onStatus);
   return build.encodeTransaction(proof.proof);
@@ -558,16 +574,25 @@ async function proveSponsoredTokenReclaim(setup: ReclaimSetup, params: BrowserRe
       reservedInputSlots: [ESCROW_INPUT_SLOT],
       reservedOutputSlots: [ESCROW_PAYOUT_SLOT],
       snapshotQuery: { outputs: [{ outputIndex: setup.escrow.leafIndex, outputCommitment: setup.escrowOutputCommitment }] },
-      primary: (context) => {
+      primary: async (context) => {
         const side = tokenEscrowReleaseSide(tokenReclaimRelease(setup, params, {
           accountProof: context.contractAccount,
           siblings: context.outputPaths[0]!.siblings,
         }, context.selfReceiveKey()));
+        const restriction = await escrowRestriction({
+          definition: setup.assetDefinition, denyLists: params.denyLists, node: params.node, escrow: setup.canonical.l2Contract.address,
+          anchor: context.contractAccount.boundary, genesisL1Block: context.status.genesisL1Block, validUntilTimestamp: MAX_PAYMENT_DEADLINE_T,
+        });
         return {
           authorization: side.authorization,
           assetId: setup.escrow.assetId,
           inputs: [{ slot: ESCROW_INPUT_SLOT, input: side.input }],
           realizeOutputs: () => ({ outputs: [{ slot: ESCROW_PAYOUT_SLOT, output: side.output }], ownedOutputs: [] }),
+          ...(restriction === undefined ? {} : { restricted: {
+            opening: restriction.plan.restricted,
+            validUntilCeiling: restriction.plan.validUntilTimestamp,
+            policy: (build: AssetActionBuild) => restriction.policy(build, "sponsored"),
+          } }),
           circuitUrl: MARKETPLACE_CIRCUITS.reclaim,
           label: "reclaim circuit",
           witness: (build, issuance) => tokenReclaimWitness(setup, params, build, true, issuance.designatedIssuanceOpening),

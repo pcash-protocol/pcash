@@ -5,7 +5,9 @@ import {
   parseAssetDefinition,
   type AssetDefinition,
 } from "@pcash/sdk/protocol";
-import { bytes32Hex, fromHex, toHex } from "@pcash/sdk/utils";
+import { recognizeMintRule, recognizeTransferRule } from "@pcash/sdk/rules";
+import { addressHex, bytes32Hex, fromHex, toHex } from "@pcash/sdk/utils";
+import { unopenableRuleReason } from "@pcash/sdk/wallet";
 import type { AmountUnit } from "../../components/tokenAmount.ts";
 
 export const TOKENS_PATH = "/tokens";
@@ -57,7 +59,9 @@ export type DefinitionCheck =
 
 /**
  * Pasted text and link fragments come from whoever shared them. A definition
- * is only trustworthy as far as it derives the token ID being looked at.
+ * is only trustworthy as far as it derives the token ID being looked at, and
+ * the ID does not fix a standard rule's configuration bytes, so a definition
+ * whose standard rule configuration does not open its commitment is invalid.
  */
 export function checkDefinition(text: string, expectedAssetId?: bigint): DefinitionCheck {
   const trimmed = text.trim();
@@ -75,7 +79,55 @@ export function checkDefinition(text: string, expectedAssetId?: bigint): Definit
   }
   const assetId = assetDefinitionAssetId(definition);
   if (expectedAssetId !== undefined && assetId !== expectedAssetId) return { state: "mismatch", definition, assetId };
+  if (unopenableRuleReason(definition) !== undefined) {
+    return { state: "invalid", message: "This definition's rule settings do not match its token ID." };
+  }
   return { state: "verified", definition, assetId };
+}
+
+export interface TokenTerms {
+  mint:
+    | { kind: "fixed-supply"; supply: bigint }
+    | { kind: "account-mint"; account: string }
+    | { kind: "deposit-mint"; vault: string }
+    | { kind: "custom" };
+  transfers: { kind: "unrestricted" } | { kind: "sender-deny-list"; contract: string; listId: string; maxDelta: bigint } | { kind: "custom" };
+}
+
+/**
+ * What the definition commits about minting and transfers, as a holder reads
+ * it. An account-mint token's terms never claim backing or a cap: the
+ * account's current rules can change.
+ */
+export function tokenTerms(definition: AssetDefinition): TokenTerms {
+  const recognized = recognizeMintRule(definition.mintRule);
+  const mint: TokenTerms["mint"] = recognized.kind === "fixed-supply"
+    ? { kind: "fixed-supply", supply: recognized.configuration.supply }
+    : recognized.kind === "account-mint"
+      ? { kind: "account-mint", account: addressHex(recognized.configuration.accountAddress) }
+      : recognized.kind === "deposit-mint"
+        ? { kind: "deposit-mint", vault: addressHex(recognized.configuration.vault) }
+        : { kind: "custom" };
+  if (definition.transferRule === undefined) return { mint, transfers: { kind: "unrestricted" } };
+  const rule = recognizeTransferRule(definition.transferRule);
+  return {
+    mint,
+    transfers: rule.kind === "sender-deny-list"
+      ? {
+        kind: "sender-deny-list", contract: addressHex(toField(rule.configuration.contractAddress)),
+        listId: toHex(rule.configuration.listId), maxDelta: rule.configuration.maxDelta,
+      }
+      : { kind: "custom" },
+  };
+}
+
+/** A whole number of seconds in the largest unit that divides it: "2 hours", "90 minutes", "45 seconds". */
+export function durationText(seconds: bigint): string {
+  const [count, unit] = seconds % 86_400n === 0n ? [seconds / 86_400n, "day"]
+    : seconds % 3_600n === 0n ? [seconds / 3_600n, "hour"]
+    : seconds % 60n === 0n ? [seconds / 60n, "minute"]
+    : [seconds, "second"];
+  return `${count.toLocaleString("en-US")} ${unit}${count === 1n ? "" : "s"}`;
 }
 
 export function tokenUnit(definition: AssetDefinition): AmountUnit {

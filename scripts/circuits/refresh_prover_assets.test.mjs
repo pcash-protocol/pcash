@@ -25,7 +25,7 @@ async function makeRepo() {
   await writeJson(repo, "circuits/manifest.json", {
     owner: "protocol",
     circuits: [
-      { package: "private_value_asset_creation_kernel", path: "private_value_asset_creation_kernel", role: "kernel", publicInputs: 0, provingRuntimes: ["native", "browser"], srsPoints: 262144 },
+      { package: "private_value_mint_kernel", path: "private_value_mint_kernel", role: "kernel", publicInputs: 0, provingRuntimes: ["native", "browser"], srsPoints: 262144 },
     ],
   });
   await writeJson(repo, "marketplace/circuits.json", { owner: "marketplace", circuits: [] });
@@ -45,19 +45,19 @@ function builtArtifact(sourcePath, comment, hash) {
 async function publishedFrom(text) {
   const { repo, refresh } = await makeRepo();
   await mkdir(path.join(repo, "circuits", "target"), { recursive: true });
-  await writeFile(path.join(repo, "circuits", "target", "private_value_asset_creation_kernel.json"), text);
+  await writeFile(path.join(repo, "circuits", "target", "private_value_mint_kernel.json"), text);
   refresh();
-  return readFile(path.join(repo, "prover-assets", "private_value_asset_creation_kernel.json"), "utf8");
+  return readFile(path.join(repo, "prover-assets", "private_value_mint_kernel.json"), "utf8");
 }
 
 test("refresh installs a built artifact and fails on a circuit that was not built", async () => {
   const { repo, refresh } = await makeRepo();
-  assert.throws(refresh, /ENOENT.*private_value_asset_creation_kernel\.json/);
-  await writeJson(repo, "circuits/target/private_value_asset_creation_kernel.json", { bytecode: "local", file_map: {} });
-  await writeJson(repo, "prover-assets/private_value_asset_creation_kernel.json", { bytecode: "old" });
+  assert.throws(refresh, /ENOENT.*private_value_mint_kernel\.json/);
+  await writeJson(repo, "circuits/target/private_value_mint_kernel.json", { bytecode: "local", file_map: {} });
+  await writeJson(repo, "prover-assets/private_value_mint_kernel.json", { bytecode: "old" });
   refresh();
   assert.deepEqual(
-    JSON.parse(await readFile(path.join(repo, "prover-assets", "private_value_asset_creation_kernel.json"), "utf8")),
+    JSON.parse(await readFile(path.join(repo, "prover-assets", "private_value_mint_kernel.json"), "utf8")),
     { bytecode: "local" },
   );
 });

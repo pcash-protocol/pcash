@@ -1,14 +1,15 @@
 import { PRIVATE_VALUE_PROFILES, privateValueProfile } from "../constants/privateValueProfiles.ts";
 import { authorizationIssuanceOpening, type DesignatedIssuanceOpening } from "../protocol/payout.ts";
-// Witness assembly for `circuits/protocol/private_value/s/sponsored_transfer_kernel`.
+// Witness assembly for the sponsored-transfer kernels, restricted or not.
 //
 // One asset action with two authorizing accounts: the primary moves the asset
-// and owns every APPLICATION marker; a distinct fee payer contributes native
-// PCASH for the protocol fee and takes at most one change note back. The role
+// and owns every APPLICATION marker; a distinct fee payer contributes
+// native PCASH for the protocol fee and takes at most one change note back. The role
 // partition comes from the slot classes, so nothing here chooses it — this
 // builder only supplies the openings each side already implies.
 
 import {
+  restrictedAssetMap,
   type AssetActionBuild,
 } from "./assetAction.ts";
 import type { AssetAccountAuthorization } from "./assetOutputs.ts";
@@ -61,30 +62,31 @@ export interface SponsoredTransferWitnessParams {
     accountStateRootStateSiblings: readonly FieldNumberish[];
   };
   pcashChainId: FieldNumberish;
-  assetId: FieldNumberish;
   primary: AssetAccountAuthorization;
   feePayer: AssetAccountAuthorization;
   nativeRelayPayment?: { slot: number; amount: bigint; ownerCommitment: FieldNumberish };
   primaryVk: ChonkVkArtifacts;
   feeVk: ChonkVkArtifacts;
+  assetId: FieldNumberish;
+  /** The asset's transfer rule for this profile; required exactly for a restricted asset. */
+  policyVk?: ChonkVkArtifacts;
 }
 
-
-
-
-
-/**
- * Assemble the relation's witness, checking the openings the circuit will check
- * so a mismatch names itself here rather than surfacing as a broken constraint.
- */
-export function buildSponsoredTransferWitness(params: SponsoredTransferWitnessParams): {
+export interface SponsoredWitness {
   primaryActionCommitment: bigint;
   feeActionCommitment: bigint;
   witnessMap: Record<string, unknown>;
-} {
+}
+
+/**
+ * The witness the sponsored-transfer kernels share, checking the openings the
+ * circuit will check so a mismatch names itself here rather than surfacing as a
+ * broken constraint.
+ */
+function sponsoredWitness(params: SponsoredTransferWitnessParams): SponsoredWitness & { primaryAddress: bigint } {
   const { build, primary, feePayer } = params;
   const { inputs: N_IN } = privateValueProfile(build.shape);
-  const assetId = toField(params.assetId, "assetId");
+  const assetId = build.assetId;
   const pcashChainId = toField(params.pcashChainId, "pcashChainId");
   const recentPcashBlockHash = toField(params.snapshot.recentPcashBlockHash, "recentPcashBlockHash");
   const primaryAddress = toAddressField(primary.address, "primary.address");
@@ -93,7 +95,7 @@ export function buildSponsoredTransferWitness(params: SponsoredTransferWitnessPa
     throw new Error("the fee payer must be a different account from the primary");
   }
 
-  const ownerInputs = Array.from({ length: N_IN }, absentInputMap);
+  const noteInputs = Array.from({ length: N_IN }, absentInputMap);
   build.resolvedInputs.forEach((input, slot) => {
     if (input.slotClass !== SlotClass.ASSET && input.slotClass !== SlotClass.NATIVE) return;
     const expectedOwner = input.slotClass === SlotClass.ASSET ? primaryAddress : feePayerAddress;
@@ -101,14 +103,14 @@ export function buildSponsoredTransferWitness(params: SponsoredTransferWitnessPa
     if (input.owner !== expectedOwner || input.assetId !== expectedAssetId) {
       throw new Error(`input slot ${slot} belongs to another account or asset`);
     }
-    ownerInputs[slot] = inputNoteMap(input);
+    noteInputs[slot] = inputNoteMap(input);
   });
 
   const assetOutputAmounts = build.resolvedOutputs.map((output) => output.slotClass === SlotClass.ASSET ? output.amount : 0n);
   const nativeChangeSlots = build.resolvedOutputs.flatMap((output, slot) =>
     output.slotClass === SlotClass.NATIVE && output.recipient === feePayerAddress
       ? [{ ...output, slot }] : []);
-  if (nativeChangeSlots.length > 1) throw new Error("sponsored transfer has multiple native change outputs");
+  if (nativeChangeSlots.length > 1) throw new Error("sponsored action has multiple native change outputs");
   const change = nativeChangeSlots[0] ?? null;
   const relayPayment = params.nativeRelayPayment;
   if (relayPayment !== undefined) {
@@ -116,7 +118,7 @@ export function buildSponsoredTransferWitness(params: SponsoredTransferWitnessPa
     if (relayPayment.amount <= 0n || output?.slotClass !== SlotClass.NATIVE
       || output.amount !== relayPayment.amount
       || output.ownerCommitment !== toField(relayPayment.ownerCommitment)) {
-      throw new Error("selected relay output does not match the sponsored transfer");
+      throw new Error("selected relay output does not match the sponsored action");
     }
     if (relayPayment.slot === change?.slot) throw new Error("selected relay and change cannot share a slot");
   }
@@ -124,11 +126,12 @@ export function buildSponsoredTransferWitness(params: SponsoredTransferWitnessPa
     ...(relayPayment === undefined ? [] : [relayPayment.slot])]);
   build.resolvedOutputs.forEach((output, slot) => {
     if (output.slotClass === SlotClass.NATIVE && !allowedNativeSlots.has(slot)) {
-      throw new Error("sponsored transfer has an undeclared native output");
+      throw new Error("sponsored action has an undeclared native output");
     }
   });
 
   const nativeIn = build.resolvedInputs.reduce((sum, input) => sum + (input.slotClass === SlotClass.NATIVE ? input.amount : 0n), 0n);
+  if (nativeIn === 0n) throw new Error("a sponsored action spends a native input of its fee payer");
   const openFeeAmount = toField(build.transaction.global.openFeeAmount);
   const nativeBurnAmount = toField(build.transaction.global.nativeBurnAmount);
   const changeAmount = change?.amount ?? 0n;
@@ -139,8 +142,6 @@ export function buildSponsoredTransferWitness(params: SponsoredTransferWitnessPa
   }
 
   const replayIds = build.resolvedInputs.map((input) => input.replayId);
-  const primaryVkMap = vkWitnessMap(params.primaryVk, "primary");
-  const feeVkMap = vkWitnessMap(params.feeVk, "fee-payer");
   const primaryActionCommitment = sponsoredTransferActionCommitment(pcashChainId, build.privateValueCommitment);
   const feeActionCommitment = contractFeeSponsorshipActionCommitment(
     pcashChainId,
@@ -163,9 +164,9 @@ export function buildSponsoredTransferWitness(params: SponsoredTransferWitnessPa
   return {
     primaryActionCommitment,
     feeActionCommitment,
-    // Every input the relation declares, from the same locals the TOML above
-    // uses. A map missing a field does not fail late in proving — noirc_abi
-    // refuses to encode the witness at all.
+    primaryAddress,
+    // A map missing a field does not fail late in proving: noirc_abi refuses
+    // to encode the witness at all.
     witnessMap: {
       event_salt: fm(build.eventOpening.eventSalt),
       pcash_chain_id: fm(params.pcashChainId),
@@ -183,17 +184,42 @@ export function buildSponsoredTransferWitness(params: SponsoredTransferWitnessPa
         slot: relayPayment?.slot ?? 0,
         amount: fm(relayPayment?.amount ?? 0n),
       },
-      asset_id: fm(assetId),
       dummy_input_seed: fm(build.dummyInputSeed),
       replay_ids: fieldArrayMap(replayIds),
       ...snapshotWitnessMap(params.snapshot),
       primary: authorizedAccountMap(primary),
       fee_payer: authorizedAccountMap(feePayer),
-      owner_inputs: ownerInputs,
+      owner_inputs: noteInputs,
       primary_statement: ruleStatementMap(primaryStatement),
-      primary_vk: primaryVkMap,
+      primary_vk: vkWitnessMap(params.primaryVk, "primary"),
       fee_statement: ruleStatementMap(feeStatement),
-      fee_vk: feeVkMap,
+      fee_vk: vkWitnessMap(params.feeVk, "fee-payer"),
+    },
+  };
+}
+
+/** The witness of a sponsored-transfer kernel, restricted or not. */
+export function buildSponsoredTransferWitness(params: SponsoredTransferWitnessParams): SponsoredWitness {
+  const { build } = params;
+  if (build.operation !== "transfer") throw new Error("a mint has one account, which pays its own fee");
+  const assetId = toField(params.assetId, "assetId");
+  if (assetId !== build.assetId) throw new Error("sponsored transfer assetId does not match its build");
+  if ((build.restricted === undefined) !== (params.policyVk === undefined)) {
+    throw new Error("a restricted asset's sponsored transfer folds its transfer rule, and only then");
+  }
+  const witness = sponsoredWitness(params);
+  return {
+    primaryActionCommitment: witness.primaryActionCommitment,
+    feeActionCommitment: witness.feeActionCommitment,
+    witnessMap: {
+      ...witness.witnessMap,
+      ...(build.restricted === undefined
+        ? { asset_id: fm(assetId) }
+        : { asset: restrictedAssetMap(build.restricted, build.shape, toField(params.policyVk!.vkHash, "policy VK hash")) }),
+      ...(params.policyVk === undefined ? {} : {
+        policy_statement: ruleStatementMap(build.policyStatement(witness.primaryAddress, witness.primaryActionCommitment)),
+        policy_vk: vkWitnessMap(params.policyVk, "transfer rule"),
+      }),
     },
   };
 }

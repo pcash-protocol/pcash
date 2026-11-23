@@ -10,9 +10,9 @@ import { DEFAULT_EVENT_ENTRY } from "./events.ts";
 
 import {
   ACCOUNT_UPDATE_ACTION_DOMAIN,
-  ASSET_CREATION_ACTION_DOMAIN,
   AUTHORIZATION_COMMITMENT_DOMAIN,
   CONTRACT_FEE_SPONSORSHIP_ACTION_DOMAIN,
+  MINT_ACTION_DOMAIN,
   SPONSORED_TRANSFER_ACTION_DOMAIN,
   TRANSFER_ACTION_DOMAIN,
 } from "../constants/domainTags.ts";
@@ -46,37 +46,34 @@ function actionCommitment(
   ]);
 }
 
-/** One account moves its own value: the transfer kernel. */
+/** One account moves its own value: the transfer and restricted-transfer kernels. */
 export function transferActionCommitment(pcashChainId: FieldNumberish, privateValueCommitment: FieldNumberish): bigint {
   return actionCommitment(TRANSFER_ACTION_DOMAIN, pcashChainId, privateValueCommitment, 0n);
 }
 
-/**
- * One account creates an asset and its supply: the asset-creation kernel. The extra data is the ID of the asset the
- * kernel creates.
- */
-export function assetCreationActionCommitment(
+/** One account mints an asset: the mint kernel. The extra data is the ID of the asset the kernel derives. */
+export function mintActionCommitment(
   pcashChainId: FieldNumberish,
   privateValueCommitment: FieldNumberish,
   assetId: FieldNumberish,
 ): bigint {
-  return actionCommitment(ASSET_CREATION_ACTION_DOMAIN, pcashChainId, privateValueCommitment, assetId);
+  return actionCommitment(MINT_ACTION_DOMAIN, pcashChainId, privateValueCommitment, assetId);
 }
 
 /**
- * A rule that opens the private value and serves both one-account kernels chooses between their actions by its slot
- * classes: the asset-creation action for `createdAssetId` when an input is a creation marker, else the transfer
- * action, which ignores `createdAssetId`.
+ * A rule that opens the private value and serves both the transfer and the mint kernel chooses between their actions
+ * by its slot classes: the mint action for `mintedAssetId` when an input is a mint marker, else the transfer action,
+ * which ignores `mintedAssetId`.
  */
 export function ownerActionCommitment(
   pcashChainId: FieldNumberish,
   transaction: PrivateValue,
-  createdAssetId: FieldNumberish,
+  mintedAssetId: FieldNumberish,
   shape?: PrivateValueShape,
 ): bigint {
   const commitment = privateValueCommitment(transaction, shape);
-  return transaction.inputs.some((input) => input.slotClass === SlotClass.ASSET_CREATION)
-    ? assetCreationActionCommitment(pcashChainId, commitment, createdAssetId)
+  return transaction.inputs.some((input) => input.slotClass === SlotClass.MINT)
+    ? mintActionCommitment(pcashChainId, commitment, mintedAssetId)
     : transferActionCommitment(pcashChainId, commitment);
 }
 
@@ -88,7 +85,7 @@ export function sponsoredTransferActionCommitment(
   return actionCommitment(SPONSORED_TRANSFER_ACTION_DOMAIN, pcashChainId, privateValueCommitment, 0n);
 }
 
-/** A user account pays the native fee for one named contract: its asset action in a sponsored transfer. */
+/** A user account pays the native fee for one named contract's sponsored transfer. */
 export function contractFeeSponsorshipActionCommitment(
   pcashChainId: FieldNumberish,
   privateValueCommitment: FieldNumberish,

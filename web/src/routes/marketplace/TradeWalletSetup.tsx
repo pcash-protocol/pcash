@@ -26,7 +26,7 @@ export function TradeWalletSetup() {
     case "activation-required":
     case "activation-prepared":
       label = "Open wallet"; action = panel.openOverview;
-      explanation = "Choose Get PCASH in the wallet panel to set up your account and get your first PCASH. Gas is paid in ETH.";
+      explanation = "Set up your account in the wallet panel. It gets your first PCASH, and gas is paid in ETH.";
       break;
     case "activation-ambiguous":
       label = "Check status"; action = checkAccountActivation;

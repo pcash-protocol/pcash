@@ -36,7 +36,7 @@ export function checks(suite = 'all') {
   add('issuance-python', ['just', 'test-issuance-python']);
   add('bundle-tests', ['npm', 'run', 'circuit-bundle:test'], ['npm']);
 
-  const packages = ['sdk', 'wallet', 'relayer', 'marketplace', 'tokens', 'lineage', 'board'];
+  const packages = ['sdk', 'wallet', 'relayer', 'marketplace', 'tokens', 'lineage', 'stablecoin', 'board'];
   const builds = packages.map(p => `build-${p}`);
   // The web app's feature packages live under web/.
   const packageDirectory = p => ['tokens', 'board'].includes(p) ? `web/${p}` : p;
@@ -51,12 +51,14 @@ export function checks(suite = 'all') {
   // Attempt CRS installation before wallet tests decide whether the pinned CRS is available.
   add('tools', ['just', 'tools'], ['npm'], { suites: ['core'] });
   add('noir-format', ['just', '_ci-noir-format'], ['tools'], { suites: ['core'] });
-  for (const p of ['relayer', 'wallet', 'board']) add(`test-${p}`, ['npm', 'test', '--ignore-scripts', '--workspace', `@pcash/${p}`], ['npm', ...packageNeeds(p)]);
+  for (const p of ['relayer', 'wallet', 'stablecoin', 'board']) add(`test-${p}`, ['npm', 'test', '--ignore-scripts', '--workspace', `@pcash/${p}`], ['npm', ...packageNeeds(p)]);
   add('dev-tests', ['npm', 'run', 'dev:test'], ['npm']);
   add('solidity-dependencies', ['just', '_solidity-dependencies'], ['forge']);
   add('solidity-build', ['forge', 'build'], ['solidity-dependencies'], { cwd: 'marketplace/l1-contracts' });
   add('lineage-solidity-tests', ['forge', 'test'], ['forge'], { cwd: 'lineage/l1-contracts' });
   add('solidity-tests', ['forge', 'test'], ['solidity-dependencies'], { cwd: 'marketplace/l1-contracts' });
+  add('stablecoin-solidity-build', ['forge', 'build'], ['solidity-dependencies'], { cwd: 'stablecoin/l1-contracts' });
+  add('stablecoin-solidity-tests', ['forge', 'test'], ['solidity-dependencies'], { cwd: 'stablecoin/l1-contracts' });
   add('profile-compile', ['node', '--test', 'scripts/circuits/profile_compile.test.mjs'], ['npm', 'tools'], { suites: ['core'] });
   add('circuit-bundle', ['node', 'scripts/circuits/bundle.mjs', '--print-path'], ['npm', 'tools'], { bundle: true, suites: ['core'] });
   add('release-pins', ['just', 'pins', '--check'], ['circuit-bundle'], { suites: ['core'] });

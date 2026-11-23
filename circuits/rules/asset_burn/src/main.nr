@@ -148,7 +148,7 @@ mod tests {
     use pcash_protocol::generated::private_value_profiles::S_OUTPUTS;
     use pcash_protocol::ledger::note::{note_body_commitment, output_commitment, owner_commitment};
     use pcash_protocol::ledger::private_value::{
-        SLOT_CLASS_APPLICATION, SLOT_CLASS_ASSET, SLOT_CLASS_ASSET_CREATION, SLOT_CLASS_DUMMY,
+        SLOT_CLASS_APPLICATION, SLOT_CLASS_ASSET, SLOT_CLASS_DUMMY, SLOT_CLASS_MINT,
         SLOT_CLASS_NATIVE,
     };
     use reference_rule_common::message::NativeBurn;
@@ -307,10 +307,10 @@ mod tests {
         let _ = run(tx, changes, opening, 0);
     }
 
-    #[test(should_fail_with = "input slot must not be a creation marker")]
-    fn test_rejects_a_creation_marker() {
+    #[test(should_fail_with = "input slot must not be a mint marker")]
+    fn test_rejects_a_mint_marker() {
         let (mut tx, changes, opening) = fixture();
-        tx.input_slot_classes[2] = SLOT_CLASS_ASSET_CREATION;
+        tx.input_slot_classes[2] = SLOT_CLASS_MINT;
         let _ = run(tx, changes, opening, 0);
     }
 

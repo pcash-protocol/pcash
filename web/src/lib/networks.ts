@@ -1,4 +1,5 @@
 import { PCASH_CHAIN_ID } from "@pcash/sdk/constants";
+import type { StatusResult } from "@pcash/sdk/clients";
 import { parseL1ChainId } from "./l1Chain.ts";
 
 /** The PCASH deployment this build serves and the Ethereum network that carries it. */
@@ -73,10 +74,10 @@ export function browserNetwork(): NetworkProfile {
 }
 
 /**
- * Scopes browser caches to one chain instance, so a reset local chain never
- * reads a previous chain's records. RPC endpoints are not part of it: a custom
- * endpoint serves the same chain.
+ * Scopes browser state to the chain the node reports, so a reset or
+ * re-anchored chain never reads a previous chain's records. The configured
+ * genesis pin only guards which node is accepted; it never names state.
  */
-export function networkInstanceKey(network: NetworkProfile): string {
-  return `${network.l1ChainId}:${network.pcashChainId}:${network.genesisHash?.toLowerCase() ?? ""}`;
+export function chainInstanceKey(status: Pick<StatusResult, "l1ChainId" | "pcashChainId" | "genesisHash">): string {
+  return `${status.l1ChainId}:${status.pcashChainId}:${status.genesisHash.toLowerCase()}`;
 }

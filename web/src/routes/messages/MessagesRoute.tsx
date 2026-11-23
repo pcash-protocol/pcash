@@ -15,8 +15,8 @@ import { Composer } from "./Composer.tsx";
 import { useBoardThreads, useThread, type BoardView, type MessagesNode } from "./useBoard.ts";
 import styles from "./Messages.module.css";
 
-const messagesRoute = routeById("messages");
-const threadRoute = routeById("message-thread");
+const boardRoute = routeById("board");
+const threadRoute = routeById("board-thread");
 const TITLE_CHARACTERS = 60;
 
 export default function MessagesRoute() {
@@ -32,8 +32,8 @@ export default function MessagesRoute() {
 function Board({ node }: { node: MessagesNode }) {
   const { view, loadMore, refresh } = useBoardThreads(node);
   return <>
-    <Metadata {...messagesRoute.metadata} />
-    <RouteHeader eyebrow="Testnet board" title="Messages" description="Anonymous public posts on PCASH. Anyone can read them; no one can tell which account wrote one." />
+    <Metadata {...boardRoute.metadata} />
+    <RouteHeader eyebrow="Testnet" title="Anonymous board" description="Public posts on PCASH. Anyone can read them; no one can tell which account wrote one." />
     <BoardStatus view={view} />
     {view.state === "ready" && <div className={styles.columns}>
       <section aria-labelledby="threads-heading">
@@ -56,7 +56,7 @@ function Board({ node }: { node: MessagesNode }) {
 
 function ThreadRow({ thread }: { thread: BoardThread }) {
   const replies = thread.postCount - 1n;
-  return <li><Link to={`${messagesRoute.path}/${thread.root.id}`} className={styles.threadRow}>
+  return <li><Link to={`${boardRoute.path}/${thread.root.id}`} className={styles.threadRow}>
     <span className={`${styles.text} ${styles.excerpt}`} dir="auto">{thread.root.text}</span>
     <span className={styles.meta}>
       {thread.root.missingParent && <span>Replies to a post that is not on this board</span>}
@@ -67,7 +67,7 @@ function ThreadRow({ thread }: { thread: BoardThread }) {
 }
 
 function PendingThreadRow({ post }: { post: PendingPost }) {
-  return <li><Link to={`${messagesRoute.path}/${post.id}`} className={`${styles.threadRow} ${styles.pending}`}>
+  return <li><Link to={`${boardRoute.path}/${post.id}`} className={`${styles.threadRow} ${styles.pending}`}>
     <span className={`${styles.text} ${styles.excerpt}`} dir="auto">{post.text}</span>
     <span className={styles.meta}><span>Pending: waiting for the network to include it</span></span>
   </Link></li>;
@@ -102,8 +102,8 @@ function Thread({ node, postId }: { node: MessagesNode; postId: string }) {
   };
   return <>
     <Metadata title={root === undefined ? threadRoute.metadata.title : threadTitle(root.text)} description={threadRoute.metadata.description} />
-    <RouteHeader eyebrow="Messages" title="Thread" description="A post and every reply to it, in the order the network included them." />
-    <p><Link to={messagesRoute.path}>← All threads</Link></p>
+    <RouteHeader eyebrow="Anonymous board" title="Thread" description="A post and every reply to it, in the order the network included them." />
+    <p><Link to={boardRoute.path}>← All threads</Link></p>
     <BoardStatus view={view} />
     {view.state === "ready" && (root === undefined
       ? <Notice>This post is not on the board yet. A new post appears once the network includes it.</Notice>

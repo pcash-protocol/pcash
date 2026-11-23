@@ -21,8 +21,9 @@ const state = vi.hoisted(() => ({
     walletPromptOpen: false,
   },
   ethereumReceipt: vi.fn(), pcashReceipt: vi.fn(),
-  /** What Ethereum shows about an address with no PCASH account. */
-  l1Code: vi.fn(), l1Nonce: vi.fn(),
+  /** What mainnet and PCASH's own Ethereum network show about an address with no PCASH account. */
+  mainnetCode: vi.fn(), mainnetNonce: vi.fn(), siteCode: vi.fn(), siteNonce: vi.fn(),
+  namesOn: true,
   quote: undefined as unknown,
   paymentIssuance: undefined as bigint | undefined,
   refreshIssuance: vi.fn(),
@@ -35,24 +36,31 @@ const state = vi.hoisted(() => ({
   networkFee: vi.fn((_units: bigint): bigint | undefined => 0n),
 }));
 vi.mock("../tokens/useTokensApp.ts", () => ({ useTokensApp: () => state.tokens }));
-vi.mock("wagmi/actions", () => ({ getPublicClient: () => ({ getTransactionReceipt: state.ethereumReceipt, getCode: state.l1Code, getTransactionCount: state.l1Nonce }) }));
+vi.mock("wagmi/actions", () => ({ getPublicClient: () => ({ getTransactionReceipt: state.ethereumReceipt, getCode: state.siteCode, getTransactionCount: state.siteNonce }) }));
 vi.mock("@pcash/sdk/clients", async (original) => ({ ...await original<typeof import("@pcash/sdk/clients")>(), pollReceipt: state.pcashReceipt }));
 vi.mock("../../lib/WalletProvider.tsx", () => ({
   errorMessage: (error: unknown) => String(error),
   useWallet: () => state.wallet,
 }));
-vi.mock("../../names/useEthereumName.ts", () => ({ useEthereumNameResolver: () => ({ resolveName: state.resolveName }), useEthereumName: () => undefined, useNameAddress: () => state.namedAddress }));
+vi.mock("../../names/useEthereumName.ts", () => ({ useEthereumNameResolver: () => state.namesOn ? { resolveName: state.resolveName } : undefined,
+  useCurrentNameResolver: () => () => state.namesOn ? { resolveName: state.resolveName, readAddress: async (address: string) => ({ code: await state.mainnetCode(address), nonce: await state.mainnetNonce(address) }) } : undefined, useEthereumName: () => undefined, useNameAddress: () => state.namedAddress }));
 vi.mock("../../lib/EthereumProvider.tsx", () => ({ useEthereumNetwork: () => ({ l1ChainId: state.l1ChainId }) }));
-vi.mock("../../lib/useNetworkFee.ts", () => ({ S_ACTION_UNITS: 4n, S_ACTION_WITH_ACCOUNT_UNITS: 6n, useNetworkFee: (units: bigint) => state.networkFee(units) }));
+// Both reads run only while a send form is showing; these tests show it on a page, outside the sidebar.
+vi.mock("../../lib/useNetworkFee.ts", () => ({ S_ACTION_UNITS: 4n, S_ACTION_WITH_ACCOUNT_UNITS: 6n, useNetworkFee: (units: bigint, enabled: boolean) => enabled ? state.networkFee(units) : undefined }));
 vi.mock("../../lib/useFastSendEstimate.ts", () => ({ useFastSendEstimate: (enabled: boolean) => enabled ? state.fastEstimate : undefined }));
-vi.mock("../../lib/usePaymentIssuance.ts", () => ({ usePaymentIssuance: () => ({
+vi.mock("../../lib/usePaymentIssuance.ts", () => ({ usePaymentIssuance: (enabled: boolean) => !enabled ? { issuance: undefined, inputs: undefined, refresh: state.refreshIssuance } : ({
   issuance: state.paymentIssuance, refresh: state.refreshIssuance,
   inputs: state.quote === undefined ? undefined : {
     quote: { status: "fulfilled", value: state.quote }, economics: { status: "fulfilled", value: { records: [] } },
   },
 }) }));
-import { WebsiteSettingsContext, WebsiteSettingsStore } from "../../lib/WebsiteSettings.tsx";
+import { WebsiteSettingsContext, WebsiteSettingsStore, defaultPreferences } from "../../lib/WebsiteSettings.tsx";
 import { OwnerPanelsProvider, useWalletPanel, SendCard } from "./OwnerPanels.tsx";
+import { NetworkContext } from "../../components/NetworkContext.tsx";
+import type { NetworkProfile } from "../../lib/networks.ts";
+
+/** Mainnet's defaults: these tests start at More private. */
+const MORE_PRIVATE_FIRST = defaultPreferences(1);
 
 const preflight = (openFeeAmount: bigint) => ({
   openFeeAmount, privateRelayFeeAmount: 0n, burn: { networkFeeAmount: 0n, voluntaryBurnAmount: 0n }, privateRelayRecipient: null, beneficiary: { kind: "publisher" }, publication: "open", inputCount: 1, inputTotal: 20n * PCASH, retry: false,
@@ -65,7 +73,7 @@ let controller: ReturnType<typeof useWalletPanel>;
 let navigate: NavigateFunction;
 function Probe() { controller = useWalletPanel(); navigate = useNavigate(); return null; }
 beforeEach(async () => {
-  settings = new WebsiteSettingsStore(() => localStorage);
+  settings = new WebsiteSettingsStore(() => localStorage, MORE_PRIVATE_FIRST);
   settings.setEnsEnabled(false);
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   for (const mock of Object.values(state.wallet)) if (typeof mock === "function") (mock as ReturnType<typeof vi.fn>).mockReset();
@@ -73,8 +81,11 @@ beforeEach(async () => {
   state.wallet.refreshSubmissionLock.mockResolvedValue({ waiting: [], released: [] });
   state.wallet.wallet.hasReceiveKey.mockReset().mockResolvedValue(true);
   state.wallet.wallet.directSends.mockReset().mockResolvedValue([]);
-  state.l1Code.mockReset().mockResolvedValue(undefined);
-  state.l1Nonce.mockReset().mockResolvedValue(3);
+  state.mainnetCode.mockReset().mockResolvedValue(undefined);
+  state.mainnetNonce.mockReset().mockResolvedValue(3);
+  state.siteCode.mockReset().mockResolvedValue(undefined);
+  state.siteNonce.mockReset().mockResolvedValue(3);
+  state.namesOn = true;
   state.wallet.busy = false;
   state.wallet.progress = undefined;
   state.wallet.actionProgress = undefined;
@@ -374,7 +385,7 @@ describe("choosing fast or slow", () => {
     const intent = { to: RECIPIENT, amount: 10n * PCASH, publication: "self", includeSender: true, newAction: true };
     expect(state.wallet.preflightPrivateSend).toHaveBeenCalledWith(intent);
     expect(state.wallet.sendPrivate).toHaveBeenCalledWith(intent, reviewed);
-    expect(split()).toBe("Recipient gets 10 PCASH · you pay the Ethereum gas");
+    expect(split()).toBe("Recipient gets 10 PCASH");
     expect(forRecipient()).toEqual({ "Your address": "Included" });
   });
 
@@ -830,10 +841,11 @@ describe("the Faster send estimate", () => {
     await act(async () => { speedOption("Faster").click(); });
   };
 
-  it("puts the Ethereum gas in the summary and says what posting earns", async () => {
+  it("leaves the Ethereum gas to the Ethereum wallet and says what posting earns", async () => {
     state.fastEstimate = estimate();
     await faster();
-    expect(split()).toBe("Recipient gets 10 PCASH · Ethereum gas about 0.0000013 ETH, up to 0.000002 ETH");
+    expect(split()).toBe("Recipient gets 10 PCASH");
+    expect(text()).not.toContain("ETH");
     expect(text()).toContain("Posting it earns you about 5 PCASH.");
   });
 
@@ -841,15 +853,6 @@ describe("the Faster send estimate", () => {
     state.fastEstimate = estimate({ collectibleOpenFee: 0n, expectedIssuance: 0n });
     await faster();
     expect(text()).not.toContain("Posting it earns you");
-  });
-
-  it.each([
-    [{ state: "loading" }, "Ethereum gas: estimating…"],
-    [{ state: "error", message: "not enough ETH" }, "Ethereum gas could not be estimated"],
-  ])("says when the cost is not known yet (%o)", async (fastEstimate, cost) => {
-    state.fastEstimate = fastEstimate;
-    await faster();
-    expect(split()).toBe(`Recipient gets 10 PCASH · ${cost}`);
   });
 
   it("does not estimate while More private is selected", async () => {
@@ -924,7 +927,7 @@ describe("resolving the recipient while typing", () => {
 
   it("does not send to a smart-contract wallet and says so without an error", async () => {
     state.wallet.wallet.hasReceiveKey.mockResolvedValue(false);
-    state.l1Code.mockResolvedValue("0x6080604052");
+    state.mainnetCode.mockResolvedValue("0x6080604052");
     await type(input("Recipient"), RECIPIENT);
     await type(input("Amount"), "10");
     expect(state.wallet.wallet.hasReceiveKey).toHaveBeenCalledWith(RECIPIENT.toLowerCase());
@@ -952,14 +955,14 @@ describe("resolving the recipient while typing", () => {
 
   it("treats an EIP-7702 delegated account as a regular wallet", async () => {
     state.wallet.wallet.hasReceiveKey.mockResolvedValue(false);
-    state.l1Code.mockResolvedValue(`0xef0100${"ab".repeat(20)}`);
+    state.mainnetCode.mockResolvedValue(`0xef0100${"ab".repeat(20)}`);
     await type(input("Recipient"), RECIPIENT);
     expect(element.querySelector("[data-recipient-reach]")?.getAttribute("data-recipient-reach")).toBe("regular");
   });
 
   it("cautions about an address that has never been used and still sends", async () => {
     state.wallet.wallet.hasReceiveKey.mockResolvedValue(false);
-    state.l1Nonce.mockResolvedValue(0);
+    state.mainnetNonce.mockResolvedValue(0);
     await type(input("Recipient"), RECIPIENT);
     await type(input("Amount"), "10");
     expect(element.querySelector('[data-recipient-reach="never-used"]')?.textContent)
@@ -967,9 +970,39 @@ describe("resolving the recipient while typing", () => {
     expect(button("Send")!.disabled).toBe(false);
   });
 
+  it("judges the address by its mainnet history while names are on", async () => {
+    state.wallet.wallet.hasReceiveKey.mockResolvedValue(false);
+    state.siteNonce.mockResolvedValue(0);
+    await type(input("Recipient"), RECIPIENT);
+    expect(element.querySelector("[data-recipient-reach]")?.getAttribute("data-recipient-reach")).toBe("regular");
+    expect(state.mainnetNonce).toHaveBeenCalledWith(RECIPIENT.toLowerCase());
+    expect(state.siteNonce).not.toHaveBeenCalled();
+  });
+
+  it("reads no mainnet history once names are turned off during the receive-key lookup", async () => {
+    let answer!: (present: boolean) => void;
+    state.wallet.wallet.hasReceiveKey.mockReturnValue(new Promise<boolean>((resolve) => { answer = resolve; }));
+    state.siteNonce.mockResolvedValue(0);
+    await type(input("Recipient"), RECIPIENT);
+    state.namesOn = false;
+    await act(async () => answer(false));
+    expect(state.mainnetCode).not.toHaveBeenCalled();
+    expect(state.mainnetNonce).not.toHaveBeenCalled();
+    expect(element.querySelector("[data-recipient-reach]")?.getAttribute("data-recipient-reach")).toBe("never-used");
+  });
+
+  it("judges the address on PCASH's own Ethereum network while names are off", async () => {
+    state.namesOn = false;
+    state.wallet.wallet.hasReceiveKey.mockResolvedValue(false);
+    state.siteNonce.mockResolvedValue(0);
+    await type(input("Recipient"), RECIPIENT);
+    expect(element.querySelector("[data-recipient-reach]")?.getAttribute("data-recipient-reach")).toBe("never-used");
+    expect(state.mainnetNonce).not.toHaveBeenCalled();
+  });
+
   it("refuses to send when Ethereum cannot be read for an address without PCASH", async () => {
     state.wallet.wallet.hasReceiveKey.mockResolvedValue(false);
-    state.l1Code.mockRejectedValue(new Error("rpc down"));
+    state.mainnetCode.mockRejectedValue(new Error("rpc down"));
     await type(input("Recipient"), RECIPIENT);
     await type(input("Amount"), "10");
     expect(text()).toContain("Couldn't check this address on Ethereum. Try again in a moment.");
@@ -980,7 +1013,7 @@ describe("resolving the recipient while typing", () => {
     state.wallet.preflightPrivateSend.mockResolvedValue(preflight(PCASH));
     await review();
     expect(element.querySelector("[data-recipient-reach]")).toBeNull();
-    expect(state.l1Code).not.toHaveBeenCalled();
+    expect(state.mainnetCode).not.toHaveBeenCalled();
     expect(state.wallet.preflightPrivateSend.mock.calls[0]![0]).not.toHaveProperty("directSend");
   });
 
@@ -988,7 +1021,7 @@ describe("resolving the recipient while typing", () => {
     const resolved = `0x${"34".repeat(20)}`;
     state.namedAddress = { state: "resolved", address: resolved };
     state.wallet.wallet.hasReceiveKey.mockResolvedValue(false);
-    state.l1Code.mockResolvedValue("0x6080604052");
+    state.mainnetCode.mockResolvedValue("0x6080604052");
     await type(input("Recipient"), "alice.eth");
     expect(state.wallet.wallet.hasReceiveKey).toHaveBeenCalledWith(resolved);
     expect(element.querySelector('[data-recipient-reach="smart-contract"]')).not.toBeNull();
@@ -999,7 +1032,7 @@ describe("resolving the recipient while typing", () => {
     state.namedAddress = { state: "resolved", address: RECIPIENT };
     state.resolveName.mockResolvedValue({ name: "alice.eth", address: fresh, system: "ens" });
     state.wallet.wallet.hasReceiveKey.mockImplementation(async (address: string) => address.toLowerCase() !== fresh);
-    state.l1Code.mockResolvedValue("0x6080604052");
+    state.mainnetCode.mockResolvedValue("0x6080604052");
     await type(input("Recipient"), "alice.eth");
     await type(input("Amount"), "10");
     await act(async () => { button("Send")!.click(); });
@@ -1105,15 +1138,18 @@ describe("keeping the form in place", () => {
   });
 });
 
+/** The form as the sidebar shows it: it closes with the Send view. */
+const renderInSidebar = () => act(async () => { root.render(<WebsiteSettingsContext.Provider value={settings}><MemoryRouter><OwnerPanelsProvider><Probe /><SendCard onClose={() => undefined} /></OwnerPanelsProvider></MemoryRouter></WebsiteSettingsContext.Provider>); });
+
 describe("leaving the Send view", () => {
-  beforeEach(async () => { await act(async () => controller.openSend()); });
+  beforeEach(async () => { await renderInSidebar(); await act(async () => controller.openSend()); });
 
   it("discards a failed preparation and its error", async () => {
     state.wallet.preflightPrivateSend.mockResolvedValue(preflight(PCASH / 100n));
     await review();
     state.wallet.paymentStage = { state: "failed", attemptId: 1 };
     state.wallet.sendPrivate.mockRejectedValue(new Error("proof failed"));
-    await render();
+    await renderInSidebar();
     await act(async () => controller.openOverview());
     expect(controller.review).toBeUndefined();
     expect(controller.paymentError).toBeUndefined();
@@ -1124,6 +1160,16 @@ describe("leaving the Send view", () => {
     await review();
     expect(controller.paymentError).toContain("Insufficient funds");
     await act(async () => controller.closePanel());
+    expect(controller.paymentError).toBeUndefined();
+  });
+});
+
+describe("leaving a page that shows the form", () => {
+  it("clears a send error once no form shows it", async () => {
+    state.wallet.preflightPrivateSend.mockRejectedValue(new Error("Insufficient funds"));
+    await review();
+    expect(controller.paymentError).toContain("Insufficient funds");
+    await act(async () => { root.render(<WebsiteSettingsContext.Provider value={settings}><MemoryRouter><OwnerPanelsProvider><Probe /></OwnerPanelsProvider></MemoryRouter></WebsiteSettingsContext.Provider>); });
     expect(controller.paymentError).toBeUndefined();
   });
 });
@@ -1214,6 +1260,13 @@ it("uses the saved default for new sends without replacing a draft's selection",
   expect(speedOption("More private").checked).toBe(true);
   await act(async () => speedOption("Faster").click());
   expect(settings.getSnapshot().defaultSubmissionMode).toBe("slow");
+});
+
+it("starts a page's send form at the default saved while no form was showing", async () => {
+  await act(async () => root.render(<WebsiteSettingsContext.Provider value={settings}><MemoryRouter><OwnerPanelsProvider><Probe /></OwnerPanelsProvider></MemoryRouter></WebsiteSettingsContext.Provider>));
+  await act(async () => settings.setDefaultSubmissionMode("fast"));
+  await render();
+  expect(speedOption("Faster").checked).toBe(true);
 });
 
 
@@ -1325,5 +1378,39 @@ describe("a message and the payer's address", () => {
     expect(rows()).toMatchObject({ "Your address": shown });
     await act(async () => { button("Send payment")!.click(); });
     expect(state.wallet.sendPrivate).toHaveBeenCalledWith(intent, reviewed);
+  });
+});
+
+describe("the first draft", () => {
+  const renderOn = (l1ChainId: number) => act(async () => { root.render(<NetworkContext.Provider value={{ network: { l1ChainId } as NetworkProfile }}><WebsiteSettingsContext.Provider value={settings}><MemoryRouter><OwnerPanelsProvider><Probe /><SendCard /></OwnerPanelsProvider></MemoryRouter></WebsiteSettingsContext.Provider></NetworkContext.Provider>); });
+
+  it("pays 1 PCASH to vitalik.eth on a testnet, by its address while ENS names are off", async () => {
+    await renderOn(11155111);
+    expect(input("Recipient").value).toBe("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
+    expect(input("Amount").value).toBe("1");
+    await act(async () => root.unmount());
+    root = createRoot(element);
+    settings.setEnsEnabled(true);
+    await renderOn(11155111);
+    expect(input("Recipient").value).toBe("vitalik.eth");
+  });
+
+  it("shows no direct-send caution on a testnet and still refuses a smart-contract wallet", async () => {
+    state.wallet.wallet.hasReceiveKey.mockResolvedValue(false);
+    await renderOn(11155111);
+    expect(element.querySelector("[data-recipient-reach]")).toBeNull();
+    state.mainnetNonce.mockResolvedValue(0);
+    await type(input("Recipient"), RECIPIENT);
+    expect(element.querySelector("[data-recipient-reach]")).toBeNull();
+    state.mainnetCode.mockResolvedValue("0x6080604052");
+    await type(input("Recipient"), `0x${"34".repeat(20)}`);
+    expect(element.querySelector('[data-recipient-reach="smart-contract"]')).not.toBeNull();
+    expect(button("Send")!.disabled).toBe(true);
+  });
+
+  it("starts empty on Ethereum mainnet", async () => {
+    await renderOn(1);
+    expect(input("Recipient").value).toBe("");
+    expect(input("Amount").value).toBe("");
   });
 });

@@ -65,7 +65,7 @@ function AccountHistoryTable({ page }: { page: TransactionPageResult }) {
             <td><TransactionLink transactionId={item.transactionId} /></td>
             <td className={explorer.num}><BlockLink number={item.block.blockNumber} /></td>
             <td className="muted"><RelativeTime seconds={item.timestamp} /></td>
-            <td>{formatKind(item.kind)}</td>
+            <td>{formatKind(item.kind, item.accountCreation)}</td>
             <td className={explorer.num}>{item.account?.accountRevision.toString() ?? "—"}</td>
             <td><Tag tone={outcomeTone(item.outcome)}>{outcomeLabel(item.outcome)}</Tag></td>
           </tr>)}
@@ -100,7 +100,7 @@ function AddressPage(props: AddressIdentity) {
 
 function UserAddressPage({ address, identityName, avatar, accountPathname, accountRead }: AddressIdentity & { accountRead: { value: AccountSnapshot | undefined; error: string | undefined } }) {
   const { status } = useReadyExplorer();
-  const { profile, funds, connectedAccount, phase, signIn } = useWallet();
+  const { profile, funds, history, connectedAccount, phase, signIn } = useWallet();
   const owner = connectedAccount?.toLowerCase() === address.toLowerCase();
   const signedIn = owner && profile !== undefined;
   const location = useLocation();
@@ -119,7 +119,7 @@ function UserAddressPage({ address, identityName, avatar, accountPathname, accou
       {account !== undefined && <span className={styles.registration}><span className={styles.statusDot} aria-hidden="true" />{account === null ? "Not registered" : "Account registered"}</span>}
     </header>
     <section aria-label="PCASH balance" className={styles.balanceLine}>
-      <div><p className={styles.balanceLabel}>Balance</p><div className={styles.balance} data-testid="wallet-balance">{!signedIn ? <span className={styles.hidden} aria-label="Private">*****</span> : funds === undefined ? "—" : <PcashAmount value={funds.total} rounding="down" />}</div>{signedIn && <HistoryScanStatus />}</div>
+      <div><p className={styles.balanceLabel}>{signedIn && history.pending ? "Estimated balance" : "Balance"}</p><div className={styles.balance} data-testid="wallet-balance">{!signedIn ? <span className={styles.hidden} aria-label="Private">*****</span> : funds === undefined ? "—" : <PcashAmount value={funds.total} rounding="down" />}</div>{signedIn && <HistoryScanStatus />}</div>
       {account !== undefined && <div className={styles.actions}>{!receivable ? account === null && owner
         ? <button type="button" className="button primary" onClick={() => panel.openOverview()}>Set up PCASH</button>
         : account === null ? <>

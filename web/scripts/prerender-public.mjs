@@ -21,7 +21,7 @@ const shareTags = [
     `<meta property="og:image" content="${shareImage}" />`,
     '<meta property="og:image:width" content="1200" />',
     '<meta property="og:image:height" content="630" />',
-    '<meta property="og:image:alt" content="PCASH seal beside the words Private money Ethereum can program." />',
+    '<meta property="og:image:alt" content="The PCASH seal beside the words A better Zcash." />',
     '<meta name="twitter:card" content="summary_large_image" />',
     `<meta name="twitter:image" content="${shareImage}" />`,
   ]),

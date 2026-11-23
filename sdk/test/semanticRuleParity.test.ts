@@ -3,8 +3,6 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { keccak_256 } from "@noble/hashes/sha3.js";
 import {
-  ASSET_CREATION_EIP712_TYPE,
-  ASSET_CREATION_WITH_BURN_EIP712_TYPE,
   ASSET_BURN_EIP712_TYPE,
   ASSET_BURN_WITH_BURN_EIP712_TYPE,
   ASSET_PAYMENT_EIP712_TYPE,
@@ -13,11 +11,13 @@ import {
   BATCH_TRANSFER_WITH_BURN_EIP712_TYPE,
   CONTRACT_FEE_SPONSORSHIP_EIP712_TYPE,
   CONTRACT_FEE_SPONSORSHIP_WITH_BURN_EIP712_TYPE,
+  MINT_EIP712_TYPE,
+  MINT_WITH_BURN_EIP712_TYPE,
   assetBurnTypedData,
-  assetCreationTypedData,
   assetPaymentTypedData,
   batchTransferTypedData,
   contractFeeSponsorshipTypedData,
+  mintTypedData,
 } from "../src/rules/semanticRules.ts";
 import {
   PAYMENT_EIP712_TYPE,
@@ -28,7 +28,7 @@ import {
 import { USER_ACCOUNT_UPDATE_TYPE, USER_ACCOUNT_UPDATE_WITH_BURN_TYPE } from "../src/constants/networkProfile.ts";
 import type { NativeBurn } from "../src/protocol/fee.ts";
 import { accountUpdateTypedData, pcashSigningHash, pcashTypedData, signDigest } from "../src/eip712/eip712.ts";
-import { assetCreationMarker, standardFungibleAssetId } from "../src/protocol/asset.ts";
+import { mintMarker } from "../src/protocol/asset.ts";
 import {
   noteBodyCommitment,
   nullifierKeyCommitment,
@@ -62,10 +62,10 @@ function noirBytes(relativePath: string, name: string, length = 32): Uint8Array 
 
 const CASES: ReadonlyArray<[string, string, string, string]> = [
   [
-    "PcashAssetCreation",
+    "PcashMint",
     "rules/lib/src/generated/reference_rule_constants.nr",
-    "S_ASSET_CREATION_TYPE_HASH",
-    ASSET_CREATION_EIP712_TYPE,
+    "S_MINT_TYPE_HASH",
+    MINT_EIP712_TYPE,
   ],
   [
     "PcashPayment",
@@ -112,10 +112,10 @@ const CASES: ReadonlyArray<[string, string, string, string]> = [
   // Each value message's WithBurn variant: the network fee and the voluntary
   // burn right after the open fee.
   [
-    "PcashAssetCreationWithBurn",
+    "PcashMintWithBurn",
     "rules/lib/src/generated/reference_rule_constants.nr",
-    "S_ASSET_CREATION_WITH_BURN_TYPE_HASH",
-    ASSET_CREATION_WITH_BURN_EIP712_TYPE,
+    "S_MINT_WITH_BURN_TYPE_HASH",
+    MINT_WITH_BURN_EIP712_TYPE,
   ],
   [
     "PcashPaymentWithBurn",
@@ -312,19 +312,17 @@ describe("signed-test signatures", () => {
     return pcashTypedData(network, TRANSACTION_DETAIL_EIP712_TYPE, message);
   };
 
-  // `run_signed_creation` in rules/lib/src/asset_creation.nr.
-  const creationTypedData = (burn?: NativeBurn) => {
-    const assetId = standardFungibleAssetId({ metadataCommitment: 6n, initialSupply: 100n, assetSecretCommitment: 7n });
-    return assetCreationTypedData(network, {
+  // `run_signed_mint` in rules/lib/src/mint.nr: two mints of TEST_ASSET_ID.
+  const signedMintTypedData = (burn?: NativeBurn) => {
+    const assetId = 0x7777n;
+    const nullifiers = [mintMarker(assetId, 0x51n), mintMarker(assetId, 0x52n), 12n, 13n];
+    return mintTypedData(network, {
       pcashChainId,
       assetId,
-      metadataCommitment: 6n,
-      initialSupply: 100n,
-      assetSecretCommitment: 7n,
-      outputs: [{ recipient: RECIPIENT, amount: 100n, assetId }, undeclared, undeclared, undeclared, undeclared],
+      outputs: [{ recipient: RECIPIENT, amount: 250n, assetId }, undeclared, undeclared, undeclared, undeclared],
       ...terms,
       openFeeAmount: 0n,
-      transactionContext: payoutTransactionContext(pcashChainId, [assetCreationMarker(assetId, 8n), 11n, 12n, 13n]),
+      transactionContext: payoutTransactionContext(pcashChainId, nullifiers),
       validUntil: 1000n,
     }, undefined, burn);
   };
@@ -352,7 +350,7 @@ describe("signed-test signatures", () => {
         outputs: [{ recipient: RECIPIENT, amount: 1000n, assetId: 0n }, undeclared, undeclared, undeclared, undeclared],
         ...terms,
       }, undefined, burn)],
-    ["rules/lib/src/asset_creation.nr", "SIGNED_CREATION", creationTypedData],
+    ["rules/lib/src/mint.nr", "SIGNED_MINT", signedMintTypedData],
     // `run_signed_update` in rules/admin/src/main.nr.
     ["rules/admin/src/main.nr", "SIGNED_UPDATE", (burn) =>
       accountUpdateTypedData(network, {

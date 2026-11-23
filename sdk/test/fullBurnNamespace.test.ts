@@ -10,14 +10,14 @@ import { authorizePcashRequestWithPrivateKey } from "../src/eip712/authorization
 import { createChonkCircuitResolver } from "../src/node/chonkMaterial.ts";
 import { defaultUserAccountRuleSet } from "../src/rules/referenceRules.ts";
 import { accountRuleEntryCommitment, accountStateCommitment, buildAccountRuleSet } from "../src/protocol/account.ts";
-import { assetSecretCommitment, standardFungibleAssetId } from "../src/protocol/asset.ts";
+import { findAssetDescriptor } from "../src/protocol/asset.ts";
 import { sizeClassFiller } from "../src/protocol/envelope.ts";
 import { DEFAULT_NETWORK_CONFIG } from "../src/protocol/network.ts";
 import { fullOutputCommitment, nullifierKeyCommitment, ownerCommitment } from "../src/protocol/notes.ts";
 import { SlotClass } from "../src/protocol/transaction.ts";
 import type { WitnessMap } from "../src/protocol/witness.ts";
 import type { ChonkCircuitMaterial } from "../src/prover/stacks.ts";
-import { syntheticRecentBlockFixture, TEST_DEFAULT_RULE_SECRETS } from "@pcash/test-support/protocol-fixtures";
+import { syntheticRecentBlockFixture, TEST_DEFAULT_RULE_SECRETS, TEST_MINT_RULE } from "@pcash/test-support/protocol-fixtures";
 import { proverAssetsDir } from "./circuitBundle.ts";
 import { deriveTestWallet } from "./testWallet.ts";
 import { noOpEventApplicationWitness } from "./noOpEventApplication.ts";
@@ -38,10 +38,7 @@ function fullBurnFixture(shape: PrivateValueShape, authorizationVkHash: bigint) 
   const rules = buildAccountRuleSet([{ entryIndex: rule.entryIndex, accountRuleEntryCommitment: accountRuleEntryCommitment(
     authorizationVkHash, rule.configurationCommitment, rule.commitmentBlinder,
   ) }]);
-  const assetId = standardFungibleAssetId({
-    metadataCommitment: 765n, initialSupply: 987n,
-    assetSecretCommitment: assetSecretCommitment(654n),
-  });
+  const assetId = findAssetDescriptor({ metadataCommitment: 765n, mintRule: TEST_MINT_RULE }, 0n).assetId;
   const assetNote = { owner: wallet.address, noteSecret: 456n, assetId, amount: 987n };
   const assetLeafIndex = 3;
   const outputs = new SparseMerkleTree(40);

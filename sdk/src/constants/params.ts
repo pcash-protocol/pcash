@@ -49,6 +49,8 @@ export const ACCOUNT_KIND_CONTRACT = 1n;
 // --- Range-check bit widths ---
 export const ADDRESS_BITS = 160; // uint160(address) and issuanceRecipient inputs
 export const AMOUNT_BITS = 128; // note amounts, fee amount
-export const ASSET_AGGREGATE_BITS = 131; // standard asset aggregate/burn bound, independent of transaction capacity
+export const ASSET_AGGREGATE_BITS = 133; // asset burn bound: a full profile L input set
+/** An asset ID without a transfer rule is below 2^252; one with a rule is in [2^252, 2^253). */
+export const ASSET_CLASS_BITS = 252;
 export const LEAF_INDEX_BITS = 40; // note/account leaf indices
 export const VALID_UNTIL_BITS = 64; // validUntilTimestamp < 2^64

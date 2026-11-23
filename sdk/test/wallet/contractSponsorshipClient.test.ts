@@ -18,14 +18,13 @@ import {
   computeCircuitVkHash,
   VK_LEN,
   decodeContractBody,
-  assetSecretCommitment,
   fullOutputCommitment,
   functionSelector,
   noteBodyCommitment,
   ownerCommitment,
   WIRE_PROOF_BYTES,
   SlotClass,
-  standardFungibleAssetId,
+  findAssetDescriptor,
 } from "@pcash/sdk/protocol";
 import { contractFunctionAuthorization, openedAssetActionOutput } from "@pcash/sdk/builders";
 import { SparseMerkleTree } from "@pcash/sdk/crypto";
@@ -33,7 +32,7 @@ import type { AssetActionProofRequest } from "@pcash/sdk/browser-prover/requests
 import type { PcashNodeClient, StatusResult, WitnessSnapshotQuery } from "@pcash/sdk/clients";
 import type { WalletFileData } from "../../src/wallet/noteStore.ts";
 import { MERKLE_DEPTH } from "@pcash/sdk/constants";
-import { defaultUserAccountRuleSet } from "@pcash/sdk/rules";
+import { defaultUserAccountRuleSet, fixedSupplyMintRule, fixedSupplySecretCommitment } from "@pcash/sdk/rules";
 import { createWalletRuntime } from "../../src/wallet/actions/walletRuntime.ts";
 import {
   runSponsoredContractAssetActionClient,
@@ -64,10 +63,10 @@ const recipient = derivePcashProfileFromPrivateKey(new Uint8Array(32).fill(9), N
 const hex = (value: bigint): string => `0x${value.toString(16).padStart(64, "0")}`;
 const addressOf = (value: bigint): string => `0x${value.toString(16).padStart(40, "0")}`;
 
-const assetId = standardFungibleAssetId({
-  metadataCommitment: 222n, initialSupply: 2_000n,
-  assetSecretCommitment: assetSecretCommitment(333n),
-});
+const assetId = findAssetDescriptor({
+  metadataCommitment: 222n,
+  mintRule: fixedSupplyMintRule({ supply: 2_000n, secretCommitment: fixedSupplySecretCommitment(333n) }),
+}, 0n).assetId;
 const contract = buildContractBody({
   nullifierKey: { publishesNkRoot: true, nkRoot: 0x5151n },
   functions: [{ selector: functionSelector(0), applicationVkHash: 0x1234n, configurationCommitment: 0x5678n }],

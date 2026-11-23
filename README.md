@@ -9,8 +9,9 @@ Read the [white paper](docs/whitepaper.md) for the case, [Security](docs/securit
 - [`node/`](node/): the Rust node. It computes PCASH from Ethereum's history, verifies proofs, and serves wallets.
 - [`sdk/`](sdk/): the TypeScript protocol library that builds and proves transactions.
 - [`wallet/`](wallet/) and [`relayer/`](relayer/): a headless wallet, and a relayer that publishes other people's transactions.
-- [`circuits/`](circuits/): the protocol circuits and the reference account rules ([README](circuits/README.md)).
+- [`circuits/`](circuits/): the protocol circuits, the reference account rules and the standard mint and transfer rules ([README](circuits/README.md)).
 - [`marketplace/`](marketplace/): PCASH-for-ETH trades through escrow ([README](marketplace/README.md)).
+- [`stablecoin/`](stablecoin/): the reference private dollar's Ethereum vault and deny-list contracts and the issuer's service ([guide](docs/guides/private-dollars.md)).
 - [`lineage/`](lineage/): an event application that certifies where PCASH came from ([README](lineage/README.md)).
 - [`derivation-proof/`](derivation-proof/): a succinct proof of PCASH's chain that an Ethereum contract checks ([README](derivation-proof/README.md)).
 - [`web/`](web/): the website, with its wallet, marketplace, explorer, tokens, messages and documents.
@@ -24,7 +25,9 @@ Everything under [`docs/`](docs/) is published on the website.
 
 - [White paper](docs/whitepaper.md): what PCASH is and why.
 - [Security](docs/security.md): how PCASH protects its money and the people who use it, and the latest security review. [`SECURITY.md`](SECURITY.md) says how to report a vulnerability.
-- [Building on PCASH](docs/guides/building-on-pcash.md): what applications can do with account rules and contracts.
+- [Building on PCASH](docs/guides/building-on-pcash.md): what applications can do with account rules, contracts and asset rules.
+- [Merchant payments](docs/guides/merchant-payments.md): invoices, confirmation, recovery and receipts, with code from a tested scenario.
+- [Private dollars](docs/guides/private-dollars.md): how to issue a private dollar, from the issuer's Ethereum vault and deny list to deposits, redemptions and freezes.
 - [Running a node](docs/guides/running-a-node.md): running and configuring a node and the wallet service.
 - [Protocol specification](docs/protocol-spec.md): the exact rules every implementation follows. It is normative.
 - [Terms of Service](docs/terms.md) and [Privacy Policy](docs/privacy.md) for the website.

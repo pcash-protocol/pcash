@@ -2,61 +2,76 @@
 // Inputs: circuits/manifest.json, the circuit bundle.
 
 /** Mega VK hash of `account_rule_mine`. */
-export const MINE_RULE_VK_HASH = 0x07fdb90a524c1d742e043f171cd4a0a802ae004f31417a33ac9d02f6d8c9d7e9n;
+export const MINE_RULE_VK_HASH = 0x107a6719d3f45e0196a40da008c0148e296dd6923453464b792506aaf9f43d67n;
 
 /** Mega VK hash of `account_rule_payment_ecdsa`. */
-export const PAYMENT_RULE_VK_HASH = 0x11b3555ac105cf19a6119024b1ad6ba1b2f4446d7ce2a0408703b31d90e7cffen;
+export const PAYMENT_RULE_VK_HASH = 0x2a2951d9541c2479c8f6ea18d73b637757e73dbde05a72dd04da46f46d6a2fc2n;
 
 /** Mega VK hash of `account_rule_asset_payment_ecdsa`. */
 export const ASSET_PAYMENT_RULE_VK_HASH = 0x1db705855e9c5886b19b1f85a86a79a8605a9a2a7888b4c9592e845cfeff1ef5n;
 
 /** Mega VK hash of `account_rule_asset_burn_ecdsa`. */
-export const ASSET_BURN_RULE_VK_HASH = 0x01d1e2a12fbe6d11b10936ccc0336d22f84654669c6157b584783579ab229ce3n;
+export const ASSET_BURN_RULE_VK_HASH = 0x2ce56dc3ea1756fcbbac7d69524538ffe2f536f82c267c2aae319d54b45e29ban;
 
 /** Mega VK hash of `account_rule_admin_ecdsa`. */
-export const ADMIN_RULE_VK_HASH = 0x11a3df0bc01a90c28c0480721cd41750187bb43095efe1641ac4290748ba65acn;
+export const ADMIN_RULE_VK_HASH = 0x01793fcb2fe0738bb0683c43f297551aae7a306ac14ec4316ea759c2394bbf0dn;
 
 /** Mega VK hash of `account_rule_batch_transfer_ecdsa`. */
-export const BATCH_TRANSFER_RULE_VK_HASH = 0x303cc49c9f87f093c85e794586b6a6318aad552a72056170a44f50ff211db91en;
+export const BATCH_TRANSFER_RULE_VK_HASH = 0x1a112bc7085a4462c4b8dc917a67c54fbc0b8abc588ec1f1560760b633d2e314n;
 
 /** Mega VK hash of `account_rule_large_batch_transfer_ecdsa`. */
-export const LARGE_BATCH_TRANSFER_RULE_VK_HASH = 0x19c416f0443579b4f54e3f66cea89738ea6edc3986fc9ca0ec3d3f631bb418fdn;
+export const LARGE_BATCH_TRANSFER_RULE_VK_HASH = 0x133ce2cf3c5e7459c0a81def1e8cb251a67c743e3c5b0fbc070e807d8df51693n;
 
-/** Mega VK hash of `account_rule_asset_creation_ecdsa`. */
-export const ASSET_CREATION_RULE_VK_HASH = 0x19e0fd8c4ed51ee180469ed490c6780fe2a43f3c67aa5b7d273fc00177de456en;
+/** Mega VK hash of `account_rule_mint_ecdsa`. */
+export const MINT_RULE_VK_HASH = 0x2f7b7fd22a2c9ce93aa9462cdbd875ccff04179021a25351fdfce899561e82f7n;
 
-/** Mega VK hash of `account_rule_large_asset_creation_ecdsa`. */
-export const LARGE_ASSET_CREATION_RULE_VK_HASH = 0x27fe5e51e64e651c0f39746b00cd1204fd3e773a751e24aadeb44dec8fc674a8n;
+/** Mega VK hash of `account_rule_large_mint_ecdsa`. */
+export const LARGE_MINT_RULE_VK_HASH = 0x0aeaba45cb4632130400ab7421995596f935f8b6061b8517d57807dac098376en;
 
 /** Mega VK hash of `account_rule_contract_fee_sponsorship_ecdsa`. */
-export const CONTRACT_FEE_SPONSORSHIP_RULE_VK_HASH = 0x26bf658f0f094de080c652ae9aac1dfe1ec2fff8d0513bd3fb93fc7a0d4d606en;
+export const CONTRACT_FEE_SPONSORSHIP_RULE_VK_HASH = 0x1af8a20a0ca483dfce2e6c2c320facafc7f4b908b9195f77009847aa438cdee1n;
 
 /** Mega VK hash of `account_rule_large_contract_fee_sponsorship_ecdsa`. */
-export const LARGE_CONTRACT_FEE_SPONSORSHIP_RULE_VK_HASH = 0x2d616d362a51db8c2c64b80bdcc727f4e19c429bc45dbed3f1d40c519a54e5b8n;
+export const LARGE_CONTRACT_FEE_SPONSORSHIP_RULE_VK_HASH = 0x2408c50ecae7a813e83c19bc8b09ec2e95556d96a3aa37fa68f6796707e6b98en;
+
+/** Mega VK hash of `transfer_rule_sender_deny_list`. */
+export const SENDER_DENY_LIST_RULE_VK_HASH = 0x2dbea5078b5bb76b579c0815bc90280859e5d4f98cb64216aadfe86b6c571987n;
+
+/** Mega VK hash of `mint_rule_fixed_supply`. */
+export const FIXED_SUPPLY_RULE_VK_HASH = 0x2bbb8b9fade955f973695dc006141181055483618eaadc0af950771513198414n;
+
+/** Mega VK hash of `mint_rule_account_mint`. */
+export const ACCOUNT_MINT_RULE_VK_HASH = 0x1ff097a63a3ffdfa0386ce373923657f6ec7711f71d66fe4afa8ae25dfe0fe0an;
+
+/** Mega VK hash of `mint_rule_deposit_mint`. */
+export const DEPOSIT_MINT_RULE_VK_HASH = 0x20a99afb9df75b35cc4d3c6394f63467487ad7a8259a69821db4a6613d3eb92cn;
 
 /** Mega VK hash of `account_rule_full_ecdsa`. */
-export const FULL_RULE_VK_HASH = 0x0577bbf6f3d73480805aff7174bc677a90e5201724520248a6743623cc0cbb45n;
+export const FULL_RULE_VK_HASH = 0x23627ffbab95495f228a3c8958b20d21d50ce7042550ebbcdb4aa39421339bf3n;
 
 /** Mega VK hash of `account_rule_multisig`. */
-export const MULTISIG_RULE_VK_HASH = 0x222455bc047ebd03cb8e8d09c492e0ba10f07168e5e97aeb8a2a9966d4d49983n;
+export const MULTISIG_RULE_VK_HASH = 0x01a16899519bb49206e1ab7a7257f4b7bc7eb927594bdef50c1f8a8ae3a2886dn;
 
 /** Mega VK hash of `account_rule_asset_covenant`. */
 export const ASSET_COVENANT_RULE_VK_HASH = 0x25a24984759866bfe42e32cf3053b754e896d0497d94cc9b681f084751e16e96n;
 
 /** Mega VK hash of `account_rule_shared_asset_claim`. */
-export const SHARED_ASSET_CLAIM_RULE_VK_HASH = 0x2220db3abfcc548c8446cb3379b06a2eaf92da30f397ae229c43ce89e22b8c1cn;
+export const SHARED_ASSET_CLAIM_RULE_VK_HASH = 0x11229c9096270b292f9cf9147e8de8c77eff46fc983420ef6a9961bb21bb5419n;
+
+/** Mega VK hash of `mint_rule_voucher`. */
+export const VOUCHER_RULE_VK_HASH = 0x002e7c42e7badfe7982f67d199492aed5446bd175f36e1ed08c26f0c988c20d6n;
 
 /** Mega VK hash of `no_op_event_application`. */
 export const NO_OP_EVENT_APPLICATION_VK_HASH = 0x08414e45d496e1d641e75ffd142ab4f99cdf01cf9696cc7e4f5dcf79e11a913cn;
 
 /** Mega VK hash of `event_sender_authentication`. */
-export const EVENT_SENDER_AUTHENTICATION_RULE_VK_HASH = 0x1b6b5ad244a257e91a2c78f1d36bb6110bda638589bfd57a5876df99eb6c3f68n;
+export const EVENT_SENDER_AUTHENTICATION_APPLICATION_VK_HASH = 0x20676855104cc1c5877e77e4613b8bce40bfe6dd5046ef4c8943efa8f9451c60n;
 
 /** Mega VK hash of `event_large_sender_authentication`. */
-export const EVENT_LARGE_SENDER_AUTHENTICATION_RULE_VK_HASH = 0x1d5ad44395b28a20b8351d70708c5a17cac15eb8939f14f80d4db867b418ecc5n;
+export const EVENT_LARGE_SENDER_AUTHENTICATION_APPLICATION_VK_HASH = 0x1894aa86ae57a60e0b1792b8ae369cfdf7549289885e679c16de26ff06a17ebdn;
 
 /** Mega VK hash of `account_rule_event_gate`. */
 export const EVENT_GATE_RULE_VK_HASH = 0x016aae06cd429bbfb79675d08efc0fce55e2747f9341d26769655e43de5f93a8n;
 
 /** Mega VK hash of `event_fixture`. */
-export const EVENT_FIXTURE_RULE_VK_HASH = 0x055e87673f6f73a62d6a7eddbb105282401ed4c60a04bfdc6d8c09b3cf2f4ac4n;
+export const EVENT_FIXTURE_APPLICATION_VK_HASH = 0x055e87673f6f73a62d6a7eddbb105282401ed4c60a04bfdc6d8c09b3cf2f4ac4n;

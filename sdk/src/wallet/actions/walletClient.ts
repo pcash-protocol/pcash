@@ -1,3 +1,4 @@
+import type { L1LogReader } from "../denyListSync.ts";
 import { resumeValueTransaction, type ResumeValueTransactionIntent, type ResumeValueTransactionResult } from "./resumeValueTransaction.ts";
 import { restoreTransactionData, type TransactionData, type DataRecord } from "@pcash/sdk/delivery";
 import type { StoredTransactionRecords } from "../noteStore.ts";
@@ -5,7 +6,7 @@ import { planNativeConsolidation, ConsolidationRequiredError } from "../consolid
 import { InsufficientNotesError } from "../noteStore.ts";
 import type { PayoutComponent, PayoutSourceKind } from "@pcash/sdk/protocol";
 import { planPublication, privateValueActionUnits, publicationOf, PADDED_PRIVATE_VALUE_BYTE_SIZE } from "./publication.ts";
-import { nativeBurnAmount, quoteNativeBurn } from "@pcash/sdk/protocol";
+import { isRestrictedAssetId, nativeBurnAmount, quoteNativeBurn } from "@pcash/sdk/protocol";
 import { NativeActivityReader, nativeActivityKey, type WalletNativeActivity } from "./nativeActivity.ts";
 import { PcashNodeClient, samePcashIdentity, statusPcashIdentity, type StatusResult } from "@pcash/sdk/clients";
 import type { PcashActionSigner } from "@pcash/sdk/eip712";
@@ -24,6 +25,7 @@ import { isPcashProfile, isSpendableWallet, missingSpendableCapability } from ".
 import { emptyWalletState, WALLET_DATABASE_STATE_STORE, type WalletDatabase, type WalletStateStore } from "../store.ts";
 import {
   addWalletAsset,
+  unopenableRuleReason,
   livePendingNoteFundedTransfers,
   noteIsSpendable,
   noteStatus,
@@ -39,6 +41,7 @@ import {
 } from "../noteStore.ts";
 import { BULK_RECOVERY_OBSERVATION_SECONDS, recoveredBulkGroups, type BulkChunk, type BulkJob } from "../bulkJobs.ts";
 import type { AssetTransferIntent } from "./assetTransferClient.ts";
+import type { DepositMintIntent, WalletDeposit } from "./depositMintClient.ts";
 import type { BulkJobStep } from "./bulkJobClient.ts";
 import { receiveKeyHashHex, receiveKeyPairs } from "../receiveKeyring.ts";
 import type {
@@ -58,7 +61,6 @@ import {
   type WalletReceivedDirectSend,
 } from "../directSends.ts";
 import { retryWhileSyncConflict } from "./syncConflictRetry.ts";
-import { historyReplayStore, type HistoryReplayStore } from "./historyReplay.ts";
 import {
   createWalletRuntime,
   WalletCapabilityError,
@@ -104,14 +106,22 @@ export interface WalletClientOptions<Prepared = unknown, Output = unknown> {
   /** Local operational metrics; browser wallets default to an in-process no-op. */
   metrics?: WalletMetrics;
   /**
-   * Open a store with no local chain state at the current block and scan the
-   * history before it in the background (`history:*` events), so the wallet is
-   * usable at once. Until that scan finishes, notes from before the block are
-   * missing, and `sync()` does not wait for it.
+   * Open a store with no local chain state, or one far behind, at the current
+   * block and scan the outputs before it in the background, newest first
+   * (`history:*` events), so the wallet is usable at once. Each scanned chunk's
+   * notes become spendable with their final spend status; the scan can still
+   * show notes a stale store already held as spent. `sync()` does not wait for
+   * the scan.
    */
   backgroundHistory?: boolean;
   /** Runs the scan's trial decryption, as `createBrowserTrialDecryption` does on workers; in-process by default. */
   trialDecrypt?: TrialDecrypt;
+  /**
+   * Reads Ethereum logs for restricted assets' deny lists and for deposits;
+   * without it the wallet sends only assets without a transfer rule and
+   * neither finds nor mints deposits.
+   */
+  l1Logs?: L1LogReader;
 }
 
 export type WalletAuthorityOptions =
@@ -169,6 +179,10 @@ export interface WalletAsset {
 }
 
 export type WalletAssetSendIntent<Prepared = unknown, Output = unknown> = Omit<AssetTransferIntent, "burnAmount"> & {
+  submission?: DurableSubmissionAdapter<Prepared, Output>;
+};
+
+export type WalletDepositMintIntent<Prepared = unknown, Output = unknown> = DepositMintIntent & {
   submission?: DurableSubmissionAdapter<Prepared, Output>;
 };
 
@@ -510,7 +524,6 @@ export class Wallet<Prepared = unknown, Output = unknown> {
   #scannedThrough: { pcashNumber: bigint; pcashHash: string } | undefined;
   readonly #backgroundHistory: boolean;
   /** The history replay's own store, kept between attempts. */
-  #historyReplay: HistoryReplayStore | undefined;
   #historyAttempt: Promise<void> | undefined;
   readonly #historyAbort = new AbortController();
   #closePromise: Promise<void> | undefined;
@@ -556,6 +569,7 @@ export class Wallet<Prepared = unknown, Output = unknown> {
       ...(options.settlePollIntervalMs === undefined ? {} : { settlePollIntervalMs: options.settlePollIntervalMs }),
       ...(options.settlePollMaxAttempts === undefined ? {} : { settlePollMaxAttempts: options.settlePollMaxAttempts }),
       ...(options.trialDecrypt === undefined ? {} : { trialDecrypt: options.trialDecrypt }),
+      ...(options.l1Logs === undefined ? {} : { l1Logs: options.l1Logs }),
     });
   }
 
@@ -786,7 +800,7 @@ export class Wallet<Prepared = unknown, Output = unknown> {
       if (data?.syncedThrough === undefined) return { state: "unavailable", reason: "not-synchronized" };
       if (data.historyStartOutputIndex !== "0" && options.recoverHistory === true) {
         const recovery = this.#nativeHistoryRecovery ??= data.historyReplayRequired === true
-          ? this.#replayHistory()
+          ? this.#scanHistory()
           : this.sync({ rescan: true, awaitFunds: true });
         try { await recovery; } finally { if (this.#nativeHistoryRecovery === recovery) this.#nativeHistoryRecovery = undefined; }
         data = await this.#store.load();
@@ -960,16 +974,23 @@ export class Wallet<Prepared = unknown, Output = unknown> {
     return this.#trackedOperation(async () => assetSummaries(await this.#store.load()));
   }
 
-  /** Verify a shared definition (text, link, or value) against the assetId it derives, and keep it. */
+  /**
+   * Verify a shared definition (text, link, or value) against the assetId it
+   * derives, and keep it in place of any definition the wallet held for that
+   * asset. A restricted asset's deny list is read at the wallet's current block.
+   */
   importAssetDefinition(input: AssetDefinition | string): Promise<{ assetId: bigint }> {
     return this.#trackedOperation(async () => {
       const definition = typeof input === "string" ? parseAssetDefinition(input) : input;
       const assetId = assetDefinitionAssetId(definition);
+      const refused = unopenableRuleReason(definition);
+      if (refused !== undefined) throw new Error(refused);
       await this.#store.transaction((current) => {
         const data = current ?? emptyWalletState({ address: this.#profile.address, network: this.network });
-        addWalletAsset(data, { assetId, definition });
+        addWalletAsset(data, { assetId, definition }, { replaceDefinition: true });
         return { data, value: undefined };
       });
+      if (definition.transferRule !== undefined) await this.#runtime.prefetchPublicationOpenings();
       return { assetId };
     });
   }
@@ -1128,7 +1149,7 @@ export class Wallet<Prepared = unknown, Output = unknown> {
         recoveredNotes: result.recovered.length,
       }));
       this.#recordAccountMetrics(result.data);
-      if (result.data.historyReplayRequired === true) void this.#replayHistory().catch(() => undefined);
+      if (result.data.historyReplayRequired === true) void this.#scanHistory().catch(() => undefined);
       return result;
     } catch (cause) {
       const error = cause instanceof Error ? cause : new Error(String(cause));
@@ -1153,23 +1174,20 @@ export class Wallet<Prepared = unknown, Output = unknown> {
   }
 
   /**
-   * Scan the history before the block this wallet opened at, and adopt it.
-   * Callers share the attempt in flight. A failed attempt keeps the replay's
-   * progress, and the next synchronization starts another.
+   * Scan the outputs this wallet skipped when it opened at a later block.
+   * Callers share the attempt in flight. A failed attempt keeps every chunk it
+   * committed, and the next synchronization starts another.
    */
-  #replayHistory(): Promise<void> {
+  #scanHistory(): Promise<void> {
     this.#historyAttempt ??= this.#track((async () => {
       try {
-        this.#historyReplay ??= historyReplayStore(this.#store);
-        await this.#runtime.replayHistory({
-          replay: this.#historyReplay,
+        await this.#runtime.scanHistory({
           signal: this.#historyAbort.signal,
           onOutputs: (scanned, total) => this.#emit("history:progress", {
             ...this.#eventContext(),
             outputs: Object.freeze({ scanned, total }),
           }),
         });
-        this.#historyReplay = undefined;
         this.#emit("history:completed", this.#eventContext());
       } catch (cause) {
         const error = cause instanceof Error ? cause : new Error(String(cause));
@@ -1383,14 +1401,55 @@ export class Wallet<Prepared = unknown, Output = unknown> {
     });
   }
 
-  /** Pay recipients in one S action: one under the asset-payment rule, several as a batch transfer. Longer lists are bulk jobs. */
+  /** Mint an account-mint asset whose configured account is this wallet's. */
+  mint(intent: Parameters<WalletRuntimeInstance<Prepared, Output>["accountMint"]>[0]): Promise<Awaited<ReturnType<WalletRuntimeInstance<Prepared, Output>["accountMint"]>>> {
+    return this.#action("mint", (lifecycle) => {
+      this.#requireSpendable("mint");
+      return this.#runtime.accountMint({ ...intent, ...lifecycle.durableCallbacks(intent) });
+    });
+  }
+
+  /**
+   * A fresh deposit code for a deposit-mint asset, for a depositor to pass to
+   * the asset's vault. Each call commits to this chain, the asset and this
+   * wallet's address under a new nonce; the wallet stores nothing and finds
+   * the deposits from Ethereum.
+   */
+  createDepositCode(params: { asset: AssetDefinition }): string {
+    this.#assertOpen();
+    return this.#runtime.depositCode(params.asset);
+  }
+
+  /**
+   * This wallet's deposits to a deposit-mint asset's vault, read from Ethereum
+   * through the block PCASH has reached. The first call for an asset reads the
+   * vault's logs from the network's genesis Ethereum block; later calls read
+   * only newer blocks. Each deposit says whether it is minted, which the node
+   * answers for the deposits' mint markers.
+   */
+  listDeposits(params: { asset: AssetDefinition }): Promise<WalletDeposit[]> {
+    return this.#trackedOperation(() => this.#runtime.deposits(params.asset));
+  }
+
+  /**
+   * Mint one of this wallet's deposits to its own address. Reads the deposit's
+   * transaction receipt from Ethereum and the log's opening from the node.
+   */
+  mintDeposit(intent: WalletDepositMintIntent<Prepared, Output>): Promise<Awaited<ReturnType<WalletRuntimeInstance<Prepared, Output>["depositMint"]>>> {
+    return this.#action("deposit-mint", (lifecycle) => {
+      this.#requireSpendable("deposit-mint");
+      return this.#runtime.depositMint({ ...intent, ...lifecycle.durableCallbacks(intent) });
+    });
+  }
+
+  /** Pay recipients in one action: profile S when it holds the action, otherwise L if the prover proves it. One recipient in S pays under the asset-payment rule, otherwise a batch transfer. Longer lists are bulk jobs. */
   sendAsset(intent: WalletAssetSendIntent<Prepared, Output>): Promise<Awaited<ReturnType<WalletRuntimeInstance<Prepared, Output>["assetTransfer"]>>> {
     intent = { ...intent, outputs: structuredClone(intent.outputs),
       ...(intent.data === undefined ? {} : { data: structuredClone(intent.data) }) };
     return this.#action("asset-send", (lifecycle) => {
       this.#requireSpendable("asset-send");
       return this.#runtime.assetTransfer({ ...intent, ...lifecycle.durableCallbacks(intent) });
-    });
+    }, () => !isRestrictedAssetId(intent.assetId));
   }
 
   /** Privately burn `amount` of an asset this wallet holds. */
@@ -1400,7 +1459,7 @@ export class Wallet<Prepared = unknown, Output = unknown> {
       this.#requireSpendable("asset-burn");
       const { amount, ...rest } = intent;
       return this.#runtime.assetTransfer({ ...rest, outputs: [], burnAmount: amount, ...lifecycle.durableCallbacks(intent) });
-    });
+    }, () => !isRestrictedAssetId(intent.assetId));
   }
 
   /** Approve a durable payment or consolidation job; every recipient is resolved before any proof. */
@@ -1413,6 +1472,9 @@ export class Wallet<Prepared = unknown, Output = unknown> {
     return this.#action("bulk", (lifecycle) => {
       this.#requireSpendable("bulk");
       return this.#runtime.runBulkJobStep({ ...intent, ...lifecycle.durableCallbacks(intent) });
+    }, async () => {
+      const job = (await this.#store.load())?.bulkJobs?.find((item) => item.jobId === intent.jobId);
+      return job === undefined || !isRestrictedAssetId(BigInt(job.assetId));
     });
   }
 
@@ -1611,9 +1673,16 @@ export class Wallet<Prepared = unknown, Output = unknown> {
     }
   }
 
+  /**
+   * `synchronizeFirst` false: the action moves an asset with a transfer rule.
+   * It waits for a synchronization in flight but starts none, and builds from
+   * the state the last one reached, whose deny-list openings that
+   * synchronization fetched, so the action requests nothing that names its asset.
+   */
   async #action<T>(
     name: string,
     operation: (lifecycle: WalletActionLifecycle) => Promise<T>,
+    synchronizeFirst: () => boolean | Promise<boolean> = () => true,
   ): Promise<T> {
     this.#assertOpen();
     const session = this.#events.startAction(this.#eventWallet, name);
@@ -1622,9 +1691,10 @@ export class Wallet<Prepared = unknown, Output = unknown> {
     this.#recordMetric(() => this.#metrics.recordActionStarted(metricContext));
     try {
       // Every action builds its witnesses from the local chain state, so it
-      // starts from a fresh synchronization.
+      // starts from a fresh synchronization, except as `synchronizeFirst` says.
       const result = await this.#track(Promise.resolve().then(async () => {
-        await this.#scan();
+        if (await synchronizeFirst()) await this.#scan();
+        else await this.#syncPromise?.catch(() => undefined);
         return operation(session.lifecycle);
       }));
       session.complete();

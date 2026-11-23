@@ -19,6 +19,7 @@ import {
   sha256,
   shortAssetId,
   tokenShareLink,
+  tokenTerms,
   tokenUnit,
   TOKENS_PATH,
   UNVERIFIED_UNIT,
@@ -34,6 +35,13 @@ import { usePageFragment } from "./usePageFragment.ts";
 import { useTokenTransaction, type TokenPublication } from "./useTokenTransaction.ts";
 import { TokenFailureNotice } from "./EthereumSubmission.tsx";
 import styles from "./Tokens.module.css";
+
+const MINT_DESCRIPTION = {
+  "fixed-supply": "A private token with a fixed supply.",
+  "account-mint": "A private token its issuer mints.",
+  "deposit-mint": "A private token minted from deposits on Ethereum.",
+  "custom": "A private token with a custom mint rule.",
+} as const;
 
 /** Carried in history state from the create page, so a reload keeps following the creation. */
 export interface CreationState {
@@ -70,7 +78,7 @@ function TokenView({ assetId }: { assetId: bigint }) {
     <RouteHeader eyebrow={definition === null ? "Token" : `Token · ${definition.metadata.symbol}`} title={title}
       description={definition === null
         ? "This page knows only the token ID. Add the token’s definition to see its name, symbol and decimals."
-        : "A private token with a fixed supply. Balances and transfers are private."} />
+        : `${MINT_DESCRIPTION[tokenTerms(definition).mint.kind]} Balances and transfers are private.`} />
     <p><Link to={TOKENS_PATH}>← Tokens</Link></p>
     {linkCheck?.state === "mismatch" && <Notice tone="error">The definition in this link does not match this token ID. It describes a different token, so nothing it claims is shown here. Ask the sender for the link again.</Notice>}
     {linkCheck?.state === "invalid" && <Notice>This link’s token definition could not be read. Only the token ID below is known.</Notice>}
@@ -102,7 +110,8 @@ function TokenView({ assetId }: { assetId: bigint }) {
           </div>}
           <TokenWalletPrompt purpose="to hold and send this token" />
           {wallet.phase === "ready" && (held?.private ?? 0n) === 0n && <p className={styles.muted}>You hold none of this token.</p>}
-          {wallet.phase === "ready" && holding && <TokenActionTabs assetId={assetId} unit={unit} spendable={held?.spendable ?? 0n} verified={held?.definition != null} />}
+          {wallet.phase === "ready" && holding && <TokenActionTabs assetId={assetId} unit={unit} spendable={held?.spendable ?? 0n} verified={held?.definition != null}
+            transferRule={held?.definition?.transferRule !== undefined} />}
         </section>
         {definition !== null && <ShareToken definition={definition} />}
       </div>
@@ -117,30 +126,33 @@ type SendMode = (typeof SEND_MODES)[number][0];
 
 interface TokenActionProps { assetId: bigint; unit: { decimals: number; symbol: string }; spendable: bigint }
 
-function TokenActionTabs({ verified, ...props }: TokenActionProps & { verified: boolean }) {
+function TokenActionTabs({ verified, transferRule, ...props }: TokenActionProps & { verified: boolean; transferRule: boolean }) {
   const [tab, setTab] = useState<ActionTab>("send");
-  // Claim links and drops deliver the definition with every claim, so they need one. The send
-  // form stays in one place either way, so adding the definition keeps an action in progress.
+  // Claim links and drops deliver the definition with every claim, so they need one, and their
+  // claims prove no transfer rule. The send form stays in one place either way, so adding the
+  // definition keeps an action in progress.
+  const claims = verified && !transferRule;
   return <div>
-    {verified && <div className={styles.tabs} role="tablist" aria-label="Token actions">
+    {claims && <div className={styles.tabs} role="tablist" aria-label="Token actions">
       {ACTION_TABS.map(([value, label]) =>
         <button key={value} type="button" role="tab" id={`token-tab-${value}`} aria-selected={tab === value} aria-controls={`token-panel-${value}`} onClick={() => setTab(value)}>{label}</button>)}
     </div>}
-    <div {...verified ? { role: "tabpanel", id: `token-panel-${tab}`, "aria-labelledby": `token-tab-${tab}` } : {}}>
-      {verified && tab === "drop" ? <TokenDrops {...props} /> : <TokenSendModes {...props} verified={verified} />}
+    <div {...claims ? { role: "tabpanel", id: `token-panel-${tab}`, "aria-labelledby": `token-tab-${tab}` } : {}}>
+      {claims && tab === "drop" ? <TokenDrops {...props} /> : <TokenSendModes {...props} claims={claims} transferRule={transferRule} />}
     </div>
   </div>;
 }
 
 /** Every way to send from this balance: to one recipient, to a list, as claim links, or to no one by burning. */
-function TokenSendModes({ verified, ...props }: TokenActionProps & { verified: boolean }) {
+function TokenSendModes({ claims, transferRule, ...props }: TokenActionProps & { claims: boolean; transferRule: boolean }) {
   const [mode, setMode] = useState<SendMode>("one");
-  const modes = verified ? SEND_MODES : SEND_MODES.filter(([value]) => value !== "links");
+  const modes = claims ? SEND_MODES : SEND_MODES.filter(([value]) => value !== "links");
   return <div className={styles.form}>
     <div className={styles.sources} role="radiogroup" aria-label="Send to">
       {modes.map(([value, label]) =>
         <label key={value}><input type="radio" name="send-mode" value={value} checked={mode === value} onChange={() => setMode(value)} />{label}</label>)}
     </div>
+    {transferRule && <p className={styles.hint}>Claim links and drops are not available for tokens with a transfer rule.</p>}
     {mode === "one" ? <TokenSend {...props} />
       : mode === "many" ? <TokenDistribute {...props} />
         : mode === "links" ? <TokenClaimLinks {...props} />
@@ -223,7 +235,9 @@ function CreationStatus({ creation, assetId, definition }: { creation: CreationS
   const [again, setAgain] = useState(false);
   const [draft, setDraft] = usePublicationDraft();
   const [problem, setProblem] = useState<string>();
-  const terms = { metadata: definition.metadata, initialSupply: definition.initialSupply };
+  const mint = tokenTerms(definition).mint;
+  const supply = mint.kind === "fixed-supply" ? mint.supply : 0n;
+  const terms = { metadata: definition.metadata, supply };
   const follow = (next: CreationState) => {
     setAgain(false);
     navigate({ pathname: location.pathname, hash: location.hash }, { replace: true, state: { creation: next } });
@@ -244,7 +258,7 @@ function CreationStatus({ creation, assetId, definition }: { creation: CreationS
     setProblem(undefined);
     // The same token ID: the wallet kept the creation material when it journaled the first attempt.
     const outcome = await tx.run(checked.choice, (publication) => opened.createAsset({ ...terms, assetId, ...publication }),
-      { kind: "token-created", amount: definition.initialSupply, unit: tokenUnit(definition) });
+      { kind: "token-created", amount: supply, unit: tokenUnit(definition) });
     if (outcome.state === "sent") follow({ contentHash: outcome.result.contentHash, mode: checked.choice.mode, ...(outcome.l1Hash === undefined ? {} : { l1Hash: outcome.l1Hash }) });
     else if (outcome.state === "unknown" || outcome.state === "broadcast") follow({ contentHash: outcome.contentHash, mode: checked.choice.mode, ...(outcome.state === "unknown" ? { unknown: true } : { l1Hash: outcome.l1Hash }) });
   };

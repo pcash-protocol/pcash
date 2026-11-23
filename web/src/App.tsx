@@ -13,12 +13,14 @@ import { OwnerPanelsProvider } from "./routes/wallet/OwnerPanels.tsx";
 import { GetActivityProvider } from "./lib/GetActivity.tsx";
 import { WalletPanel } from "./components/WalletPanel.tsx";
 import { MarketplaceProvider } from "./routes/marketplace/MarketplaceProvider.tsx";
-import DevelopersRoute from "./routes/developers/DevelopersRoute.tsx";
+import DocsHome from "./routes/docs/DocsHome.tsx";
 import { isExplorerPath, isIdentityPath } from "./routes/explorer/paths.ts";
 import { HomeRoute } from "./routes/home/HomeRoute.tsx";
 import { NotFound } from "./routes/NotFound.tsx";
 import { RouteError } from "./routes/RouteError.tsx";
 import { SiteChrome } from "./routes/SiteChrome.tsx";
+import { TryLayout } from "./routes/try/TryLayout.tsx";
+import { DOCS_PATH } from "./routes/docs/publicDocuments.ts";
 import { routeById } from "./routes/routeManifest.ts";
 import { parseAssetIdSegment } from "./routes/tokens/model.ts";
 
@@ -28,6 +30,8 @@ const ExplorerRoute = lazy(() => import("./routes/explorer/ExplorerRoute.tsx"));
 const AddressRoute = lazy(() => import("./routes/address/AddressRoute.tsx"));
 const MarketplaceRoute = lazy(() => import("./routes/marketplace/MarketplaceRoute.tsx"));
 const GetRoute = lazy(() => import("./routes/get/GetRoute.tsx"));
+const EarnRoute = lazy(() => import("./routes/get/EarnRoute.tsx"));
+const AccountRoute = lazy(() => import("./routes/account/AccountRoute.tsx"));
 const TokenListRoute = lazy(() => import("./routes/tokens/TokenListPage.tsx"));
 const CreateTokenRoute = lazy(() => import("./routes/tokens/CreateTokenPage.tsx"));
 const TokenRoute = lazy(() => import("./routes/tokens/TokenPage.tsx"));
@@ -40,18 +44,19 @@ const fixtureMode = import.meta.env.VITE_PCASH_MODE === "fixtures";
 const StatesRoute = fixtureMode ? lazy(() => import("./routes/fixtures/StatesRoute.tsx")) : undefined;
 
 const homeRoute = routeById("home");
-const learnRoute = routeById("learn");
-const developersRoute = routeById("developers");
+const docsHomeRoute = routeById("docs");
 const explorerRoute = routeById("explorer");
 const marketplaceRoute = routeById("marketplace");
 const getRoute = routeById("get");
+const earnRoute = routeById("get-earn");
+const accountRoute = routeById("account");
 const tokensRoute = routeById("tokens");
 const newTokenRoute = routeById("token-new");
 const tokenRoute = routeById("token");
 const claimRoute = routeById("claim");
 const receiveRoute = routeById("receive");
 const dropRoute = routeById("drop");
-const messagesRoute = routeById("messages");
+const boardRoute = routeById("board");
 const termsRoute = routeById("terms");
 const privacyRoute = routeById("privacy");
 
@@ -132,17 +137,22 @@ export function appRoutes({ docsRoute, legalPage, getPage, tokenListPage }: {
       errorElement: <RouteError />,
       children: [
         { path: homeRoute.path, element: <HomeRoute /> },
-        { path: `${learnRoute.path}/*`, element: docsRoute ?? <LazyDocsRoute /> },
-        { path: developersRoute.path, element: <DevelopersRoute /> },
-        { path: getRoute.path, element: getPage ?? <GetRoute /> },
+        { path: docsHomeRoute.path, element: <DocsHome /> },
+        { path: `${DOCS_PATH}/*`, element: docsRoute ?? <LazyDocsRoute /> },
+        // Try PCASH: account setup on top of every tab, and each tab's own pages.
+        { element: <TryLayout />, children: [
+          { path: getRoute.path, element: getPage ?? <GetRoute /> },
+          { path: earnRoute.path, element: <EarnRoute /> },
+          { path: tokensRoute.path, element: tokenListPage ?? <TokenListRoute /> },
+          { path: newTokenRoute.path, element: <CreateTokenRoute /> },
+          { path: tokenRoute.path, element: <TokenPageRoute /> },
+          { path: dropRoute.path, element: <DropPageRoute /> },
+          { path: `${boardRoute.path}/*`, element: <MessagesRoute /> },
+        ] },
+        { path: accountRoute.path, element: <AccountRoute /> },
         { path: `${marketplaceRoute.path}/*`, element: <MarketplaceRoute /> },
-        { path: tokensRoute.path, element: tokenListPage ?? <TokenListRoute /> },
-        { path: newTokenRoute.path, element: <CreateTokenRoute /> },
-        { path: tokenRoute.path, element: <TokenPageRoute /> },
         { path: claimRoute.path, element: <ClaimRoute /> },
         { path: receiveRoute.path, element: <ReceiveRoute /> },
-        { path: dropRoute.path, element: <DropPageRoute /> },
-        { path: `${messagesRoute.path}/*`, element: <MessagesRoute /> },
         { path: termsRoute.path, element: legalPage ?? <LazyLegalRoute /> },
         { path: privacyRoute.path, element: legalPage ?? <LazyLegalRoute /> },
         ...StatesRoute === undefined ? [] : [{ path: "/__states", element: <StatesRoute /> }],

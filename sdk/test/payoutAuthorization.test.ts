@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { paymentTypedData, type PaymentMessage } from "../src/rules/readableRules.ts";
-import { assetCreationTypedData, type AssetCreationMessage } from "../src/rules/semanticRules.ts";
+import { mintTypedData, type MintMessage } from "../src/rules/semanticRules.ts";
 import { pcashSigningHash, recoverAddress, signDigest } from "../src/eip712/eip712.ts";
 import { DEFAULT_NETWORK_CONFIG } from "../src/protocol/network.ts";
 import { ownerCommitment } from "../src/protocol/notes.ts";
@@ -20,7 +20,7 @@ const message: PaymentMessage = {
   transactionContext: payoutTransactionContext(chainId, nullifiers), notBefore: 0n, validUntil: 100n,
 };
 const paymentSigningHash = (m: PaymentMessage) => pcashSigningHash(paymentTypedData(DEFAULT_NETWORK_CONFIG, m));
-const assetCreationSigningHash = (m: AssetCreationMessage) => pcashSigningHash(assetCreationTypedData(DEFAULT_NETWORK_CONFIG, m));
+const mintSigningHash = (m: MintMessage) => pcashSigningHash(mintTypedData(DEFAULT_NETWORK_CONFIG, m));
 
 describe("proof-bound payout approvals", () => {
   it("rejects same-recipient fee secret substitution under the unchanged payer signature", () => {
@@ -38,9 +38,11 @@ describe("proof-bound payout approvals", () => {
     ]) expect(recoverAddress(paymentSigningHash(changed), signature)).not.toBe(wallet.address);
     expect(authorizationIssuanceOpening(issuanceOwnerCommitment, chainId, nullifiers, { recipientAddress: issuanceRecipient, noteSecret: issuanceSecret, transactionContext: message.transactionContext }).issuanceNoteSecret).toBe(issuanceSecret);
   });
-  it("binds the asset secret commitment of a readable asset creation", () => {
-    const creation: AssetCreationMessage = { ...message, assetId: 1n, metadataCommitment: 3n, initialSupply: 100n, assetSecretCommitment: 4n, outputs: [{ recipient: 0xdefn, amount: 100n, assetId: 1n }, ...Array.from({length:4}, () => ({recipient:0n,amount:0n,assetId:0n}))] };
-    const signature = signDigest(wallet.privKey, assetCreationSigningHash(creation));
-    expect(recoverAddress(assetCreationSigningHash({...creation, assetSecretCommitment:5n}), signature)).not.toBe(wallet.address);
+  it("binds the mint markers of a readable mint through its transaction context", () => {
+    const mint: MintMessage = { ...message, assetId: 1n, outputs: [{ recipient: 0xdefn, amount: 100n, assetId: 1n }, ...Array.from({length:4}, () => ({recipient:0n,amount:0n,assetId:0n}))] };
+    const signature = signDigest(wallet.privKey, mintSigningHash(mint));
+    expect(recoverAddress(mintSigningHash(mint), signature)).toBe(wallet.address);
+    const otherReplayId = { ...mint, transactionContext: payoutTransactionContext(chainId, [11n, 15n, 13n, 14n]) };
+    expect(recoverAddress(mintSigningHash(otherReplayId), signature)).not.toBe(wallet.address);
   });
 });

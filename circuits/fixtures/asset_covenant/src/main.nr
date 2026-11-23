@@ -9,7 +9,7 @@ use pcash_protocol::generated::private_value_profiles::{S_INPUTS, S_OUTPUTS, S_S
 use pcash_protocol::ledger::note::{note_body_commitment, owner_commitment};
 use pcash_protocol::ledger::private_value::{
     private_value_commitment, PrivateValue, SLOT_CLASS_APPLICATION, SLOT_CLASS_ASSET,
-    SLOT_CLASS_ASSET_CREATION, SLOT_CLASS_NATIVE,
+    SLOT_CLASS_MINT, SLOT_CLASS_NATIVE,
 };
 use pcash_protocol::primitives::params::{BLOCK_HEADER_TREE_DEPTH, STATE_TREE_DEPTH};
 use pcash_protocol::primitives::range::{assert_address, assert_amount};
@@ -34,8 +34,8 @@ fn assert_covenant_action<let N_IN: u32, let N_OUT: u32, let SHAPE: u32>(
     );
     for i in 0..N_IN {
         assert(
-            private_value.input_slot_classes[i] != SLOT_CLASS_ASSET_CREATION,
-            "input slot must not be a creation marker",
+            private_value.input_slot_classes[i] != SLOT_CLASS_MINT,
+            "input slot must not be a mint marker",
         );
         assert(
             private_value.input_slot_classes[i] != SLOT_CLASS_APPLICATION,
@@ -159,7 +159,7 @@ mod tests {
     use super::{assert_covenant_action, assert_successor_outputs};
     use pcash_protocol::ledger::note::{note_body_commitment, owner_commitment};
     use pcash_protocol::ledger::private_value::{
-        SLOT_CLASS_APPLICATION, SLOT_CLASS_ASSET, SLOT_CLASS_ASSET_CREATION, SLOT_CLASS_NATIVE,
+        SLOT_CLASS_APPLICATION, SLOT_CLASS_ASSET, SLOT_CLASS_MINT, SLOT_CLASS_NATIVE,
     };
     use reference_rule_common::test_support::TestPrivateValue;
 
@@ -220,10 +220,10 @@ mod tests {
         assert_covenant_action(private_value, 5);
     }
 
-    #[test(should_fail_with = "input slot must not be a creation marker")]
-    fn test_asset_covenant_rejects_asset_creation() {
+    #[test(should_fail_with = "input slot must not be a mint marker")]
+    fn test_asset_covenant_rejects_a_mint() {
         let mut private_value = covenant_transaction();
-        private_value.input_slot_classes = [SLOT_CLASS_ASSET_CREATION, SLOT_CLASS_NATIVE, 0, 0];
+        private_value.input_slot_classes = [SLOT_CLASS_MINT, SLOT_CLASS_NATIVE, 0, 0];
         private_value.input_commitments[0] = 0;
         assert_covenant_action(private_value, 5);
     }

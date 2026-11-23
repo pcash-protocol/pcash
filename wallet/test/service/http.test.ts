@@ -36,18 +36,31 @@ import { fieldToHex } from "@pcash/sdk/crypto";
 import { ChainSim } from "../chainFixture.ts";
 import { TEST_PRIV_KEY } from "../testWallet.ts";
 import { PrometheusWalletMetrics } from "../../src/service/metrics.ts";
-import { assetDefinitionAssetId, formatAssetDefinition, type AssetDefinition } from "@pcash/sdk/protocol";
+import { assetDefinitionAssetId, findAssetDefinition, formatAssetDefinition, type AssetDefinition } from "@pcash/sdk/protocol";
+import { createAccountMintAsset, createDepositMintAsset, fixedSupplyMintRule } from "@pcash/sdk/rules";
 import { bytes32Hex, fromHex, keccak256, toHex } from "@pcash/sdk/utils";
 
 const servers: ReturnType<typeof createServer>[] = [];
 const DIGEST = `0x${"cd".repeat(32)}`;
 const TX_HASH = `0x${"ab".repeat(32)}`;
-const definition: AssetDefinition = {
-  initialSupply: 123n,
-  assetSecretCommitment: 0x32n,
-  metadata: { name: "Asset", symbol: "AST", decimals: 6, contentDigest: fromHex(DIGEST) },
-};
+const metadata = { name: "Asset", symbol: "AST", decimals: 6, contentDigest: fromHex(DIGEST) };
+const definition: AssetDefinition = findAssetDefinition({
+  mintRule: fixedSupplyMintRule({ supply: 123n, secretCommitment: 0x32n }), metadata,
+}, 0n);
 const assetId = assetDefinitionAssetId(definition);
+const MINTER = 0xabcn;
+const { definition: restrictedDefinition, descriptor: restrictedDescriptor } = createAccountMintAsset({
+  metadata: { ...metadata, name: "Restricted", symbol: "RST" }, accountAddress: MINTER, startSalt: 0n,
+  transferRule: { sVkHash: 0x51n, lVkHash: 0n, configurationCommitment: 0xc0n, configuration: Uint8Array.of(1, 2, 3) },
+});
+const VAULT = 0xc1n;
+const { definition: depositDefinition, descriptor: depositDescriptor } = createDepositMintAsset({
+  metadata: { ...metadata, name: "Deposit", symbol: "DEP" }, vault: VAULT, startSalt: 0n,
+});
+const customDefinition = findAssetDefinition({
+  mintRule: { sVkHash: 0x61n, lVkHash: 0n, configurationCommitment: 0xd0n, configuration: new Uint8Array() },
+  metadata: { ...metadata, name: "Custom", symbol: "CST" },
+}, 0n);
 
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
@@ -667,7 +680,7 @@ describe("wallet HTTP boundary", () => {
         name: "Asset",
         symbol: "AST",
         decimals: 6,
-        initialSupply: "123",
+        supply: "123",
         contentDigest: DIGEST,
         assetId: "0x55",
       }),
@@ -682,7 +695,7 @@ describe("wallet HTTP boundary", () => {
         decimals: 6,
         contentDigest: fromHex(DIGEST),
       },
-      initialSupply: 123n,
+      supply: 123n,
       assetId: 0x55n,
       submission,
       onPrepared: expect.any(Function),
@@ -692,7 +705,8 @@ describe("wallet HTTP boundary", () => {
       path: "mempool",
       submit: { path: "mempool", accepted: true },
       assetId: bytes32Hex(assetId),
-      definition: { text: formatAssetDefinition(definition), name: "Asset", symbol: "AST", decimals: 6, contentDigest: DIGEST, initialSupply: "123" },
+      definition: { text: formatAssetDefinition(definition), name: "Asset", symbol: "AST", decimals: 6, contentDigest: DIGEST,
+        mintRule: { kind: "fixed-supply", supply: "123" }, restricted: false },
     });
   });
 
@@ -700,10 +714,10 @@ describe("wallet HTTP boundary", () => {
     const testContext = context();
     const url = await serve(testContext);
     const invalidBodies = [
-      { symbol: "AST", decimals: 6, initialSupply: "123", contentDigest: DIGEST },
-      { name: "Asset", decimals: 6, initialSupply: "123", contentDigest: DIGEST },
-      { name: "Asset", symbol: "AST", decimals: "6", initialSupply: "123", contentDigest: DIGEST },
-      { name: "Asset", symbol: "AST", decimals: 6, initialSupply: "0", contentDigest: DIGEST },
+      { symbol: "AST", decimals: 6, supply: "123", contentDigest: DIGEST },
+      { name: "Asset", decimals: 6, supply: "123", contentDigest: DIGEST },
+      { name: "Asset", symbol: "AST", decimals: "6", supply: "123", contentDigest: DIGEST },
+      { name: "Asset", symbol: "AST", decimals: 6, supply: "0", contentDigest: DIGEST },
     ];
 
     for (const body of invalidBodies) {
@@ -714,14 +728,14 @@ describe("wallet HTTP boundary", () => {
       });
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({
-        error: "asset creation requires name, symbol, numeric decimals and positive initialSupply",
+        error: "asset creation requires name, symbol, numeric decimals and positive supply",
       });
     }
     for (const contentDigest of [undefined, "0x12", "cd".repeat(32)]) {
       const response = await fetch(`${url}/assets`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: "Asset", symbol: "AST", decimals: 6, initialSupply: "123", contentDigest }),
+        body: JSON.stringify({ name: "Asset", symbol: "AST", decimals: 6, supply: "123", contentDigest }),
       });
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({ error: "contentDigest must be a 32-byte 0x-hex digest" });
@@ -729,7 +743,7 @@ describe("wallet HTTP boundary", () => {
     const zeroAsset = await fetch(`${url}/assets`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Asset", symbol: "AST", decimals: 6, initialSupply: "123", contentDigest: DIGEST, assetId: "0" }),
+      body: JSON.stringify({ name: "Asset", symbol: "AST", decimals: 6, supply: "123", contentDigest: DIGEST, assetId: "0" }),
     });
     expect(zeroAsset.status).toBe(400);
   });
@@ -740,6 +754,9 @@ describe("wallet HTTP boundary", () => {
       assets: async () => [
         { assetId: 0x55n, definition: null, private: 4n, spendable: 3n, created: false },
         { assetId, definition, private: 123n, spendable: 123n, created: true },
+        { assetId: restrictedDescriptor.assetId, definition: restrictedDefinition, private: 0n, spendable: 0n, created: false },
+        { assetId: depositDescriptor.assetId, definition: depositDefinition, private: 0n, spendable: 0n, created: false },
+        { assetId: assetDefinitionAssetId(customDefinition), definition: customDefinition, private: 0n, spendable: 0n, created: false },
       ],
     }) as never;
     const url = await serve(testContext);
@@ -748,7 +765,20 @@ describe("wallet HTTP boundary", () => {
     expect(await response.json()).toEqual([
       { assetId: bytes32Hex(0x55n), definition: null, private: "4", spendable: "3", created: false },
       { assetId: bytes32Hex(assetId), private: "123", spendable: "123", created: true, definition: {
-        text: formatAssetDefinition(definition), name: "Asset", symbol: "AST", decimals: 6, contentDigest: DIGEST, initialSupply: "123",
+        text: formatAssetDefinition(definition), name: "Asset", symbol: "AST", decimals: 6, contentDigest: DIGEST,
+        mintRule: { kind: "fixed-supply", supply: "123" }, restricted: false,
+      } },
+      { assetId: bytes32Hex(restrictedDescriptor.assetId), private: "0", spendable: "0", created: false, definition: {
+        text: formatAssetDefinition(restrictedDefinition), name: "Restricted", symbol: "RST", decimals: 6, contentDigest: DIGEST,
+        mintRule: { kind: "account-mint", account: `0x${MINTER.toString(16).padStart(40, "0")}` }, restricted: true,
+      } },
+      { assetId: bytes32Hex(depositDescriptor.assetId), private: "0", spendable: "0", created: false, definition: {
+        text: formatAssetDefinition(depositDefinition), name: "Deposit", symbol: "DEP", decimals: 6, contentDigest: DIGEST,
+        mintRule: { kind: "deposit-mint", vault: `0x${VAULT.toString(16).padStart(40, "0")}` }, restricted: false,
+      } },
+      { assetId: bytes32Hex(assetDefinitionAssetId(customDefinition)), private: "0", spendable: "0", created: false, definition: {
+        text: formatAssetDefinition(customDefinition), name: "Custom", symbol: "CST", decimals: 6, contentDigest: DIGEST,
+        mintRule: { kind: "custom" }, restricted: false,
       } },
     ]);
   });

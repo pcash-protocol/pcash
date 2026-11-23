@@ -9,13 +9,14 @@ import {
   buildNativeTransfer,
   defaultUserAccountRuleSet,
   deriveWalletIdentity,
-  assetSecretCommitment,
+  fixedSupplyMintRule,
+  fixedSupplySecretCommitment,
   fullOutputCommitment,
   generateMlKemKeyPair,
   nullifierKeyCommitment,
   openedAssetActionOutput,
   ownerChangeAssetActionOutput,
-  standardFungibleAssetId,
+  findAssetDescriptor,
 } from "@pcash/sdk/browser";
 import { CIRCUIT_URLS } from "@pcash/sdk/browser-prover";
 import {
@@ -57,12 +58,10 @@ function largeState() {
     return { address, receiveKey: generateMlKemKeyPair().publicKey };
   });
 
-  const descriptorFields = {
+  const assetId = findAssetDescriptor({
     metadataCommitment: 0x1a3e7an,
-    initialSupply: 1_000_000n,
-    assetSecretCommitment: assetSecretCommitment(0x1a155en),
-  };
-  const assetId = standardFungibleAssetId(descriptorFields);
+    mintRule: fixedSupplyMintRule({ supply: 1_000_000n, secretCommitment: fixedSupplySecretCommitment(0x1a155en) }),
+  }, 0n).assetId;
   const outputTree = new SparseMerkleTree(MERKLE_DEPTH);
   const assetNotes = ASSET_NOTES.map((amount, leafIndex) => {
     const noteSecret = 0x1a0100n + BigInt(leafIndex);

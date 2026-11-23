@@ -1,10 +1,9 @@
 // 2-of-3 secp256k1 account rule for a private contract account's transfers
-// and asset creations.
+// and mints.
 //
 // Two of the three configured signers approve the action commitment and the
-// account address. The action is the asset-creation action for the created
-// asset when the private value carries a creation marker, else the transfer
-// action.
+// account address. The action is the mint action for the minted asset when
+// the private value carries a mint marker, else the transfer action.
 // The configuration commits the salt, the threshold and the sorted signer
 // addresses derived from the witnessed public keys; the salt hides the signer
 // set from readers of the published contract body.
@@ -59,15 +58,14 @@ fn main(
     recent_pcash_block_hash: Field,
     configuration: Configuration,
     private_value: PrivateValue,
-    // The asset an asset creation creates; a transfer ignores it.
-    created_asset_id: Field,
+    // The asset a mint mints; a transfer ignores it.
+    minted_asset_id: Field,
     account_address: Field,
     signers: [Secp256k1PubKey; N],
     approvals: [Approval; K],
     event_entry: Field,
 ) -> return_data [Field; RULE_STATEMENT_LENGTH] {
-    let action_commitment =
-        owner_action_commitment(pcash_chain_id, private_value, created_asset_id);
+    let action_commitment = owner_action_commitment(pcash_chain_id, private_value, minted_asset_id);
 
     let mut addresses: [Field; N] = [0; N];
     for i in 0..N {

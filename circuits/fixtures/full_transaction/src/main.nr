@@ -1,9 +1,9 @@
 // Readable full-transaction rule for the reference user account. It opens
 // every real output and every asset input in the account's exact contribution.
-// It serves the transfer and asset-creation kernels and returns the action of
-// whichever one the opened private value selects. An asset creation's action
-// names the created asset, which the kernel requires to be the asset it
-// derives and in whose namespace the declared asset outputs are.
+// It serves the transfer and mint kernels and returns the action of whichever
+// one the opened private value selects. A mint's action names the minted
+// asset, which the kernel requires to be the asset it derives and in whose
+// namespace the declared asset outputs are.
 //
 // This demonstration's signed schema explicitly names four inputs/five outputs.
 // It is a fixed-shape fixture, not a profile-generic wallet rule.
@@ -46,7 +46,7 @@ pub fn transaction_detail_relation(
     nk_root: Field,
     spent_asset_id: Field,
     spent_asset_amount: Field,
-    created_asset_id: Field,
+    minted_asset_id: Field,
     outputs: [OutputDeclaration; 5],
     private_value: PrivateValue,
     output_note_secrets: [Field; 5],
@@ -133,7 +133,7 @@ pub fn transaction_detail_relation(
 
     rule_statement(
         owner.authorization_commitment,
-        owner_action_commitment(pcash_chain_id, private_value, created_asset_id),
+        owner_action_commitment(pcash_chain_id, private_value, minted_asset_id),
         recent_pcash_block_hash,
         event_entry,
     )
@@ -148,7 +148,7 @@ fn main(
     nk_root: Field,
     spent_asset_id: Field,
     spent_asset_amount: Field,
-    created_asset_id: Field,
+    minted_asset_id: Field,
     outputs: [OutputDeclaration; 5],
     private_value: PrivateValue,
     issuance_recipient: Field,
@@ -168,7 +168,7 @@ fn main(
         nk_root,
         spent_asset_id,
         spent_asset_amount,
-        created_asset_id,
+        minted_asset_id,
         outputs,
         private_value,
         output_note_secrets,
@@ -223,11 +223,11 @@ mod tests {
     use pcash_protocol::authorization::statement::RULE_STATEMENT_LENGTH;
     use pcash_protocol::ledger::note::{note_body_commitment, output_commitment, owner_commitment};
     use pcash_protocol::ledger::private_value::{
-        SLOT_CLASS_APPLICATION, SLOT_CLASS_ASSET, SLOT_CLASS_ASSET_CREATION, SLOT_CLASS_DUMMY,
+        SLOT_CLASS_APPLICATION, SLOT_CLASS_ASSET, SLOT_CLASS_DUMMY, SLOT_CLASS_MINT,
         SLOT_CLASS_NATIVE,
     };
     use reference_rule_common::test_support::{
-        asset_creation_statement, TEST_ASSET_ID, TEST_CONFIGURATION, TEST_NK_ROOT, TEST_NULLIFIERS,
+        mint_statement, TEST_ASSET_ID, TEST_CONFIGURATION, TEST_NK_ROOT, TEST_NULLIFIERS,
         TEST_PCASH_CHAIN_ID, TEST_RECENT_BLOCK, TEST_RECIPIENT, TEST_SIGNER, TEST_SIGNING_KEY,
         TestPrivateValue, transfer_statement,
     };
@@ -298,7 +298,7 @@ mod tests {
         secrets: [Field; 5],
         spent_asset_id: Field,
         spent_asset_amount: Field,
-        created_asset_id: Field,
+        minted_asset_id: Field,
         spends: [AssetSpendOpening; 4],
         event_entry: Field,
     ) -> [Field; RULE_STATEMENT_LENGTH] {
@@ -310,7 +310,7 @@ mod tests {
             TEST_NK_ROOT,
             spent_asset_id,
             spent_asset_amount,
-            created_asset_id,
+            minted_asset_id,
             outputs,
             tx,
             secrets,
@@ -495,11 +495,11 @@ mod tests {
         );
     }
 
-    // The full rule is retained as a compiled fixture for the asset-creation
-    // kernel's native-fee application. It is not installed in the website's
-    // canonical six-rule User Account and must not regain consumer routing.
+    // The full rule is retained as a compiled fixture for the mint kernel's
+    // native-fee application. It is not installed in the website's canonical
+    // six-rule User Account and must not regain consumer routing.
     #[test]
-    fn test_fixture_accepts_funded_asset_creation_fee_authorization() {
+    fn test_fixture_accepts_funded_mint_fee_authorization() {
         let asset_id = 9;
         let asset_secret = 0x7101;
         let change_secret = 0x7102;
@@ -516,7 +516,7 @@ mod tests {
             delivery_commitment: 0x61,
             account_creation_commitment: 0,
             input_slot_classes: [
-                SLOT_CLASS_ASSET_CREATION,
+                SLOT_CLASS_MINT,
                 SLOT_CLASS_NATIVE,
                 SLOT_CLASS_DUMMY,
                 SLOT_CLASS_DUMMY,
@@ -563,7 +563,7 @@ mod tests {
             [no_spend(), no_spend(), no_spend(), no_spend()],
             0,
         );
-        assert(statement == asset_creation_statement(tx, asset_id, 0));
+        assert(statement == mint_statement(tx, asset_id, 0));
     }
 
     // A readable rule cannot display a durable one-shot application effect, so it

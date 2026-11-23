@@ -3619,27 +3619,68 @@ mod protocol_vector_tests {
     fn asset_composition_formulas_match_published_vectors() {
         let vectors = vectors();
         let asset = &vectors["assetComposition"];
-        let asset_secret_commitment = poseidon(&[
-            domain_tags::ASSET_SECRET_COMMITMENT_DOMAIN,
-            field(&asset["assetSecret"]),
+        let rule = &asset["mintRule"];
+        let mint_rule = poseidon(&[
+            domain_tags::ASSET_MINT_RULE_DOMAIN,
+            field(&rule["sVkHash"]),
+            field(&rule["lVkHash"]),
+            field(&rule["configurationCommitment"]),
         ]);
-        assert_eq!(
-            asset_secret_commitment,
-            field(&asset["assetSecretCommitment"])
-        );
-        let asset_id = poseidon(&[
-            domain_tags::ASSET_ID_DOMAIN,
+        assert_eq!(mint_rule, field(&rule["commitment"]));
+        let core = poseidon(&[
+            domain_tags::ASSET_CORE_DOMAIN,
+            field(&asset["instanceSalt"]),
             field(&asset["metadataCommitment"]),
-            field(&asset["initialSupply"]),
-            asset_secret_commitment,
+            mint_rule,
         ]);
+        let asset_id = poseidon(&[domain_tags::ASSET_ID_DOMAIN, core, Fr::from(0u64)]);
         assert_eq!(asset_id, field(&asset["assetId"]));
         let marker = poseidon(&[
-            domain_tags::ASSET_CREATION_MARKER_DOMAIN,
+            domain_tags::MINT_MARKER_DOMAIN,
             asset_id,
-            field(&asset["assetSecret"]),
+            field(&asset["replayId"]),
         ]);
         assert_eq!(marker, field(&asset["marker"]));
+        let mint_context = &asset["mintContext"];
+        assert_eq!(
+            poseidon(&[
+                domain_tags::ASSET_MINT_POLICY_DOMAIN,
+                asset_id,
+                field(&rule["configurationCommitment"]),
+                field(&mint_context["accountAddress"]),
+                field(&mint_context["validUntilTimestamp"]),
+            ]),
+            field(&mint_context["value"])
+        );
+
+        let restricted = &asset["restricted"];
+        let transfer = &restricted["transferRule"];
+        let transfer_rule = poseidon(&[
+            domain_tags::ASSET_TRANSFER_RULE_DOMAIN,
+            field(&transfer["sVkHash"]),
+            field(&transfer["lVkHash"]),
+            field(&transfer["configurationCommitment"]),
+        ]);
+        assert_eq!(transfer_rule, field(&transfer["commitment"]));
+        let restricted_core = poseidon(&[
+            domain_tags::ASSET_CORE_DOMAIN,
+            field(&restricted["instanceSalt"]),
+            field(&asset["metadataCommitment"]),
+            mint_rule,
+        ]);
+        let restricted_id = poseidon(&[domain_tags::ASSET_ID_DOMAIN, restricted_core, transfer_rule]);
+        assert_eq!(restricted_id, field(&restricted["assetId"]));
+        let policy = &restricted["policyContext"];
+        assert_eq!(
+            poseidon(&[
+                domain_tags::ASSET_POLICY_DOMAIN,
+                restricted_id,
+                field(&transfer["configurationCommitment"]),
+                field(&policy["ownerAddress"]),
+                field(&policy["validUntilTimestamp"]),
+            ]),
+            field(&policy["value"])
+        );
     }
 
     #[test]

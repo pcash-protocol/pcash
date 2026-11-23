@@ -20,11 +20,12 @@ pub global L1_LOG_TREE_DEPTH: u32 = 64;
 // --- Range-check bit widths ---
 pub global ADDRESS_BITS: u32 = 160; // uint160(address) inputs
 pub global AMOUNT_BITS: u32 = 128; // note amounts and fees
-// The largest initial supply of a standard fungible asset: five maximal notes.
-pub global MAX_ASSET_SUPPLY: Field = 5 * 0xffffffffffffffffffffffffffffffff;
-// The width of MAX_ASSET_SUPPLY, which bounds every asset aggregate: an initial
-// supply and a burn amount.
-pub global ASSET_AGGREGATE_BITS: u32 = 131;
+// Bounds the asset burn: the input total of a full profile L action, 32 notes
+// each below 2^128, is below 2^133.
+pub global ASSET_AGGREGATE_BITS: u32 = 133;
+// An asset ID without a transfer rule is below 2^252, and one with a rule is in
+// [2^252, 2^253).
+pub global ASSET_CLASS_BITS: u32 = 252;
 pub global VALID_UNTIL_BITS: u32 = 64; // transaction timestamps
 // The uint64 block number, timestamp, and log count of an L1 origin leaf.
 pub global L1_ORIGIN_INTEGER_BITS: u32 = 64;

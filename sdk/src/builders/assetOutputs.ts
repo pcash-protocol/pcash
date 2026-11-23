@@ -8,9 +8,11 @@ import type { FieldNumberish } from "../crypto/field.ts";
 import { toAddressField, toField } from "../crypto/field.ts";
 import { parseExtendedCode } from "../delivery/extendedCode.ts";
 import {
-  type StandardFungibleAssetDescriptor
+  type AssetDescriptor,
+  type RestrictedAssetOpening,
 } from "../protocol/asset.ts";
 import type { AssetDefinition } from "../protocol/assetDefinition.ts";
+export type { RestrictedAssetOpening } from "../protocol/asset.ts";
 import type { ArenaSender } from "../protocol/sectionDelivery.ts";
 import { randomFieldEntropy } from "../utils/bytes.ts";
 import { STATE_KEY_OUTPUT_ROOT } from "../constants/params.ts";
@@ -98,7 +100,14 @@ export type AssetActionInput =
     /** The override's nullifier key. Required with `owner`. */
     nk?: FieldNumberish;
   }
-  | { kind: "creation-marker" }
+  | {
+    /**
+     * One mint of the asset, keyed by a replay ID the asset's mint rule
+     * accepts. Every retry of one mint uses the same replay ID.
+     */
+    kind: "mint-marker";
+    replayId: FieldNumberish;
+  }
   | {
     /**
      * A note-free one-shot marker whose nullifier the selected account rule
@@ -190,9 +199,9 @@ export interface BuildAssetActionBaseParams extends EventOptions {
   owner: AssetAccountAuthorization;
   /**
    * Two authorizing accounts: the primary owns the asset inputs and every
-   * marker, and a distinct fee payer owns the native inputs. The
-   * sponsored-transfer kernel authenticates both accounts, so this build carries no
-   * account fields of its own.
+   * marker, and a distinct fee payer owns the native inputs. A sponsored
+   * kernel authenticates both accounts, so this build carries no account fields
+   * of its own.
    */
   nativeFeePayer?: boolean;
   inputs: readonly AssetActionInput[];
@@ -222,23 +231,24 @@ export interface BuildAssetActionBaseParams extends EventOptions {
   assetDefinition?: AssetDefinition;
 }
 
-export interface BuildStandardAssetTransferParams extends BuildAssetActionBaseParams {
+export interface BuildAssetTransferParams extends BuildAssetActionBaseParams {
   /** Ordinary transfer, split, merge, or burn needs only the recovered note namespace. */
   assetId: FieldNumberish;
-  assetDescriptor?: never;
-  assetSecret?: never;
+  /** Required exactly for an asset with a transfer rule. */
+  restricted?: RestrictedAssetOpening;
+  mint?: never;
 }
 
-export interface BuildStandardAssetCreationParams extends BuildAssetActionBaseParams {
-  /** Asset creation opens and authenticates the complete immutable definition. */
+export interface BuildAssetMintParams extends BuildAssetActionBaseParams {
+  /** A mint opens the complete definition; the asset's mint rule decides what it may mint. */
   assetId?: never;
-  assetDescriptor: StandardFungibleAssetDescriptor;
-  assetSecret: FieldNumberish;
+  restricted?: never;
+  mint: { descriptor: AssetDescriptor };
 }
 
 export type BuildAssetActionParams =
-  | BuildStandardAssetTransferParams
-  | BuildStandardAssetCreationParams;
+  | BuildAssetTransferParams
+  | BuildAssetMintParams;
 
 
 /**

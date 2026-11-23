@@ -312,7 +312,7 @@ test("restores sign-ins and pending submissions across browser navigation", asyn
     assert.equal(creation.authorization.kind, "signed");
 
     await browser.openWallet();
-    assert.equal(await browser.evaluate(`document.querySelector('[data-testid="wallet-panel"] a[href="/get"]') !== null`), false, "mining waits for account confirmation");
+    assert.equal(await browser.evaluate(`document.querySelector('[data-testid="wallet-panel"] a[href="/get/earn"]') !== null`), false, "mining waits for account confirmation");
     assert.equal(await browser.evaluate(`document.querySelector('[data-testid="mining-start"]')`), null);
     await waitForSubmittedAccount(browser);
 
@@ -558,7 +558,7 @@ test("restores sign-ins and pending submissions across browser navigation", asyn
       timeoutMs: 60_000,
     });
     assert.equal(await browser.evaluate(`document.querySelector('[data-testid="activation-status"]').innerText.includes(${JSON.stringify(queuedHash)})`), true);
-    assert.equal(await browser.evaluate(`document.querySelector('[data-testid="wallet-panel"] a[href="/get"]') !== null`), false, "mining waits for account confirmation");
+    assert.equal(await browser.evaluate(`document.querySelector('[data-testid="wallet-panel"] a[href="/get/earn"]') !== null`), false, "mining waits for account confirmation");
     assert.equal(provider.sentTransactions.length, 1, "checking an expired transaction does not silently retry it");
     await browser.evaluate(`(() => {
       const retry = [...document.querySelectorAll("button")].find((button) => button.textContent === "Retry setup");

@@ -26,6 +26,7 @@ import type {
   AssetPaymentMessage,
   BatchTransferMessage,
   ContractFeeSponsorshipMessage,
+  MintMessage,
 } from "./semanticRules.ts";
 
 /** The first asset input, needed only for a burn with no asset output. */
@@ -298,26 +299,24 @@ export function buildContractFeeSponsorshipRuleWitness(
   };
 }
 
-export interface AssetCreationWitnessParams extends Omit<BatchTransferWitnessParams, "message" | "assetNamespaceOpening"> {
-  message: import("./semanticRules.ts").AssetCreationMessage;
+export interface MintWitnessParams extends Omit<BatchTransferWitnessParams, "message" | "assetNamespaceOpening"> {
+  message: MintMessage;
 }
 
-export function buildAssetCreationRuleWitness(params: AssetCreationWitnessParams): { witnessMap: Record<string, unknown> } {
+export function buildMintRuleWitness(params: MintWitnessParams): { witnessMap: Record<string, unknown> } {
   const profile = privateValueProfile(params.shape ?? PRIVATE_VALUE_PROFILES.S.shapeId);
   if (params.transaction.inputs.length !== profile.inputs || params.transaction.outputs.length !== profile.outputs) {
-    throw new Error("asset creation witness does not fit the selected profile");
+    throw new Error("mint witness does not fit the selected profile");
   }
   for (const values of [params.outputNoteSecrets, params.ownerChangeAmounts, params.message.outputs]) {
-    if (values.length !== profile.outputs) throw new Error(`asset creation requires ${profile.outputs} output slots`);
+    if (values.length !== profile.outputs) throw new Error(`mint requires ${profile.outputs} output slots`);
   }
-  requireWalletAuthorization(params.wallet, params.authorization, "asset-creation");
+  requireWalletAuthorization(params.wallet, params.authorization, "mint");
   const network = networkForChain(params.message.pcashChainId, params.network);
   return { witnessMap: {
     ...ruleContextMap(params.message.pcashChainId, params.recentPcashBlockHash, network, params.eventEntry),
     nk_root: fm(params.nkRoot),
-    metadata_commitment: fm(params.message.metadataCommitment),
-    initial_supply: fm(params.message.initialSupply),
-    asset_secret_commitment: fm(params.message.assetSecretCommitment),
+    asset_id: fm(params.message.assetId),
     outputs: params.message.outputs.map((output) => ({ recipient: fm(output.recipient), amount: fm(output.amount), asset_id: fm(output.assetId) })),
     relay_fee_amount: fm(params.message.relayFeeAmount),
     relay_fee_owner_commitment: fm(params.message.relayFeeOwnerCommitment),

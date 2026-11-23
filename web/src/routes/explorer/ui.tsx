@@ -2,6 +2,7 @@ import { EthereumAddress, FittedCode } from "../../components/EthereumAddress.ts
 import { friendlyError } from "../../components/friendlyError.ts";
 import { Children, Fragment, useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import type { TransactionSummaryResult } from "@pcash/sdk/clients";
 import { bytes32Hex } from "@pcash/sdk/utils";
 import { addressPath } from "./paths.ts";
 import { Notice } from "../../components/Notice.tsx";
@@ -191,8 +192,20 @@ export function TransactionLink({ transactionId }: { transactionId: string }) {
   return <Link className={styles.figures} to={`/tx/${transactionId}`} title={transactionId}>{shortHex(transactionId)}</Link>;
 }
 
-export function AddressLink({ address, label }: { address: string; label?: string }) {
-  return <Link className={styles.figures} to={addressPath(address)}>{label ?? <EthereumAddress address={address} short />}</Link>;
+export function TransactionEffects({ summary }: { summary: TransactionSummaryResult }) {
+  if (summary.outcome !== "succeeded") return <span className={styles.muted}>None — the transaction failed</span>;
+  const { nullifiers, outputsAdded, account, accountCreation } = summary;
+  return <ul className={styles.effects}>
+    {nullifiers !== null && <li>{nullifiers.length} in → {outputsAdded.toString()} out</li>}
+    {account !== null && <li>
+      {accountCreation === 1 ? "Created account" : "Updated account"}{" "}
+      <AddressLink address={account.address} showAddress />
+    </li>}
+  </ul>;
+}
+
+export function AddressLink({ address, label, showAddress = false }: { address: string; label?: string; showAddress?: boolean }) {
+  return <Link className={styles.figures} to={addressPath(address)}>{label ?? <EthereumAddress address={address} short showAddress={showAddress} />}</Link>;
 }
 
 export function BatchLink({ l1TransactionHash }: { l1TransactionHash: string }) {

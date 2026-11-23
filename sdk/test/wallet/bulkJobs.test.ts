@@ -1,19 +1,25 @@
 import { applicationDataRecords, recordValue } from "../recordHelpers.ts";
 import { storedReceiveKeyPair } from "../../src/wallet/receiveKeyring.ts";
 import { describe, expect, it } from "vitest";
-import { BULK_RECOVERY_MAX_APP_TAG_BYTES, BULK_RECOVERY_OBSERVATION_SECONDS, bulkRecoveryRecord, bulkRecoverySchema, createBulkJob, freshBulkJobRecovery, planNextBulkChunk, reconcileBulkRecoveryObservations, recoveredBulkGroups } from "../../src/wallet/bulkJobs.ts";
+import { BULK_RECOVERY_MAX_APP_TAG_BYTES, BULK_RECOVERY_OBSERVATION_SECONDS, bulkRecoveryRecord, bulkRecoverySchema, createBulkJob, freshBulkJobRecovery, planNextBulkChunk, reconcileBulkRecoveryObservations, recoveredBulkGroups, type BulkJob } from "../../src/wallet/bulkJobs.ts";
 import { runBulkJobStep, startBulkJob } from "../../src/wallet/actions/bulkJobClient.ts";
 import { memoryWalletStateStore } from "../../src/wallet/memoryStoreBackend.ts";
 import { derivePcashProfileFromPrivateKey } from "../../src/wallet/externalIdentity.ts";
 import { defaultUserAccountRuleSet } from "@pcash/sdk/rules";
 import {
-  encodeRecords,
   buildContractBody,
+  encodeAssetDefinition,
+  encodeDirectSendOpening,
+  findAssetDefinition,
+  isRestrictedAssetId,
+  MAX_ASSET_DEFINITION_BYTES,
+  MAX_RULE_CONFIGURATION_BYTES,
+  sealSectionDelivery,
+  TX_KIND_PRIVATE_VALUE,
+  type DirectSendOpening,
   functionSelector,
   decodeTransaction,
   assetDefinitionSchema,
-  sentOpeningsSchema,
-  sentEnvelopesSchema,
   transactionIdentity as submissionIdentity,
   receiveKeyHash,
   generateMlKemKeyPair,
@@ -27,10 +33,9 @@ import {
   WIRE_PROOF_BYTES,
   noteBodyCommitment,
   ownerCommitment,
-  planArena,
   SlotClass,
 } from "@pcash/sdk/protocol";
-import { PRIVATE_VALUE_PROFILES } from "@pcash/sdk/constants";
+import { privateValueProfile, type PrivateValueShape } from "@pcash/sdk/constants";
 import { baseFee } from "@pcash/sdk/protocol";
 import { fieldToHex, SparseMerkleTree } from "@pcash/sdk/crypto";
 import { createSelectedRelayQuote, privateKeyPcashActionSigner } from "@pcash/sdk/eip712";
@@ -40,7 +45,7 @@ import type { PcashNodeClient, ReceiptResult } from "@pcash/sdk/clients";
 import { addWalletAsset, type WalletFileData } from "../../src/wallet/noteStore.ts";
 import { synchronizeWalletInventory } from "../../src/wallet/actions/scan.ts";
 import { emptyWalletState } from "../../src/wallet/store.ts";
-import { syntheticRecentBlockFixture } from "./builderTestHelpers.ts";
+import { fixedSupplyAssetDefinition, syntheticRecentBlockFixture } from "./builderTestHelpers.ts";
 import { testStatus } from "./statusFixture.ts";
 import { anchoredChain, ChainSim, chainRecords, consumedIn, syncStoreTo } from "./chainFixture.ts";
 import type { NullifierConsumption } from "../../src/wallet/chainState.ts";
@@ -490,11 +495,11 @@ describe("bulk job self delivery", () => {
   });
 
   it("delivers a maximal token definition to recoverable recipients and its sender region", async () => {
-    const definition: AssetDefinition = {
-      initialSupply: 100n,
-      assetSecretCommitment: 0xa3n,
+    const definition: AssetDefinition = fixedSupplyAssetDefinition({
+      supply: 100n,
+      secretCommitment: 0xa3n,
       metadata: { name: "N".repeat(64), symbol: "S".repeat(12), decimals: 18, contentDigest: new Uint8Array(32).fill(9) },
-    };
+    });
     const assetId = assetDefinitionAssetId(definition);
     const f = fixture([100n], assetId);
     await f.store.transaction(data => {
@@ -522,26 +527,185 @@ describe("bulk job self delivery", () => {
     expect(recordValue(change.records, assetDefinitionSchema)).toBeUndefined();
   });
 
-  it("fits the fullest S and L chunk with the longest tag in the arena", () => {
-    const definition: AssetDefinition = {
-      initialSupply: 100n,
-      assetSecretCommitment: 0xa4n,
-      metadata: { name: "N".repeat(64), symbol: "S".repeat(12), decimals: 18, contentDigest: new Uint8Array(32).fill(9) },
-    };
-    for (const profile of [PRIVATE_VALUE_PROFILES.S, PRIVATE_VALUE_PROFILES.L]) {
-      const slots = Array.from({ length: profile.outputs }, (_, slot) => slot);
-      const recovery = freshBulkJobRecovery({ appTag: new Uint8Array(BULK_RECOVERY_MAX_APP_TAG_BYTES).fill(1),
-        manifestDigest: bytes32Hex(1n), originalRecipientCount: 10_000, originalIndexes: slots.map(slot => 9_999 - slot) });
-      const applicationRecords = [bulkRecoveryRecord(recovery, 0, slots.length)];
-      // A count of 10,000 and the tag length take 2 bytes each, as does every index from 9,999 down past 128.
-      expect(applicationRecords[0]!.data).toHaveLength(32 + 32 + 2 + 2 + BULK_RECOVERY_MAX_APP_TAG_BYTES + 1 + 2 * profile.outputs);
-      // Every slot pays a recipient: opened out of band, or by envelope with its own copy of the definition in its region.
-      const openings = (encodeRecords([...applicationRecords, assetDefinitionSchema.encode(definition), sentOpeningsSchema.encode(slots.map(slot => ({ slot, recipientAddress: 1n, assetId: 1n, amount: (1n << 128n) - 1n, noteSecret: 1n })))]).length);
-      const envelopes = (encodeRecords([...applicationRecords, assetDefinitionSchema.encode(definition), sentEnvelopesSchema.encode(slots.map(slot => ({ slot, sharedSecret: new Uint8Array(32), recipientAddress: 1n })))]).length);
-      expect(planArena({ shape: profile.shapeId, sender: openings, regions: [] }).fits).toBe(true);
-      expect(planArena({ shape: profile.shapeId, sender: envelopes,
-        regions: slots.map(() => encodeRecords([assetDefinitionSchema.encode(definition)]).length) }).fits).toBe(true);
+});
+
+const LONGEST_TAG = new Uint8Array(BULK_RECOVERY_MAX_APP_TAG_BYTES).fill(1);
+const longestMetadata = { name: "N".repeat(64), symbol: "S".repeat(12), decimals: 18, contentDigest: new Uint8Array(32).fill(9) };
+const shortDefinition = fixedSupplyAssetDefinition({ supply: 100n, secretCommitment: 0xa4n,
+  metadata: { name: "Token", symbol: "TKN", decimals: 6, contentDigest: new Uint8Array(32).fill(9) } });
+// Both rules carry the longest configuration: the longest definition.
+const longestDefinition = findAssetDefinition({
+  mintRule: { sVkHash: 1n, lVkHash: 2n, configurationCommitment: 3n, configuration: new Uint8Array(MAX_RULE_CONFIGURATION_BYTES).fill(1) },
+  transferRule: { sVkHash: 4n, lVkHash: 5n, configurationCommitment: 6n, configuration: new Uint8Array(MAX_RULE_CONFIGURATION_BYTES).fill(2) },
+  metadata: longestMetadata,
+}, 0n);
+
+/** A recoverable job whose recipients sit at the end of a 10,000-recipient list, so every index takes two bytes. */
+function recoverableJob(assetId: bigint, recipients: number, shape: 0 | 1) {
+  return createBulkJob({ kind: "payment", assetId, shape, openFeeAmount: 0n, maxTransactions: recipients,
+    recipients: Array.from({ length: recipients }, () => ({ to: code, amount: 1n })),
+    recovery: freshBulkJobRecovery({ appTag: LONGEST_TAG, manifestDigest: bytes32Hex(1n), originalRecipientCount: 10_000,
+      originalIndexes: Array.from({ length: recipients }, (_, index) => 9_999 - index) }) });
+}
+
+/** One note of `amount` per entry, holding `definition`'s asset. */
+function tokenInventory(definition: AssetDefinition, amounts: bigint[]): WalletFileData {
+  const assetId = assetDefinitionAssetId(definition);
+  const data = inventory(amounts, assetId);
+  addWalletAsset(data, { assetId, definition });
+  return data;
+}
+
+/**
+ * Seal a payment chunk's delivery the way the bulk client builds it: every
+ * enveloped recipient's region holds the definition, and the sender region the
+ * definition, the chunk record, the sent envelopes and the direct sends it
+ * spends. Throws when the arena cannot hold it.
+ */
+function sealChunk(params: { shape: PrivateValueShape; job: BulkJob; firstRecipient: number; recipientCount: number;
+  definition: AssetDefinition; directSendOpenings?: DirectSendOpening[] }) {
+  const { shape, job, firstRecipient, recipientCount, definition } = params;
+  const profile = privateValueProfile(shape);
+  const assetId = assetDefinitionAssetId(definition);
+  return sealSectionDelivery({
+    shape,
+    context: { chainId: network.pcashChainId, transactionType: TX_KIND_PRIVATE_VALUE,
+      nullifiers: Array.from({ length: profile.inputs }, (_, index) => BigInt(index + 1)) },
+    envelopes: job.recipients.slice(firstRecipient, firstRecipient + recipientCount).map((recipient, slot) => ({
+      slot, receiveKey: wallet.mlKemPublicKey, recipientAddress: wallet.address, sentTo: wallet.address,
+      note: { chainId: network.pcashChainId, assetId, amount: BigInt(recipient.amount), owner: wallet.address, noteSecret: BigInt(slot + 1) },
+      records: [assetDefinitionSchema.encode(definition)],
+    })),
+    sender: { outgoingKey: wallet.outgoingKey, records: [bulkRecoveryRecord(job.recovery!, firstRecipient, recipientCount)],
+      directSendOpenings: params.directSendOpenings ?? [] },
+    assetDefinition: definition,
+  });
+}
+
+/** Plan every chunk of `job`, spending each chunk's inputs before planning the next. */
+function planAllChunks(data: WalletFileData, job: BulkJob) {
+  const plans = [];
+  for (let plan = planNextBulkChunk(data, job); plan !== null; plan = planNextBulkChunk(data, job)) {
+    plans.push(plan);
+    job.chunks.push({ shape: plan.shape, firstRecipient: plan.firstRecipient, recipientCount: plan.recipientCount,
+      action: {} as BulkJob["chunks"][number]["action"], outcome: "unresolved" });
+    const spent = new Set(plan.inputs.map(note => note.commitment));
+    for (const note of data.notes) if (spent.has(note.commitment)) note.spent = true;
+  }
+  return plans;
+}
+
+const ARENA_OVERFLOW = /arena regions need \d+ cells/;
+
+describe("bulk chunk arena capacity", () => {
+  it.each([
+    { name: "S", shape: 0 as const, outputs: 5 },
+    { name: "L", shape: 1 as const, outputs: 32 },
+  ])("takes a full $name chunk of a short definition with the longest tag", ({ shape, outputs }) => {
+    const job = recoverableJob(assetDefinitionAssetId(shortDefinition), outputs, shape);
+    // One note funds every recipient exactly, so no change takes a slot.
+    const plan = planNextBulkChunk(tokenInventory(shortDefinition, [BigInt(outputs)]), job);
+    expect(plan).toMatchObject({ shape, firstRecipient: 0, recipientCount: outputs, change: [] });
+    expect(() => sealChunk({ shape, job, firstRecipient: 0, recipientCount: outputs, definition: shortDefinition })).not.toThrow();
+  });
+
+  it.each([
+    { name: "S", shape: 0 as const, outputs: 5, recipients: 10 },
+    { name: "L", shape: 1 as const, outputs: 32, recipients: 60 },
+  ])("gives the longest restricted definition fewer recipients per $name chunk, each the most that fit", ({ shape, outputs, recipients }) => {
+    expect(isRestrictedAssetId(assetDefinitionAssetId(longestDefinition))).toBe(true);
+    expect(encodeAssetDefinition(longestDefinition)).toHaveLength(MAX_ASSET_DEFINITION_BYTES);
+    const job = recoverableJob(assetDefinitionAssetId(longestDefinition), recipients, shape);
+    const plans = planAllChunks(tokenInventory(longestDefinition, Array<bigint>(recipients).fill(1n)), job);
+    expect(plans.reduce((sum, plan) => sum + plan.recipientCount, 0)).toBe(recipients);
+    for (const plan of plans) {
+      expect(plan).toMatchObject({ shape, change: [] });
+      expect(() => sealChunk({ shape, job, firstRecipient: plan.firstRecipient, recipientCount: plan.recipientCount, definition: longestDefinition })).not.toThrow();
+      if (plan.firstRecipient + plan.recipientCount < recipients) {
+        expect(plan.recipientCount).toBeLessThan(outputs);
+        expect(() => sealChunk({ shape, job, firstRecipient: plan.firstRecipient, recipientCount: plan.recipientCount + 1, definition: longestDefinition }))
+          .toThrow(ARENA_OVERFLOW);
+      }
     }
+  });
+
+  it("counts the direct sends a chunk spends against its arena", () => {
+    const assetId = assetDefinitionAssetId(longestDefinition);
+    const job = { ...recoverableJob(assetId, 40, 1), openFeeAmounts: fees("4") };
+    // One token note funds every recipient; four native notes pay the fee.
+    const data = tokenInventory(longestDefinition, [100n]);
+    data.notes.push(...inventory([1n, 1n, 1n, 1n]).notes.map((note, index) => ({ ...note, leafIndex: String(index + 1),
+      commitment: bytes32Hex(fullOutputCommitment({ owner: wallet.address, noteSecret: BigInt(note.noteSecret), amount: 1n, assetId: 0n }, index + 1)) })));
+    const without = planNextBulkChunk(data, job)!;
+    expect(without.inputs.filter(note => BigInt(note.assetId) === 0n)).toHaveLength(4);
+    // Each native note was received by direct send, whose opening the chunk's sender region records.
+    const directSendOpenings = data.notes.filter(note => BigInt(note.assetId) === 0n).map((note, index) => ({
+      chainId: network.pcashChainId, contentHash: bytes32Hex(BigInt(0x500 + index)), slot: 0, owner: wallet.address,
+      amount: BigInt(note.amount), noteSecret: BigInt(note.noteSecret) }));
+    data.directSendOpenings = directSendOpenings.map(opening => ({ opening: toHex(encodeDirectSendOpening(opening)) }));
+    const plan = planNextBulkChunk(data, job)!;
+    expect(plan.recipientCount).toBeLessThan(without.recipientCount);
+    const chunk = { shape: 1 as const, job, firstRecipient: 0, definition: longestDefinition, directSendOpenings };
+    expect(() => sealChunk({ ...chunk, recipientCount: plan.recipientCount })).not.toThrow();
+    expect(() => sealChunk({ ...chunk, recipientCount: plan.recipientCount + 1 })).toThrow(ARENA_OVERFLOW);
+  });
+
+  it.each([
+    { name: "S", shape: 0 as const },
+    { name: "L", shape: 1 as const },
+  ])("fits one recipient of the longest definition with the longest tag and every input a direct send in $name", ({ shape }) => {
+    const job = recoverableJob(assetDefinitionAssetId(longestDefinition), 1, shape);
+    const directSendOpenings = Array.from({ length: privateValueProfile(shape).inputs }, (_, index) => ({
+      chainId: network.pcashChainId, contentHash: bytes32Hex(BigInt(0x500 + index)), slot: 0, owner: wallet.address,
+      amount: (1n << 128n) - 1n, noteSecret: BigInt(index + 1) }));
+    expect(() => sealChunk({ shape, job, firstRecipient: 0, recipientCount: 1, definition: longestDefinition, directSendOpenings })).not.toThrow();
+  });
+
+  it("recovers a chunk the arena limited from the chain alone and resumes its remaining recipient", async () => {
+    // A long custom mint rule configuration without a transfer rule: five recipients would need 45 of the 40 cells.
+    const definition = findAssetDefinition({ metadata: longestMetadata,
+      mintRule: { sVkHash: 1n, lVkHash: 2n, configurationCommitment: 3n, configuration: new Uint8Array(MAX_RULE_CONFIGURATION_BYTES).fill(1) } }, 0n);
+    const assetId = assetDefinitionAssetId(definition);
+    const f = fixture([5n], assetId);
+    await f.store.transaction(data => {
+      addWalletAsset(data!, { assetId, definition });
+      return { data: data!, value: undefined };
+    });
+    const recipients = Array.from({ length: 5 }, () => ({ to: code, amount: 1n }));
+    const job = await startBulkJob({ ...f, wallet, chainId: network.pcashChainId, kind: "payment", assetId, shape: 0,
+      recipients, openFeeAmount: 0n, maxTransactions: 5, recovery: { appTag: LONGEST_TAG } });
+    const entries: Uint8Array[] = [];
+    await runBulkJobStep({ ...f, jobId: job.jobId, wallet, signer, chainId: network.pcashChainId,
+      submission: { mode: "mempool", preflight: async () => null,
+        submit: async ({ transactionBytes }: { transactionBytes: Uint8Array }) => {
+          entries.push(transactionBytes);
+          return { accepted: false, queued: true, output: null };
+        } } });
+    // The single note funds all five exactly; the arena holds four, and the remainder returns as change.
+    expect((await f.store.load())!.bulkJobs![0]!.chunks[0]).toMatchObject({ shape: 0, firstRecipient: 0, recipientCount: 4 });
+
+    const sim = new ChainSim(network.pcashChainId, { l1ChainId: network.l1ChainId, inboxAddress: network.inboxAddress });
+    sim.include(entries[0]!);
+    const scanned = emptyWalletState({ address: wallet.address, network: { chainId: network.pcashChainId, genesisHash: sim.genesisHash } });
+    await synchronizeWalletInventory(sim.client(), wallet, network.pcashChainId, scanned, { store: memoryWalletStateStore(scanned),
+      target: { pcashNumber: sim.head.number, pcashHash: fieldToHex(sim.head.hash).toLowerCase() } });
+    const groups = recoveredBulkGroups(scanned.sentOutputs ?? []);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({ recoveryJobId: job.recovery!.recoveryJobId, paidOriginalIndexes: [0, 1, 2, 3] });
+
+    const restored = fixture([1n], assetId);
+    await restored.store.transaction(data => {
+      addWalletAsset(data!, { assetId, definition });
+      data!.sentOutputs = scanned.sentOutputs!;
+      reconcileBulkRecoveryObservations(data!, 100n, 100n);
+      reconcileBulkRecoveryObservations(data!, 101n + BULK_RECOVERY_OBSERVATION_SECONDS, 101n + BULK_RECOVERY_OBSERVATION_SECONDS);
+      return { data: data!, value: undefined };
+    });
+    const resumed = await startBulkJob({ ...restored, wallet, chainId: network.pcashChainId, kind: "payment", assetId, shape: 0,
+      recipients, openFeeAmount: 0n, maxTransactions: 5,
+      recovery: { appTag: LONGEST_TAG, resumeRecoveryJobId: job.recovery!.recoveryJobId } });
+    expect(resumed.recovery).toMatchObject({ originalIndexes: [4], baselineContentHashes: [groups[0]!.chunks[0]!.contentHash] });
+    expect(planNextBulkChunk((await restored.store.load())!, resumed)).toMatchObject({ shape: 0, firstRecipient: 0, recipientCount: 1, change: [] });
   });
 });
 
@@ -896,11 +1060,11 @@ describe("durable bulk job execution (mock proofs)", () => {
   });
 
   it("attaches a known definition to asset outputs and opens explicit note secrets without an envelope", async () => {
-    const definition: AssetDefinition = {
-      initialSupply: 100n,
-      assetSecretCommitment: 0xa2n,
+    const definition: AssetDefinition = fixedSupplyAssetDefinition({
+      supply: 100n,
+      secretCommitment: 0xa2n,
       metadata: { name: "Bulk Token", symbol: "BLK", decimals: 0, contentDigest: new Uint8Array(32) },
-    };
+    });
     const assetId = assetDefinitionAssetId(definition);
     const f = fixture([100n], assetId);
     await f.store.transaction((data) => {
